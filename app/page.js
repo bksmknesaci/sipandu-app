@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from './lib/supabase'; // IMPORT SUPABASE DITAMBAHKAN DI SINI
+import { supabase } from '@/lib/supabase'; // IMPORT SUPABASE DITAMBAHKAN DI SINI
 import { 
   Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, 
   HeartPulse, GraduationCap, BookOpen, ClipboardList, CalendarDays, AlertTriangle, Award, 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Save, Upload, School, BookOpen, Users, Trash2 } from 'lucide-react';
 
 export default function ProfilSIPANDU() {

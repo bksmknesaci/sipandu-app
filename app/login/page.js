@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase'; // Koneksi ke Supabase
+import { supabase } from '@/lib/supabase'; // Koneksi ke Supabase
 import { User, Lock, Eye, EyeOff, LogIn, GraduationCap } from 'lucide-react';
 
 export default function Login() {
