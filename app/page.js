@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { supabase } from './lib/supabase'; // IMPORT SUPABASE DITAMBAHKAN DI SINI
 import { 
   Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, 
   HeartPulse, GraduationCap, BookOpen, ClipboardList, CalendarDays, AlertTriangle, Award, 
@@ -34,18 +35,36 @@ export default function SIPANDU() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [openMenus, setOpenMenus] = useState({});
   const [activeMenu, setActiveMenu] = useState('beranda');
+  const [currentImg, setCurrentImg] = useState(0);
   const [typedText, setTypedText] = useState("");
   const [chartCycle, setChartCycle] = useState(0);
   
-  const fullText = "SISTEM INFORMASI DAN PENANGANAN SISWA TERPADU";
+  // State tunggal untuk pengaturan dari Supabase
+  const [settings, setSettings] = useState({ 
+    logo_url: null, 
+    hero_images: [], 
+    nama_sekolah: 'SIPANDU' 
+  });
 
+  // 1. Cek Status Login
   useEffect(() => {
     const loggedIn = localStorage.getItem('isLoggedIn');
     if (loggedIn === 'true') setIsLoggedIn(true);
   }, []);
 
+  // 2. Ambil Data Pengaturan dari Supabase (Menggantikan localStorage)
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
+      if (data) setSettings(data);
+    };
+    fetchSettings();
+  }, []);
+
+  // 3. Efek Mengetik
   useEffect(() => {
     let i = 0;
+    const fullText = "SISTEM INFORMASI DAN PENANGANAN SISWA TERPADU";
     const timer = setInterval(() => {
       if (i < fullText.length) { setTypedText(fullText.substring(0, i + 1)); i++; } 
       else { i = 0; setTypedText(""); }
@@ -53,10 +72,24 @@ export default function SIPANDU() {
     return () => clearInterval(timer);
   }, []);
 
+  // 4. Efek Grafik Berganti
   useEffect(() => {
     const timer = setInterval(() => setChartCycle((prev) => (prev + 1) % 2), 4000);
     return () => clearInterval(timer);
   }, []);
+
+    // 5. Efek Hero Image Berganti (3 detik)
+  useEffect(() => {
+    const images = settings.hero_images || [];
+    if (images.length <= 1) {
+      setCurrentImg(0); // Reset jika cuma 1 atau 0 foto
+      return;
+    }
+    const timer = setInterval(() => {
+      setCurrentImg((prev) => (prev + 1) % images.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [settings.hero_images]);
 
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
@@ -67,51 +100,56 @@ export default function SIPANDU() {
   const toggleMenu = (menu) => setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
   const closeSidebarMobile = () => setSidebarOpen(false);
 
-  // Komponen Menu
   const NavLink = ({ icon: Icon, title, href="/", menuId }) => (
-    <Link href={href} onClick={() => { setActiveMenu(menuId); closeSidebarMobile(); }} className={`flex items-center gap-3 py-3 px-5 rounded-lg mx-2 text-slate-300 transition-colors duration-200 whitespace-nowrap ${activeMenu === menuId ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md'}`}>
-      <div className="flex-shrink-0 w-5 flex justify-center"><Icon size={20} /></div>
+    <Link href={href} onClick={() => { setActiveMenu(menuId); closeSidebarMobile(); }} className={`flex items-center gap-3 py-3 pl-6 pr-3 rounded-lg mx-2 text-slate-300 transition-colors duration-150 whitespace-nowrap ${activeMenu === menuId ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md active:scale-95 active:bg-slate-600'}`}>
+      <div className="flex-shrink-0 w-5 inline-flex justify-center"><Icon size={20} /></div>
       <span className="inline-block md:hidden md:group-hover:inline-block">{title}</span>
     </Link>
   );
 
   const DropdownMenu = ({ title, icon: Icon, menuKey, children, menuId }) => (
     <div className="mx-2">
-      <button onClick={() => { toggleMenu(menuKey); setActiveMenu(menuId); }} className={`w-full flex items-center justify-between py-3 px-5 rounded-lg text-slate-300 transition-colors duration-200 whitespace-nowrap ${activeMenu === menuId ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md'}`}>
+      <button onClick={() => { toggleMenu(menuKey); setActiveMenu(menuId); }} className={`w-full flex items-center justify-between py-3 pl-6 pr-3 rounded-lg text-slate-300 transition-colors duration-150 whitespace-nowrap ${activeMenu === menuId ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md active:scale-95 active:bg-slate-800'}`}>
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-5 flex justify-center"><Icon size={20} /></div>
+          <div className="flex-shrink-0 w-5 inline-flex justify-center"><Icon size={20} /></div>
           <span className="inline-block md:hidden md:group-hover:inline-block">{title}</span>
         </div>
         <div className="inline-block md:hidden md:group-hover:inline-block">
           {openMenus[menuKey] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </div>
       </button>
-      {openMenus[menuKey] && <div className="mt-1 space-y-1 pl-5">{children}</div>}
+      {openMenus[menuKey] && <div className="mt-1 space-y-1 pl-6">{children}</div>}
     </div>
   );
 
   const SubLink = ({ icon: Icon, title, href="/" }) => (
-    <Link href={href} onClick={closeSidebarMobile} className="flex items-center gap-3 py-2 pl-8 pr-3 text-sm text-slate-400 hover:text-white hover:bg-slate-700 hover:shadow active:bg-slate-600 rounded-md transition-all duration-200 whitespace-nowrap">
-      <div className="flex-shrink-0 w-4 flex justify-center"><Icon size={16} /></div>
+    <Link href={href} onClick={closeSidebarMobile} className="flex items-center gap-3 py-2 pl-10 pr-3 text-sm text-slate-400 hover:text-white hover:bg-slate-700 hover:shadow-sm active:scale-95 active:bg-slate-600 rounded-md transition-colors duration-150 whitespace-nowrap">
+      <div className="flex-shrink-0 w-4 inline-flex justify-center"><Icon size={16} /></div>
       <span className="inline-block md:hidden md:group-hover:inline-block">{title}</span>
     </Link>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <div className="min-h-screen bg-gray-50 font-sans relative">
       
       {/* Overlay Gelap untuk Mobile */}
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={closeSidebarMobile}></div>}
 
-      {/* --- SIDEBAR --- */}
-      <aside className={`group fixed z-50 h-full bg-slate-900 text-white flex flex-col transition-all duration-300 overflow-y-auto overflow-x-hidden
+                  {/* --- SIDEBAR --- */}
+      <aside className={`group fixed z-50 h-full bg-slate-900 text-white flex flex-col transition-[width] duration-300 ease-in-out overflow-hidden
         ${isSidebarOpen ? 'w-72 translate-x-0' : '-translate-x-full w-72'} 
-        md:translate-x-0 md:w-[70px] md:hover:w-72`}>
+        md:translate-x-0 md:w-20 md:hover:w-72`}>
         
         {/* Header Sidebar */}
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between h-16">
+        <div className="flex-shrink-0 p-4 border-b border-slate-700 flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-5 flex justify-center text-blue-400 font-extrabold text-2xl">S</div>
+            {settings.logo_url ? (
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden shadow-md bg-slate-800">
+                <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-xl shadow-md">S</div>
+            )}
             <div className="inline-block md:hidden md:group-hover:inline-block whitespace-nowrap">
               <h1 className="text-2xl font-extrabold text-blue-400 tracking-wider">SIPANDU</h1>
               <p className="text-[10px] text-slate-400 -mt-1">SMK Negeri 1 Cikedung</p>
@@ -122,7 +160,7 @@ export default function SIPANDU() {
         
         {/* Profil Admin */}
         {isLoggedIn && (
-          <div className="p-4 border-b border-slate-700 flex items-center justify-between h-20">
+          <div className="flex-shrink-0 p-4 border-b border-slate-700 flex items-center justify-between h-20">
             <div className="flex items-center gap-3">
               <div className="bg-blue-600 p-2 rounded-full flex-shrink-0 w-[36px] h-[36px] flex justify-center items-center"><User size={20}/></div>
               <div className="inline-block md:hidden md:group-hover:inline-block whitespace-nowrap">
@@ -135,28 +173,28 @@ export default function SIPANDU() {
         )}
 
         {/* Navigasi */}
-        <nav className="flex-1 px-0 py-4 space-y-1 text-sm">
-          <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-2 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU UMUM</p>
+        <nav className="flex-1 overflow-y-auto py-4 space-y-1 text-sm scrollbar-thin scrollbar-thumb-slate-700">
+          <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-2 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU UMUM</p>
           <NavLink icon={Users} title="Portal Orang Tua" menuId="portal" />
           <NavLink icon={Award} title="Siswa Berprestasi" menuId="prestasi" />
           <NavLink icon={GraduationCap} title="Tracer Studi Lulusan" menuId="tracer" />
 
-          <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SISWA</p>
+          <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SISWA</p>
           <NavLink icon={HeartPulse} title="Absen Sakit & Izin" menuId="sakit" />
           <NavLink icon={Search} title="Cari Data Siswa" menuId="cari" />
 
           {isLoggedIn && (
             <>
-              <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SEKRETARIS</p>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SEKRETARIS</p>
               <NavLink icon={ClipboardList} title="Absensi Kehadiran" menuId="absensi" />
 
-              <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU OSIS</p>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU OSIS</p>
               <DropdownMenu title="Piket OSIS" icon={CalendarDays} menuKey="osis" menuId="osis">
                 <SubLink icon={Award} title="Entri Reward" />
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
               </DropdownMenu>
 
-              <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU WALI KELAS</p>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU WALI KELAS</p>
               <DropdownMenu title="Wali Kelas" icon={User} menuKey="wali" menuId="wali">
                 <SubLink icon={Award} title="Entri Reward" />
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
@@ -165,7 +203,7 @@ export default function SIPANDU() {
                 <SubLink icon={ClipboardCheck} title="Rekap Kehadiran" />
               </DropdownMenu>
 
-              <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU ADMIN</p>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU ADMIN</p>
               <DropdownMenu title="Administrator" icon={Shield} menuKey="admin" menuId="admin">
                 <SubLink icon={Users} title="Daftar Siswa" href="/admin/siswa" />
                 <SubLink icon={UserCog} title="Penanganan Siswa" />
@@ -174,9 +212,9 @@ export default function SIPANDU() {
                 <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" />
               </DropdownMenu>
 
-              <p className="px-5 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SETTING</p>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SETTING</p>
               <DropdownMenu title="Pengaturan" icon={Settings} menuKey="setting" menuId="setting">
-                <SubLink icon={Building2} title="Profil SIPANDU" />
+                <SubLink icon={Building2} title="Profil SIPANDU" href="/setting/profil" />
                 <SubLink icon={UserCog} title="Managemen User" />
                 <SubLink icon={UserCheck} title="Penanggung Jawab" />
                 <SubLink icon={CalendarCheck} title="Hari Efektif" />
@@ -188,15 +226,26 @@ export default function SIPANDU() {
       </aside>
 
       {/* --- KONTEN UTAMA --- */}
-      <div className="md:ml-[70px] md:group-hover:ml-72 flex flex-col min-h-screen transition-all duration-300">
+      <div className="md:ml-20 md:group-hover:ml-72 flex flex-col min-h-screen pb-20 md:pb-0 transition-[margin] duration-300 ease-in-out">
         
+        {/* Header (Icon saja di HP, Logo ditambahkan) */}
         <header className="bg-white shadow-sm border-b p-4 flex justify-between items-center z-30 sticky top-0">
-          <button className="md:hidden text-gray-600" onClick={() => setSidebarOpen(true)}><Menu size={24}/></button>
-          <div className="hidden md:block"></div>
+          <div className="flex items-center gap-3">
+            <button className="md:hidden text-gray-600" onClick={() => setSidebarOpen(true)}><Menu size={24}/></button>
+            
+            {/* Logo SIPANDU pada tampilan HP */}
+            {settings.logo_url ? (
+              <img src={settings.logo_url} alt="Logo" className="h-12 w-12 rounded-md object-cover md:hidden" />
+            ) : (
+              <div className="h-12 w-12 rounded-md bg-slate-900 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
+            )}
+          </div>
+
           <div className="flex items-center gap-4 md:gap-6 text-gray-600 font-medium text-sm">
-            <Link href="/" className="hidden md:flex items-center gap-1 hover:text-blue-600"><Home size={16}/> Home</Link>
-            <Link href="/" className="hidden md:flex items-center gap-1 hover:text-blue-600"><Info size={16}/> Tentang</Link>
-            <Link href="/" className="hidden md:flex items-center gap-1 hover:text-blue-600"><Bell size={16}/> Informasi</Link>
+            {/* Ikon berjejer, teks hanya muncul di Desktop */}
+            <Link href="/" className="flex items-center gap-1 hover:text-blue-600"><Home size={18}/> <span className="hidden md:inline-block">Home</span></Link>
+            <Link href="/tentang" className="flex items-center gap-1 hover:text-blue-600"><Info size={18}/> <span className="hidden md:inline-block">Tentang</span></Link>
+            <Link href="/" className="flex items-center gap-1 hover:text-blue-600"><Bell size={18}/> <span className="hidden md:inline-block">Informasi</span></Link>
             {isLoggedIn ? (
               <button onClick={handleLogout} className="flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
                 <LogOut size={16}/> <span className="hidden md:inline-block">Logout</span>
@@ -210,16 +259,30 @@ export default function SIPANDU() {
         </header>
 
         {/* HERO SECTION */}
-        <section className="relative py-20 md:py-32 flex items-center justify-center text-white overflow-hidden bg-gradient-to-br from-blue-800 via-indigo-900 to-slate-900">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 left-0 w-40 h-40 bg-blue-500 rounded-full filter blur-3xl animate-pulse"></div>
-            <div className="absolute bottom-0 right-0 w-60 h-60 bg-indigo-500 rounded-full filter blur-3xl animate-pulse"></div>
-          </div>
+        <section className="relative py-20 md:py-32 flex items-center justify-center text-white overflow-hidden min-h-[500px]">
+          
+          {/* Lapisan 1: Gambar dari Supabase dengan Teknik Crossfade (Dijamin Berganti) */}
+          {settings.hero_images && settings.hero_images.length > 0 ? (
+            settings.hero_images.map((img, index) => (
+              <div 
+                key={index}
+                className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${index === currentImg ? 'opacity-100' : 'opacity-0'}`}
+                style={{ backgroundImage: `url(${img})` }}
+              ></div>
+            ))
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-800 via-indigo-900 to-slate-900"></div>
+          )}
+
+          {/* Lapisan 2: Gradien Gelap (Overlay agar teks terbaca) */}
+          <div className={`absolute inset-0 ${settings.hero_images && settings.hero_images.length > 0 ? 'bg-black/60' : 'bg-transparent'}`}></div>
+          
+          {/* Lapisan 3: Konten Teks */}
           <div className="relative z-10 text-center px-4 max-w-3xl">
-            <h2 className="text-3xl md:text-5xl font-extrabold mb-4 drop-shadow-lg">Selamat Datang di SIPANDU</h2>
-            <p className="mb-6 text-sm md:text-lg drop-shadow-md text-blue-100">SIPANDU adalah platform digital yang dirancang untuk mempermudah manajemen siswa di Sekolah.</p>
-            <div className="border-2 border-blue-400 p-2 md:p-3 inline-block rounded-lg bg-blue-500/20 backdrop-blur-sm mb-8">
-              <p className="text-lg md:text-2xl font-bold tracking-widest text-blue-300">{typedText}<span className="animate-pulse">|</span></p>
+            <h2 className="text-3xl md:text-5xl font-extrabold mb-4 drop-shadow-lg text-sky-400">Selamat Datang di SIPANDU</h2>
+            <p className="mb-6 text-sm md:text-lg drop-shadow-md text-blue-100">SIPANDU adalah platform digital yang dirancang untuk mempermudah manajemen siswa di Sekolah. Dengan sistem ini, guru, siswa dan orang tua dapat lebih mudah memantau kegiatan, absensi, serta informasi penting lainnya.</p>
+            <div className="border-2 border-sky-400 p-2 md:p-3 inline-block rounded-lg bg-sky-500/20 backdrop-blur-sm mb-8">
+              <p className="text-sm md:text-lg font-bold tracking-widest text-sky-300">{typedText}<span className="animate-pulse">|</span></p>
             </div>
             <div className="w-full max-w-xl mx-auto relative">
               <input type="text" placeholder="Cari Data Siswa... Nama/NISN" className="w-full py-3 px-5 pr-14 rounded-full text-gray-800 bg-white shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
@@ -276,15 +339,70 @@ export default function SIPANDU() {
           {/* FOOTER */}
           <footer className="bg-slate-900 text-slate-300 p-6 md:p-8 rounded-t-xl">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 mb-8">
-              <div><h4 className="text-white font-bold mb-3 text-sm md:text-base">Alamat</h4><p className="text-xs md:text-sm">Jl. Raya Cikedung, Indramayu, Jawa Barat</p></div>
-              <div><h4 className="text-white font-bold mb-3 text-sm md:text-base">Informasi</h4><ul className="space-y-2 text-xs md:text-sm"><li><a href="#" className="hover:text-white transition-colors">SNBP</a></li><li><a href="#" className="hover:text-white transition-colors">SNBT</a></li><li><a href="#" className="hover:text-white transition-colors">Tracer Studi</a></li></ul></div>
-              <div><h4 className="text-white font-bold mb-3 text-sm md:text-base">Tentang</h4><p className="text-xs md:text-sm">Sistem informasi terpadu untuk manajemen data dan kedisiplinan siswa.</p></div>
-              <div><h4 className="text-white font-bold mb-3 text-sm md:text-base">Follow Kami</h4><div className="flex gap-4 text-slate-400"><a href="#" className="hover:text-white transition-colors"><MessageCircle size={20}/></a><a href="#" className="hover:text-white transition-colors"><Camera size={20}/></a><a href="#" className="hover:text-white transition-colors"><PlayCircle size={20}/></a><a href="#" className="hover:text-white transition-colors"><Music2 size={20}/></a></div></div>
+              <div>
+                <h4 className="text-white font-bold mb-3 text-sm md:text-base">Alamat</h4>
+                <p className="text-xs md:text-sm">{settings.alamat || 'Jl. Raya Cikedung, Indramayu, Jawa Barat'}</p>
+              </div>
+              <div>
+                <h4 className="text-white font-bold mb-3 text-sm md:text-base">Informasi</h4>
+                <ul className="space-y-2 text-xs md:text-sm">
+                  <li><a href="#" className="hover:text-white transition-colors">SNBP</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">SNBT</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Tracer Studi</a></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-white font-bold mb-3 text-sm md:text-base">Tentang</h4>
+                <p className="text-xs md:text-sm">{settings.tentang || 'Sistem informasi terpadu untuk manajemen data dan kedisiplinan siswa.'}</p>
+              </div>
+              <div>
+                <h4 className="text-white font-bold mb-3 text-sm md:text-base">Follow Kami</h4>
+                <div className="flex gap-4 text-slate-400">
+                  <a href={settings.facebook || '#'} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><MessageCircle size={20}/></a>
+                  <a href={settings.instagram || '#'} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><Camera size={20}/></a>
+                  <a href={settings.youtube || '#'} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><PlayCircle size={20}/></a>
+                  <a href={settings.tiktok || '#'} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><Music2 size={20}/></a>
+                </div>
+              </div>
             </div>
-            <div className="border-t border-slate-700 pt-6 text-center text-xs md:text-sm text-slate-500">Copyright © 2026 | SIPANDU SMK Negeri 1 Cikedung | Created By: Rifki Aripin, S.Pd</div>
+            <div className="border-t border-slate-700 pt-6 text-center text-xs md:text-sm text-slate-500">
+              Copyright © 2026 | SIPANDU {settings.nama_sekolah || 'SMK Negeri 1 Cikedung'} | Created By: {settings.tim || 'Rifki Aripin, S.Pd'}
+            </div>
           </footer>
         </main>
       </div>
+
+      {/* --- BOTTOM NAVIGATION MOBILE --- */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 md:hidden flex justify-around items-center h-16 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2">
+          <HeartPulse size={20} />
+          <span className="text-[10px] mt-1 font-medium">Izin</span>
+        </Link>
+        <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2">
+          <ClipboardList size={20} />
+          <span className="text-[10px] mt-1 font-medium">Absensi</span>
+        </Link>
+        <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2">
+          <CalendarDays size={20} />
+          <span className="text-[10px] mt-1 font-medium">Osis</span>
+        </Link>
+        <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2">
+          <User size={20} />
+          <span className="text-[10px] mt-1 font-medium">Wali Kelas</span>
+        </Link>
+        {isLoggedIn ? (
+          <button onClick={handleLogout} className="flex flex-col items-center justify-center text-red-500 hover:text-red-600 transition-colors py-1 px-2">
+            <Shield size={20} />
+            <span className="text-[10px] mt-1 font-medium">Admin</span>
+          </button>
+        ) : (
+          <Link href="/login" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2">
+            <LogIn size={20} />
+            <span className="text-[10px] mt-1 font-medium">Login</span>
+          </Link>
+        )}
+      </div>
+
     </div>
   );
 }
