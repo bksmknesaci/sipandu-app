@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import MajorLogoManager from '@/app/components/MajorLogoManager'; // ← TAMBAHAN
 import { ArrowLeft, Save, Upload, School, BookOpen, Users, Trash2 } from 'lucide-react';
 
 export default function ProfilSIPANDU() {
@@ -225,6 +226,8 @@ const handleHeroUpload = async (e) => {
               )}
             </div>
           </div>
+
+          <MajorLogoManager /> {/* ← TAMBAHAN: Komponen Manajemen Logo Jurusan */}
 
           {/* Tombol Simpan */}
           <button onClick={handleSave} className="w-full bg-blue-600 md:col-span-2 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2">
