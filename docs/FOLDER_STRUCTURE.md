@@ -7,7 +7,8 @@ SIPANDU-APP/
 │
 ├── app/
 │   ├── actions/
-│   │   └── majorLogoActions.js
+│   │   ├── majorLogoActions.js
+│   │   └── siswaActions.js
 │   │
 │   ├── absen-mandiri/
 │   │   └── page.js

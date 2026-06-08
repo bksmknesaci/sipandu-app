@@ -43,3 +43,20 @@
 - Tambah jarak antara Akses Cepat Informasi dan Footer
 - Perbaikan tombol SNBP/SNBT/Tracer Studi di footer (panah + efek tertekan)
 - Header tabel kategori reward & pelanggaran ganti hitam bold
+
+## 2026-06-09
+
+- Revamp total halaman Manajemen Data Siswa
+- Integrasi Data Siswa dengan Rekapitulasi Jumlah Siswa di Dashboard (Real-time)
+- Tambah fitur Tambah, Edit, Hapus Siswa via Server Actions (bypass RLS)
+- Tambah fitur Import CSV, Export CSV, Cetak Data
+- Tambah fitur Hapus Semua Data
+- Tambah fitur Kenaikan Kelas (X→XI, XI→XII) dengan checklist siswa
+- Tambah fitur Kelulusan XII (hapus data + download arsip CSV)
+- Tambah halaman QR Absensi (Generate QR per kelas dinamis, Pengaturan GPS & Waktu)
+- Tambah halaman Absen Hadir Mandiri (Simulasi alur scan QR + validasi)
+- RekapSiswa di Dashboard sekarang menampilkan 6 jurusan tetap (TKRO, DKV, RPL, PH, KL, LPKKK)
+- Fix filter Data Siswa menggunakan logika ekstraksi yang sama dengan dropdown
+- Fix teks hitam pada semua kolom input dan select di halaman admin
+- Tambah kolom jenis_kelamin di tabel siswa (Supabase)
+- Tambah server action siswaActions.js

@@ -29,7 +29,8 @@ export default function Login() {
     
     if (username === 'admin' && password === 'admin123') {
       localStorage.setItem('isLoggedIn', 'true');
-      router.push('/');
+window.dispatchEvent(new Event('loginSuccess'));
+router.push('/');
     } else {
       setError('Username atau Password salah!');
     }
@@ -136,7 +137,7 @@ export default function Login() {
 
         {/* Footer Login */}
         <p className="text-center text-gray-400 text-xs mt-6">
-          © 2026 SIPANDU
+          © 2026 SIPANDU | Developed By: Rifki Aripin, S.Pd
         </p>
       </div>
     </div>

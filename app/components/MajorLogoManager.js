@@ -8,7 +8,7 @@ import {
 } from '@/app/actions/majorLogoActions';
 
 const JURUSAN_SLOTS = [
-  { code: 'TKR', name: 'Teknik Kendaraan Ringan' },
+  { code: 'TKRO', name: 'Teknik Kendaraan Ringan Otomotif' },
   { code: 'PH', name: 'Perhotelan' },
   { code: 'DKV', name: 'Desain Komunikasi Visual' },
   { code: 'KL', name: 'Kuliner' },

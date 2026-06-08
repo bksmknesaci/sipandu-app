@@ -21,10 +21,31 @@ export default function AppShell({ children }) {
   const [activeMenu, setActiveMenu] = useState('beranda');
   const [settings, setSettings] = useState({ logo_url: null, nama_sekolah: 'SIPANDU' });
 
+      // 1. Cek Status Login
+  useEffect(() => {
+    const checkLogin = () => {
+      const loggedIn = localStorage.getItem('isLoggedIn');
+      setIsLoggedIn(loggedIn === 'true');
+    };
+    
+    // Cek saat pertama kali mount
+    checkLogin();
+    
+    // Dengarkan event dari halaman login
+    window.addEventListener('loginSuccess', checkLogin);
+    window.addEventListener('storage', checkLogin);
+    
+    return () => {
+      window.removeEventListener('loginSuccess', checkLogin);
+      window.removeEventListener('storage', checkLogin);
+    };
+  }, []);
+
+    // Re-cek login setiap kali pindah halaman
   useEffect(() => {
     const loggedIn = localStorage.getItem('isLoggedIn');
-    if (loggedIn === 'true') setIsLoggedIn(true);
-  }, []);
+    setIsLoggedIn(loggedIn === 'true');
+  }, [pathname]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -80,6 +101,11 @@ export default function AppShell({ children }) {
       <span className="inline-block md:hidden md:group-hover:inline-block">{title}</span>
     </Link>
   );
+
+  // Jika halaman login, tidak usah tampilkan Sidebar & Header
+  if (pathname === '/login') {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
@@ -177,21 +203,21 @@ export default function AppShell({ children }) {
       {/* --- KONTEN UTAMA --- */}
       <div className="md:ml-20 md:group-hover:ml-72 flex flex-col min-h-screen pb-20 md:pb-0 transition-[margin] duration-300 ease-in-out">
         
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b p-4 flex justify-between items-center z-30 sticky top-0">
+                {/* Header */}
+        <header className="bg-slate-900 shadow-sm border-b border-slate-700 p-4 flex justify-between items-center z-30 sticky top-0">
           <div className="flex items-center gap-3">
-            <button className="md:hidden text-gray-600" onClick={() => setSidebarOpen(true)}><Menu size={24}/></button>
+            <button className="md:hidden text-gray-300" onClick={() => setSidebarOpen(true)}><Menu size={24}/></button>
             {settings.logo_url ? (
               <img src={settings.logo_url} alt="Logo" className="h-12 w-12 rounded-md object-cover md:hidden" />
             ) : (
-              <div className="h-12 w-12 rounded-md bg-slate-900 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
+              <div className="h-12 w-12 rounded-md bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
             )}
           </div>
 
-          <div className="flex items-center gap-4 md:gap-6 text-gray-600 font-medium text-sm">
-            <Link href="/" className="flex items-center gap-1 hover:text-blue-600"><Home size={18}/> <span className="hidden md:inline-block">Home</span></Link>
-            <Link href="/tentang" className="flex items-center gap-1 hover:text-blue-600"><Info size={18}/> <span className="hidden md:inline-block">Tentang</span></Link>
-            <Link href="/" className="flex items-center gap-1 hover:text-blue-600"><Bell size={18}/> <span className="hidden md:inline-block">Informasi</span></Link>
+          <div className="flex items-center gap-4 md:gap-6 text-gray-300 font-medium text-sm">
+            <Link href="/" className="flex items-center gap-1 hover:text-white"><Home size={18}/> <span className="hidden md:inline-block">Home</span></Link>
+            <Link href="/tentang" className="flex items-center gap-1 hover:text-white"><Info size={18}/> <span className="hidden md:inline-block">Tentang</span></Link>
+            <Link href="/" className="flex items-center gap-1 hover:text-white"><Bell size={18}/> <span className="hidden md:inline-block">Informasi</span></Link>
             {isLoggedIn ? (
               <button onClick={handleLogout} className="flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
                 <LogOut size={16}/> <span className="hidden md:inline-block">Logout</span>

@@ -25,4 +25,5 @@
 * kelas (varchar)
 * jurusan (varchar)
 * status (varchar)
+* jenis_kelamin (varchar)
 

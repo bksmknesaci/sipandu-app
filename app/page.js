@@ -137,7 +137,7 @@ export default function SIPANDU() {
             </div>
           </div>
           <div className="border-t border-slate-700 pt-6 text-center text-xs md:text-sm text-slate-500">
-            Copyright © 2026 | SIPANDU {settings.nama_sekolah || 'SMK Negeri 1 Cikedung'} | Created By: {settings.tim || 'Rifki Aripin, S.Pd'}
+            Copyright © 2026 | SIPANDU {settings.nama_sekolah || 'SMK Negeri 1 Cikedung'} | Developed By: {settings.tim || 'Rifki Aripin, S.Pd'}
           </div>
         </footer>
       </div>
