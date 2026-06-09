@@ -3,7 +3,11 @@
 ## Authentication
 - Login
 - Logout
-- Role Based Access
+- Role Based Access (4 Role: Administrator, Wali Kelas, Sekretaris Kelas, OSIS)
+- Login via Database (loginUserAction)
+- Login Hardcoded Admin (admin/admin123)
+- Simpan Data User ke localStorage saat Login
+- Loading State "⏳ Memproses..." saat Login
 
 Status: ACTIVE
 
@@ -81,5 +85,49 @@ Status: ACTIVE (Simulasi UI)
 - Pengaturan Validasi GPS (Latitude, Longitude, Radius)
 - Pengaturan Validasi Waktu (Jam Masuk, Terlambat, Tutup)
 - QR Code Security (Token, Timestamp, Signature)
+
+Status: ACTIVE
+
+## Managemen User
+- Statistik Pengguna (Count-Up Animation, 5 Kartu Gradient)
+- Tambah User (Modal Form + Upload Foto Profil)
+- Edit User
+- Hapus User (Modal Konfirmasi Ketik "HAPUS")
+- Hapus Semua Data (2x Konfirmasi Ketik "HAPUS SEMUA")
+- Import CSV
+- Export CSV (Filtered Data)
+- Cetak Data (Print Browser)
+- Filter Dinamis (Peran, Kelas, Status)
+- Pencarian Realtime (Nama/Username/Email/WhatsApp)
+- Sorting Kolom Tabel (Klik Header)
+- Pagination
+- Upload Foto Profil ke Supabase Storage
+- Kolom Jurusan di Form & Tabel
+- Pemilihan Kelas via 3 Dropdown (Tingkat + Jurusan + Nomor) dengan Auto-Compose
+- Validasi Kelas Wajib untuk Non-Administrator
+- Avatar Default Gradient (Jika Tidak Ada Foto)
+
+Status: ACTIVE
+
+## Profil Saya
+
+- Modal Profil Pengguna di Sidebar
+- Tampilkan Foto, Nama, Peran + Kelas, Username, Email, WhatsApp, Kelas, Jurusan, Status
+- Mode Edit (Email & WhatsApp)
+- Simpan Perubahan via Server Action (updateProfileData)
+- Update Otomatis ke localStorage & Sidebar
+- Tombol Profil Saya & Logout Sejajar di Sidebar
+
+Status: ACTIVE
+
+## Role-Based Navigation
+
+- Administrator: Semua Menu (Umum, Siswa, Sekretaris, OSIS, Wali Kelas, Admin, Setting)
+- Wali Kelas: Menu Umum, Siswa, Wali Kelas
+- Sekretaris Kelas: Menu Umum, Siswa, Sekretaris
+- OSIS: Menu Umum, Siswa, OSIS
+- Belum Login: Menu Umum, Siswa saja
+- SubLink Active State (Highlight otomatis sesuai URL)
+- Auto-Open Dropdown sesuai Halaman Aktif
 
 Status: ACTIVE

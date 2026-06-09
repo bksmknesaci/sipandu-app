@@ -6,15 +6,18 @@ SIPANDU-APP/
 │   └── dev/
 │
 ├── app/
-│   ├── actions/
-│   │   ├── majorLogoActions.js
-│   │   └── siswaActions.js
-│   │
 │   ├── absen-mandiri/
 │   │   └── page.js
 │   │
+│   ├── actions/
+│   │   ├── majorLogoActions.js
+│   │   ├── siswaActions.js
+│   │   └── userActions.js
+│   │
 │   ├── admin/
-│   │   └── siswa/
+│   │   │── siswa/
+│   │   │   └── page.js
+│   │   └── users/
 │   │       └── page.js
 │   │
 │   ├── components/
@@ -44,6 +47,11 @@ SIPANDU-APP/
 │   └── page.js
 │
 ├── docs/
+│   ├── CHANGELOG.md
+│   ├── DATABASE_SCHEMA.md
+│   ├── FEATURE_LIST.md
+│   ├── FOLDER_STRUCTURE.md
+│   └── PROJECT_CONTEXT.md
 │
 ├── lib/
 │   ├── supabase-admin.js

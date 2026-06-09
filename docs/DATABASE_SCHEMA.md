@@ -27,3 +27,16 @@
 * status (varchar)
 * jenis_kelamin (varchar)
 
+## users
+
+* id (int8)
+* nama (varchar)
+* username (varchar)
+* email (varchar)
+* password (varchar)
+* role (varchar)
+* kelas (varchar)
+* whatsapp (varchar)
+* status (varchar)
+* foto_url (text)
+* created_at (timestamptz)

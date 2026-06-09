@@ -60,3 +60,34 @@
 - Fix teks hitam pada semua kolom input dan select di halaman admin
 - Tambah kolom jenis_kelamin di tabel siswa (Supabase)
 - Tambah server action siswaActions.js
+- Tambah server action userActions.js
+- Tambah server admin users page.js
+
+## 2026-06-10
+
+- Aktifkan halaman Manajemen User (/admin/users)
+- Tambah kartu statistik pengguna dengan animasi count-up dan gradient (5 kartu)
+- Tambah fitur Tambah, Edit, Hapus User via Server Actions
+- Tambah fitur Upload Foto Profil ke Supabase Storage
+- Tambah fitur Import CSV, Export CSV, Cetak Data
+- Tambah fitur Hapus Semua Data (2x konfirmasi ketik "HAPUS SEMUA")
+- Tambah kolom Jurusan di tabel users (Supabase)
+- Tambah 3 dropdown Kelas (Tingkat + Jurusan + Nomor) di form dengan auto-compose
+- Tambah sorting kolom tabel (klik header)
+- Tambah filter Kelas dinamis dari database siswa
+- Tambah validasi kelas wajib untuk role selain Administrator
+- Tambah avatar default gradient jika tidak ada foto
+- Implementasi role-based navigation di sidebar (4 role)
+- Administrator: semua menu | Wali Kelas: umum+siswa+wali | Sekretaris: umum+siswa+sekretaris | OSIS: umum+siswa+osis
+- Belum login hanya tampil menu umum dan siswa
+- Tambah panel profil pengguna di sidebar (foto, nama, peran + kelas lengkap, indikator online)
+- Tambah tombol Profil Saya & Logout sejajar di sidebar
+- Tambah modal Profil Saya (lihat detail + edit email & whatsapp + simpan)
+- Tambah Server Action updateProfileData
+- Tambah Server Action getUserStats, getAvailableKelas, uploadUserPhotoAction, importUsersCSV
+- Perbaikan login: simpan userData ke localStorage, loading state "⏳ Memproses...", login via database
+- Perbaikan SubLink active state highlight di sidebar
+- Perbaikan auto-open dropdown saat navigasi ke halaman admin/users
+- Perbaikan null value pada input form (select & input)
+- Perbaikan fungsi CountUp agar update saat data berubah
+- Sub menu Managemen User di sidebar MENU SETTING kini berfungsi (href /admin/users)

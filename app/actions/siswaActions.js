@@ -3,13 +3,28 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function fetchSiswaAction() {
-  const { data, error } = await supabaseAdmin
-    .from('siswa')
-    .select('*')
-    .order('id', { ascending: true });
+  // Fetch semua data menggunakan pagination loop
+  // Supabase default limit 1000 per query, jadi kita loop sampai habis
+  const pageSize = 1000;
+  let allData = [];
+  let page = 0;
+  let hasMore = true;
 
-  if (error) return { error: error.message };
-  return { data };
+  while (hasMore) {
+    const { data, error } = await supabaseAdmin
+      .from('siswa')
+      .select('*')
+      .order('id', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) return { error: error.message };
+
+    allData = [...allData, ...(data || [])];
+    hasMore = (data || []).length === pageSize;
+    page++;
+  }
+
+  return { data: allData };
 }
 
 export async function saveSiswaAction(siswaData, editMode) {

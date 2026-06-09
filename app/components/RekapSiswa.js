@@ -1,8 +1,44 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchSiswaAction } from '@/app/actions/siswaActions';
+
+// ============================================
+// KOMPONEN: AnimatedNumber
+// Hook dipanggil di top-level komponen ini, BUKAN di .map()
+// ============================================
+function AnimatedNumber({ target, shouldStart, duration = 1800 }) {
+  const [count, setCount] = useState(0);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (!shouldStart || startedRef.current) return;
+    startedRef.current = true;
+
+    let startTime = null;
+    let rafId;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.floor(target * eased));
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(animate);
+      } else {
+        setCount(target);
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [shouldStart, target, duration]);
+
+  return <>{count}</>;
+}
 
 // Color palette untuk jurusan
 const majorColors = [
@@ -18,23 +54,70 @@ const majorColors = [
   { color: '#14B8A6', bg: '#F0FDFA' },
 ];
 
+// Warna icon per tingkat kelas
+const classColors = [
+  { icon: '#3B82F6', bg: '#DBEAFE', ring: '#93C5FD' },   // X  → Biru
+  { icon: '#10B981', bg: '#D1FAE5', ring: '#6EE7B7' },   // XI → Hijau
+  { icon: '#8B5CF6', bg: '#EDE9FE', ring: '#C4B5FD' },   // XII → Ungu
+];
+
 export default function RekapSiswa({ settings }) {
   const [openClass, setOpenClass] = useState(null);
-  const [mounted, setMounted] = useState(false);
   const [siswaData, setSiswaData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [animateStart, setAnimateStart] = useState(false);
+  const sectionRef = useRef(null);
+  const hasAnimatedRef = useRef(false);
 
   useEffect(() => {
-    setMounted(true);
     loadSiswaData();
   }, []);
+
+  // ============================================
+  // INTERSECTION OBSERVER + FALLBACK
+  // ============================================
+  useEffect(() => {
+    if (hasAnimatedRef.current) return;
+
+    const element = sectionRef.current;
+    let observer;
+
+    const startAnimation = () => {
+      if (hasAnimatedRef.current) return;
+      hasAnimatedRef.current = true;
+      setAnimateStart(true);
+    };
+
+    if (element && typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            startAnimation();
+            observer.unobserve(element);
+          }
+        },
+        { threshold: 0.1 }
+      );
+      observer.observe(element);
+    }
+
+    // Fallback: mulai animasi setelah 3 detik
+    const fallbackTimer = setTimeout(() => {
+      if (!hasAnimatedRef.current) {
+        startAnimation();
+      }
+    }, 3000);
+
+    return () => {
+      if (observer) observer.disconnect();
+      clearTimeout(fallbackTimer);
+    };
+  }, [loading]);
 
   const loadSiswaData = async () => {
     try {
       const result = await fetchSiswaAction();
-      if (result.data) {
-        setSiswaData(result.data);
-      }
+      if (result.data) setSiswaData(result.data);
     } catch (error) {
       console.error('Error fetching siswa:', error);
     } finally {
@@ -43,15 +126,12 @@ export default function RekapSiswa({ settings }) {
   };
 
   // ============================================
-  // HITUNG STATISTIK DINAMIS
+  // HITUNG STATISTIK
   // ============================================
   const totalSiswa = siswaData.length;
   const maleCount = siswaData.filter(s => s.jenis_kelamin === 'L').length;
   const femaleCount = siswaData.filter(s => s.jenis_kelamin === 'P').length;
 
-  // ============================================
-  // KELOMPOKKAN PER TINGKAT (X, XI, XII)
-  // ============================================
   const tingkatGroups = {};
   siswaData.forEach(s => {
     const kelas = (s.kelas || '').trim();
@@ -61,23 +141,15 @@ export default function RekapSiswa({ settings }) {
     tingkatGroups[tingkat].push(s);
   });
 
-  // Build classData
   const classData = ['X', 'XI', 'XII']
     .filter(t => tingkatGroups[t])
-    .map(tingkat => {
+    .map((tingkat, idx) => {
       const students = tingkatGroups[tingkat];
-
-      // Kelompokkan per jurusan/kelas group
       const majorGroups = {};
       students.forEach(s => {
         const kelas = (s.kelas || '').trim();
         const parts = kelas.split(/\s+/);
-        let majorName;
-        if (parts.length > 1) {
-          majorName = parts.slice(1).join(' ');
-        } else {
-          majorName = s.jurusan || 'Lainnya';
-        }
+        let majorName = parts.length > 1 ? parts.slice(1).join(' ') : (s.jurusan || 'Lainnya');
         if (!majorGroups[majorName]) majorGroups[majorName] = { total: 0, male: 0, female: 0 };
         majorGroups[majorName].total++;
         if (s.jenis_kelamin === 'L') majorGroups[majorName].male++;
@@ -88,42 +160,19 @@ export default function RekapSiswa({ settings }) {
         id: tingkat.toLowerCase(),
         name: `KELAS ${tingkat}`,
         count: students.length,
+        color: classColors[idx],
         majors: Object.entries(majorGroups)
           .map(([name, counts]) => ({ name, ...counts }))
           .sort((a, b) => a.name.localeCompare(b.name))
       };
     });
 
-  // ============================================
-  // CHART CONFIGS (Donut Chart)
-  // ============================================
   const chartConfigs = [
-    {
-      title: 'TOTAL SISWA',
-      percentage: 100,
-      color: '#9CA3AF',
-      bgColor: '#E5E7EB',
-      centerText: String(totalSiswa)
-    },
-    {
-      title: 'TOTAL LAKI-LAKI',
-      percentage: totalSiswa > 0 ? (maleCount / totalSiswa) * 100 : 0,
-      color: '#3B82F6',
-      bgColor: '#EFF6FF',
-      centerText: String(maleCount)
-    },
-    {
-      title: 'TOTAL PEREMPUAN',
-      percentage: totalSiswa > 0 ? (femaleCount / totalSiswa) * 100 : 0,
-      color: '#EC4899',
-      bgColor: '#FDF2F8',
-      centerText: String(femaleCount)
-    }
+    { title: 'TOTAL SISWA', percentage: 100, color: '#9CA3AF', bgColor: '#E5E7EB', value: totalSiswa },
+    { title: 'TOTAL LAKI-LAKI', percentage: totalSiswa > 0 ? (maleCount / totalSiswa) * 100 : 0, color: '#3B82F6', bgColor: '#EFF6FF', value: maleCount },
+    { title: 'TOTAL PEREMPUAN', percentage: totalSiswa > 0 ? (femaleCount / totalSiswa) * 100 : 0, color: '#EC4899', bgColor: '#FDF2F8', value: femaleCount }
   ];
 
-    // ============================================
-  // MAJORS LIST (6 Jurusan Tetap)
-  // ============================================
   const fixedMajors = [
     { code: 'TKRO', color: '#3B82F6', bg: '#EFF6FF' },
     { code: 'DKV',  color: '#F97316', bg: '#FFF7ED' },
@@ -134,22 +183,14 @@ export default function RekapSiswa({ settings }) {
   ];
 
   const majorsList = fixedMajors.map(major => {
-    // Hitung siswa yang jurusan/kelasnya mengandung kode jurusan ini
     const count = siswaData.filter(s => {
       const j = (s.jurusan || '').trim().toUpperCase();
       const k = (s.kelas || '').trim().toUpperCase();
       return j.startsWith(major.code) || k.includes(major.code);
     }).length;
-
-    return {
-      code: major.code,
-      students: count,
-      color: major.color,
-      bg: major.bg,
-    };
+    return { code: major.code, students: count, color: major.color, bg: major.bg };
   });
 
-  // Max students untuk progress bar
   const maxStudents = Math.max(...majorsList.map(m => m.students), 1);
 
   // ============================================
@@ -163,22 +204,15 @@ export default function RekapSiswa({ settings }) {
           <div className="flex-grow h-1 bg-gray-200 rounded-full"></div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-xl p-6 h-52"></div>
-          ))}
+          {[1, 2, 3].map(i => <div key={i} className="bg-white rounded-xl p-6 h-52"></div>)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-48 bg-gray-200 rounded-full mx-auto w-48"></div>
-          ))}
+          {[1, 2, 3].map(i => <div key={i} className="h-48 bg-gray-200 rounded-full mx-auto w-48"></div>)}
         </div>
       </div>
     );
   }
 
-  // ============================================
-  // EMPTY STATE
-  // ============================================
   if (totalSiswa === 0) {
     return (
       <div className="bg-gray-50 p-6 md:p-10 rounded-2xl border border-gray-200 shadow-sm font-poppins">
@@ -196,7 +230,7 @@ export default function RekapSiswa({ settings }) {
   }
 
   return (
-    <div className="bg-gray-50 p-6 md:p-10 rounded-2xl border border-gray-200 shadow-sm font-poppins">
+    <div ref={sectionRef} className="bg-gray-50 p-6 md:p-10 rounded-2xl border border-gray-200 shadow-sm font-poppins">
 
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
@@ -204,21 +238,29 @@ export default function RekapSiswa({ settings }) {
         <div className="flex-grow h-1 bg-orange-500 rounded-full"></div>
       </div>
 
-      {/* Class Cards */}
+      {/* ============================================
+          CLASS CARDS
+          AnimatedNumber sebagai komponen di dalam .map()
+          sehingga hook dipanggil di top-level AnimatedNumber,
+          BUKAN di dalam .map() di komponen utama
+      ============================================ */}
       {classData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           {classData.map((cls) => (
             <div key={cls.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md">
               <div className="p-6 text-center">
-                <div className="mx-auto w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mb-3">
-                  <Users className="text-blue-600" size={24}/>
+                <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: cls.color.bg }}>
+                  <Users size={24} style={{ color: cls.color.icon }}/>
                 </div>
-                <h3 className="text-lg font-bold text-blue-600 mb-1">{cls.name}</h3>
-                <p className="text-5xl font-bold text-gray-800 mb-1">{cls.count}</p>
+                <h3 className="text-lg font-bold mb-1" style={{ color: cls.color.icon }}>{cls.name}</h3>
+                <p className="text-5xl font-bold text-gray-800 mb-1">
+                  <AnimatedNumber target={cls.count} shouldStart={animateStart} duration={1800} />
+                </p>
                 <p className="text-gray-500 text-sm mb-4">SISWA</p>
                 <button
                   onClick={() => setOpenClass(openClass === cls.id ? null : cls.id)}
-                  className="bg-orange-500 hover:bg-orange-600 active:scale-95 transition-all text-white px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2"
+                  className="hover:opacity-90 active:scale-95 transition-all text-white px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2"
+                  style={{ backgroundColor: cls.color.icon }}
                 >
                   {openClass === cls.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} Lihat Jurusan
                 </button>
@@ -226,8 +268,8 @@ export default function RekapSiswa({ settings }) {
 
               {openClass === cls.id && (
                 <div className="bg-gray-50 border-t p-4 text-left text-sm">
-                  {cls.majors.map((major, idx) => (
-                    <div key={idx} className="mb-3 bg-white p-3 rounded-lg border border-gray-100">
+                  {cls.majors.map((major, midx) => (
+                    <div key={midx} className="mb-3 bg-white p-3 rounded-lg border border-gray-100">
                       <p className="font-semibold text-gray-800">{major.name}</p>
                       <div className="flex justify-between text-gray-600 mt-1">
                         <span>Total: {major.total}</span>
@@ -242,17 +284,21 @@ export default function RekapSiswa({ settings }) {
         </div>
       )}
 
-      {/* Donut Charts */}
+      {/* ============================================
+          DONUT CHARTS
+      ============================================ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {chartConfigs.map((chart, idx) => (
           <div key={idx} className="flex flex-col items-center py-4">
             <h4 className="font-bold text-gray-700 mb-6 text-center">{chart.title}</h4>
             <div className="relative w-48 h-48 rounded-full" style={{
-              background: mounted ? `conic-gradient(${chart.color} ${chart.percentage}%, ${chart.bgColor} ${chart.percentage}% 100%)` : `conic-gradient(${chart.bgColor} 0% 100%)`,
+              background: animateStart ? `conic-gradient(${chart.color} ${chart.percentage}%, ${chart.bgColor} ${chart.percentage}% 100%)` : `conic-gradient(${chart.bgColor} 0% 100%)`,
               transition: 'background 1.5s ease-out'
             }}>
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-gray-50 rounded-full flex flex-col items-center justify-center">
-                <p className="text-3xl font-bold text-gray-800">{chart.centerText}</p>
+                <p className="text-3xl font-bold text-gray-800">
+                  <AnimatedNumber target={chart.value} shouldStart={animateStart} duration={1800} />
+                </p>
                 <p className="text-xs text-gray-500 mt-1 font-semibold">SISWA</p>
               </div>
             </div>
@@ -260,7 +306,9 @@ export default function RekapSiswa({ settings }) {
         ))}
       </div>
 
-      {/* Majors List */}
+      {/* ============================================
+          MAJORS LIST
+      ============================================ */}
       {majorsList.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
           {majorsList.map((major) => (
@@ -278,12 +326,14 @@ export default function RekapSiswa({ settings }) {
               </div>
               <div className="flex-grow">
                 <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{width: mounted ? `${(major.students / maxStudents) * 100}%` : '0%', backgroundColor: major.color}}></div>
+                  <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{width: animateStart ? `${(major.students / maxStudents) * 100}%` : '0%', backgroundColor: major.color}}></div>
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="font-bold text-gray-800">{major.code}</p>
-                <p className="text-xs text-gray-500">{major.students} SISWA</p>
+                <p className="text-xs text-gray-500">
+                  <AnimatedNumber target={major.students} shouldStart={animateStart} duration={1400} /> SISWA
+                </p>
               </div>
             </div>
           ))}

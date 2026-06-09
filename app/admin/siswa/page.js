@@ -187,24 +187,34 @@ export default function ManajemenSiswa() {
       return;
     }
 
-    const result = await saveSiswaAction(formData, editMode);
-    if (result.error) {
-      alert('Gagal simpan: ' + result.error);
-      return;
-    }
-
-    setIsModalOpen(false);
-    fetchSiswa();
-  };
-
-    const handleDelete = async (id) => {
-    if (confirm('Yakin ingin menghapus siswa ini?')) {
-      const result = await deleteSiswaAction(id);
+    try {
+      const result = await saveSiswaAction(formData, editMode);
       if (result.error) {
-        alert('Gagal hapus: ' + result.error);
+        alert('Gagal simpan: ' + result.error);
         return;
       }
+      setIsModalOpen(false);
       fetchSiswa();
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Terjadi kesalahan saat menyimpan data. Coba lagi.');
+    }
+  };
+
+      const handleDelete = async (id) => {
+    if (confirm('Yakin ingin menghapus siswa ini?')) {
+      try {
+        const result = await deleteSiswaAction(id);
+        if (result.error) {
+          alert('Gagal hapus: ' + result.error);
+          return;
+        }
+        setCurrentPage(1);
+        fetchSiswa();
+      } catch (error) {
+        console.error('Delete error:', error);
+        alert('Terjadi kesalahan saat menghapus data.');
+      }
     }
   };
 
@@ -777,16 +787,24 @@ export default function ManajemenSiswa() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-500 block mb-1">Kelas</label>
-                  <select name="kelas" value={formData.kelas} onChange={handleInputChange} style={blackText} className={inputClass}>
+                    <select name="kelas" value={formData.kelas?.split(' ')[0] || ''} onChange={(e) => {
+                    const tingkat = e.target.value;
+                    const jurusan = formData.jurusan || '';
+                    setFormData({ ...formData, kelas: jurusan ? `${tingkat} ${jurusan}` : tingkat });
+                  }} style={blackText} className={inputClass}>
                     <option value="">Pilih Kelas</option>
-                    {kelasList.map(k => <option key={k} value={k}>{k}</option>)}
+                    {tingkatList.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 block mb-1">Jurusan</label>
-                  <select name="jurusan" value={formData.jurusan} onChange={handleInputChange} style={blackText} className={inputClass}>
+                    <select name="jurusan" value={formData.jurusan} onChange={(e) => {
+                    const jurusan = e.target.value;
+                    const tingkat = formData.kelas?.split(' ')[0] || '';
+                    setFormData({ ...formData, jurusan: jurusan, kelas: tingkat && jurusan ? `${tingkat} ${jurusan}` : tingkat });
+                  }} style={blackText} className={inputClass}>
                     <option value="">Pilih Jurusan</option>
-                    {jurusanList.map(j => <option key={j} value={j}>{j}</option>)}
+                    {kelasGroupList.map(j => <option key={j} value={j}>{j}</option>)}
                   </select>
                 </div>
               </div>
@@ -923,7 +941,7 @@ export default function ManajemenSiswa() {
                     Lanjut <ChevronRight size={16}/>
                   </button>
                 ) : (
-                  <button onClick={handleProcessPromote} disabled={promoteLoading || (promoteAction === 'lulus' && selectedIds.length > 0)} className="px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+                    <button onClick={handleProcessPromote} disabled={promoteLoading || selectedIds.length === 0} className="px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
                     {promoteLoading ? (
                       <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Memproses...</>
                     ) : (
