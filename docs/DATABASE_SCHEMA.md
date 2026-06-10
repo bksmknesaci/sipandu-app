@@ -40,3 +40,34 @@
 * status (varchar)
 * foto_url (text)
 * created_at (timestamptz)
+
+## absensi
+
+* id (int8)
+* siswa_id (int8)
+* tanggal (date)
+* status (varchar)
+* input_by (varchar)
+* locked (boolean)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+* UNIQUE(siswa_id, tanggal)
+
+## absensi_edit_requests
+
+* id (int8)
+* user_id (int8)
+* kelas (varchar)
+* jurusan (varchar)
+* tanggal (date)
+* reason (text)
+* status (varchar)
+* approved_by (int8)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+
+## Catatan Penggunaan Nilai (Value Constraints)
+
+absensi
+* input_by: Menerima nilai 'Sekretaris Kelas', 'Administrator', 'Sistem Otomatis', 'QR Mandiri', 'Sakit/Izin Online'
+* status: Menerima nilai 'Hadir', 'Sakit', 'Izin', 'Alpha'

@@ -106,6 +106,9 @@ Status: ACTIVE
 - Pemilihan Kelas via 3 Dropdown (Tingkat + Jurusan + Nomor) dengan Auto-Compose
 - Validasi Kelas Wajib untuk Non-Administrator
 - Avatar Default Gradient (Jika Tidak Ada Foto)
+- Tambah User (Modal Form + Upload Foto Profil)
+- Edit User
+- Hapus User
 
 Status: ACTIVE
 
@@ -131,3 +134,28 @@ Status: ACTIVE
 - Auto-Open Dropdown sesuai Halaman Aktif
 
 Status: ACTIVE
+
+## Menu Rekap Kehadiran
+
+- Halaman Rekap Kehadiran (Akses: Wali Kelas & Administrator)
+- Tab Harian (Tabel Detail, Status Badge, Sumber Absensi, Waktu)
+- Tab Bulanan (Freeze Table Nama & Header, Kolom Tanggal 1-31, Auto-Alpha di tanggal kosong)
+- Tab Semester (6 Bulan, Format H/S/I/A vertikal, Freeze Table, Total & Persentase)
+- Tab Tahunan (12 Bulan, Format H/S/I/A vertikal, Freeze Table, Total & Persentase)
+- Auto-Alpha Sinkronisasi (Otomatis mengisi Alpha jika tidak ada record >14:00 WIB)
+- Export PDF (Kop Surat Resmi, Logo Dinas Jabar & Logo Sekolah, Data Semester)
+- Export Excel (Data Rekap Semester Format Lengkap)
+- Reset Semester (Hapus data absensi semester aktif)
+- Reset Semua / Tahunan (Hapus seluruh data absensi kelas terpilih)
+- Diagram Distribusi Kehadiran (Donut Chart Hari Ini)
+- Diagram Perbandingan Status (Bar Chart Hari Ini)
+
+Status: ACTIVE
+
+## Dashboard - Daftar Siswa Tidak Hadir
+
+- Integrasi Supabase Realtime Subscription (Auto-update tanpa reload)
+- Perbaikan Label Kelas (Gabungan Kelas + Jurusan, cont: "XI TKRO 1")
+
+Status: ACTIVE
+

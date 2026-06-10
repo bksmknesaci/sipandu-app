@@ -13,8 +13,14 @@ import {
 
 const roleList = ['Administrator', 'Wali Kelas', 'Sekretaris Kelas', 'OSIS']
 const tingkatList = ['X', 'XI', 'XII']
-const jurusanList = ['TKRO', 'DKV', 'RPL', 'PH', 'KL', 'LPKKK']
-const nomorKelasList = ['1', '2', '3', '4']
+const jurusanList = [
+  'TKRO 1', 'TKRO 2', 'TKRO 3', 'TKRO 4',
+  'DKV 1', 'DKV 2', 'DKV 3', 'DKV 4',
+  'RPL 1', 'RPL 2', 'RPL 3', 'RPL 4',
+  'PH 1', 'PH 2', 'PH 3', 'PH 4',
+  'KL 1', 'KL 2', 'KL 3', 'KL 4',
+  'LPKKK 1', 'LPKKK 2', 'LPKKK 3', 'LPKKK 4',
+]
 
 const roleConfig = {
   'Administrator': { icon: Shield, color: '#8B5CF6', bg: '#F5F3FF', gradient: 'from-purple-500 to-purple-600' },
@@ -193,6 +199,16 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, target, isAll = false 
 export default function ManajemenUser() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // ← TARUH DI SINI, bersama state lainnya
+  const [userData, setUserData] = useState(null)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData')
+      if (stored) setUserData(JSON.parse(stored))
+    } catch {}
+  }, [])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -293,16 +309,15 @@ export default function ManajemenUser() {
     const { name, value } = e.target
     setFormData(prev => {
       const updated = { ...prev, [name]: value }
-      // Auto-compose kelas dari tingkat + jurusan + nomor
-      if (['tingkat', 'jurusan', 'nomor'].includes(name)) {
+      // Auto-compose kelas dari tingkat + jurusan (jurusan sudah termasuk nomor, misal "TKRO 1")
+      if (['tingkat', 'jurusan'].includes(name)) {
         const t = name === 'tingkat' ? value : prev.tingkat
         const j = name === 'jurusan' ? value : prev.jurusan
-        const n = name === 'nomor' ? value : prev.nomor
-        updated.kelas = t && j && n ? `${t} ${j} ${n}` : ''
+        updated.kelas = t && j ? `${t} ${j}` : ''
         updated.jurusan = j
       }
       if (name === 'role' && value === 'Administrator') {
-        updated.kelas = ''; updated.tingkat = ''; updated.jurusan = ''; updated.nomor = ''
+        updated.kelas = ''; updated.tingkat = ''; updated.jurusan = ''
       }
       return updated
     })
@@ -332,7 +347,6 @@ export default function ManajemenUser() {
       role: u.role || 'OSIS',
       tingkat: parsed.tingkat || '',
       jurusan: u.jurusan || parsed.jurusan || '',
-      nomor: parsed.nomor || '',
       kelas: u.kelas || '',
       whatsapp: u.whatsapp || '',
       status: u.status || 'Aktif',
@@ -391,11 +405,16 @@ export default function ManajemenUser() {
     } catch (e) { console.error(e) }
   }
 
-  const handleDeleteAllConfirm = async () => {
+    const handleDeleteAllConfirm = async () => {
     try {
-      const result = await deleteAllUsersAction()
+      // Dapatkan ID user yang sedang login agar tidak ikut terhapus
+      const currentUserId = userData?.id
+      const result = await deleteAllUsersAction(currentUserId)
       if (result.error) { showToast(result.error, 'error'); return }
-      showToast('Semua pengguna berhasil dihapus!'); setIsDeleteAllOpen(false); setCurrentPage(1); await fetchUsers()
+      showToast('Semua pengguna berhasil dihapus! Akun Anda tetap aman.')
+      setIsDeleteAllOpen(false)
+      setCurrentPage(1)
+      fetchUsers()
     } catch (e) { console.error(e) }
   }
 
@@ -672,7 +691,7 @@ export default function ManajemenUser() {
               {formData.role !== 'Administrator' && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 block mb-1">Kelas <span className="text-red-500">*</span></label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <select name="tingkat" value={formData.tingkat} onChange={handleInputChange} style={blackText} className={inputClass}>
                       <option value="">Tingkat</option>
                       {tingkatList.map(t => <option key={t} value={t}>{t}</option>)}
@@ -681,12 +700,7 @@ export default function ManajemenUser() {
                       <option value="">Jurusan</option>
                       {jurusanList.map(j => <option key={j} value={j}>{j}</option>)}
                     </select>
-                    <select name="nomor" value={formData.nomor} onChange={handleInputChange} style={blackText} className={inputClass}>
-                      <option value="">No</option>
-                      {nomorKelasList.map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
                   </div>
-                  {/* Preview kelas yang terbentuk */}
                   {formData.kelas && (
                     <p className="mt-2 text-xs text-blue-600 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg">
                       Kelas: <span className="font-bold">{formData.kelas}</span>

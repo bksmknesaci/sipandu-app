@@ -73,7 +73,10 @@ export default function AppShell({ children }) {
   useEffect(() => {
     if (pathname === '/') setActiveMenu('beranda');
     else if (pathname.includes('/absen-mandiri')) setActiveMenu('absen-mandiri');
-    else if (pathname.includes('/admin/users')) {
+    else if (pathname.includes('/rekap-kehadiran')) {
+      setActiveMenu('wali');
+      setOpenMenus(prev => ({ ...prev, wali: true }));
+    } else if (pathname.includes('/admin/users')) {
       setActiveMenu('setting');
       setOpenMenus(prev => ({ ...prev, setting: true }));
     } else if (pathname.includes('/admin/siswa')) {
@@ -311,7 +314,7 @@ export default function AppShell({ children }) {
           {isLoggedIn && (isSekretaris || isAdmin) && (
             <>
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SEKRETARIS</p>
-              <NavLink icon={ClipboardList} title="Absensi Kehadiran" menuId="absensi" />
+              <NavLink icon={ClipboardList} title="Absensi Kehadiran" href="/absensi" menuId="absensi" />
             </>
           )}
 
@@ -335,7 +338,7 @@ export default function AppShell({ children }) {
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
                 <SubLink icon={FileWarning} title="Rekap Pelanggaran" />
                 <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" />
-                <SubLink icon={ClipboardCheck} title="Rekap Kehadiran" />
+                <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
               </DropdownMenu>
             </>
           )}
@@ -346,7 +349,7 @@ export default function AppShell({ children }) {
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU ADMIN</p>
               <DropdownMenu title="Administrator" icon={Shield} menuKey="admin" menuId="admin">
                 <SubLink icon={Users} title="Daftar Siswa" href="/admin/siswa" />
-                <SubLink icon={UserCog} title="Penanganan Siswa" />
+                <SubLink icon={UserCog} title="Penanganan Siswa" href="/admin/siswa/penanganan" />
                 <SubLink icon={BarChart2} title="Rekap Reward" />
                 <SubLink icon={FileText} title="Rekap Formulir" />
                 <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" />

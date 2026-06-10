@@ -9,8 +9,13 @@ SIPANDU-APP/
 │   ├── absen-mandiri/
 │   │   └── page.js
 │   │
+│   ├── absensi/
+│   │   └── page.js
+│   │
 │   ├── actions/
+│   │   ├── absensiActions.js
 │   │   ├── majorLogoActions.js
+│   │   ├── rekapActions.js
 │   │   ├── siswaActions.js
 │   │   └── userActions.js
 │   │
@@ -32,6 +37,9 @@ SIPANDU-APP/
 │   │   └── TopReward.js
 │   │
 │   ├── login/
+│   │   └── page.js
+│   │
+│   ├── rekap-kehadiran/   
 │   │   └── page.js
 │   │
 │   ├── setting/
@@ -60,6 +68,13 @@ SIPANDU-APP/
 ├── node_modules/
 │
 ├── public/
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── logo-dinas.png
+│   ├── logo-sekolah.png
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
 │
 ├── .env.local
 ├── .gitignore

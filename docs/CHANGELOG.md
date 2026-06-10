@@ -91,3 +91,30 @@
 - Perbaikan null value pada input form (select & input)
 - Perbaikan fungsi CountUp agar update saat data berubah
 - Sub menu Managemen User di sidebar MENU SETTING kini berfungsi (href /admin/users)
+- Aktifkan halaman Manajemen User (/admin/users)
+- Tambah kartu statistik pengguna dengan animasi count-up dan gradient (5 kartu)
+- Tambah fitur Tambah, Edit, Hapus User via Server Actions
+- Tambah fitur Upload Foto Profil ke Supabase Storage
+- Tambah fitur Import CSV, Export CSV, Cetak Data
+- Tambah fitur Hapus Semua Data (kecuali admin yang sedang aktif)
+
+## 2026-06-10
+
+- Aktifkan halaman Manajemen User (/admin/users)
+- Tambah kartu statistik pengguna dengan animasi count-up dan gradient (5 kartu)
+- Tambah fitur Tambah, Edit, Hapus User via Server Actions (bypass RLS)
+
+## 2026-06-11
+
+- Aktifkan halaman Rekap Kehadiran (/rekap-kehadiran)
+- Tambah 4 Tab Rekap: Harian, Bulanan, Semester, Tahunan
+- Tambah Freeze Table (Sticky Header & Sidebar) di tab Bulanan, Semester, Tahunan
+- Tambah Auto-Alpha Sinkronisasi di Server Action (Otomatis >14:00 WIB)
+- Tambah Export PDF dengan Kop Surat Resmi (Logo Dinas Jabar & Logo Sekolah)
+- Tambah Export Excel Data Semester (Format kolom bulanan H/S/I/A)
+- Tambah tombol Reset Semester & Reset Semua Absensi (Hapus data kelas terpilih)
+- Tambah diagram Distribusi & Perbandingan Status di tab Semester/Tahunan
+- Perbaikan query filter bulanan (gunakan gte/lte alih-alih like untuk tipe date)
+- Perbaikan grouping kelas di Dashboard DaftarTidakHadir (Gabung kelas+jurusan)
+- Tambah Supabase Realtime Subscription di komponen DaftarTidakHadir
+- Simpan aset logo (logo-dinas.png, logo-sekolah.png) ke folder public

@@ -133,11 +133,26 @@ export async function deleteUserAction(id) {
 // ============================
 // DELETE ALL USERS
 // ============================
-export async function deleteAllUsersAction() {
-  const { error } = await supabaseAdmin
+export async function deleteAllUsersAction(excludeUserId) {
+  // Konversi excludeUserId ke Integer karena tipe id di Supabase adalah bigint
+  const safeAdminId = excludeUserId ? parseInt(excludeUserId, 10) : null;
+
+  let query = supabaseAdmin
     .from('users')
-    .delete()
-    .gte('id', 1)
+    .delete();
+
+  // Jika safeAdminId valid (berhasil di-parse jadi angka), kecualikan admin tersebut
+  if (!isNaN(safeAdminId) && safeAdminId !== null) {
+    query = query.neq('id', safeAdminId);
+  } else {
+    // Jika ID admin tidak valid (undefined/NaN/null), batalkan operasi demi keamanan
+    // agar tidak ikut menghapus akun admin yang sedang login
+    console.error("ID Admin tidak valid, operasi hapus semua dibatalkan.");
+    return { error: "ID Admin tidak valid. Gagal menghapus data demi keamanan akun Anda." };
+  }
+
+  const { error } = await query;
+
   if (error) return { error: error.message }
   return { success: true }
 }

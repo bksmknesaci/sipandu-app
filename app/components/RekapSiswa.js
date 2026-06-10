@@ -149,7 +149,7 @@ export default function RekapSiswa({ settings }) {
       students.forEach(s => {
         const kelas = (s.kelas || '').trim();
         const parts = kelas.split(/\s+/);
-        let majorName = parts.length > 1 ? parts.slice(1).join(' ') : (s.jurusan || 'Lainnya');
+        let majorName = tingkat + ' ' + (s.jurusan || parts.slice(1).join(' ') || 'Lainnya');
         if (!majorGroups[majorName]) majorGroups[majorName] = { total: 0, male: 0, female: 0 };
         majorGroups[majorName].total++;
         if (s.jenis_kelamin === 'L') majorGroups[majorName].male++;
