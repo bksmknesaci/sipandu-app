@@ -9,6 +9,9 @@ SIPANDU-APP/
 │   ├── absen-mandiri/
 │   │   └── page.js
 │   │
+│   ├── absen-sakit-izin/
+│   │   └── page.js
+│   │
 │   ├── absensi/
 │   │   └── page.js
 │   │
@@ -20,7 +23,9 @@ SIPANDU-APP/
 │   │   └── userActions.js
 │   │
 │   ├── admin/
-│   │   │── siswa/
+│   │   ├── siswa/
+│   │   │   ├── penanganan/
+│   │   │   │   └── page.js
 │   │   │   └── page.js
 │   │   └── users/
 │   │       └── page.js
@@ -48,6 +53,10 @@ SIPANDU-APP/
 │   │
 │   ├── tentang/
 │   │   └── page.js
+│   │
+│   ├── wali-kelas/
+│   │   └── rekap-sakit-izin/
+│   │       └── page.js
 │   │
 │   ├── favicon.ico
 │   ├── globals.css

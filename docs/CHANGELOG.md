@@ -118,3 +118,24 @@
 - Perbaikan grouping kelas di Dashboard DaftarTidakHadir (Gabung kelas+jurusan)
 - Tambah Supabase Realtime Subscription di komponen DaftarTidakHadir
 - Simpan aset logo (logo-dinas.png, logo-sekolah.png) ke folder public
+
+## 2026-06-12
+
+- Aktifkan halaman Absen Sakit & Izin (/absen-sakit-izin)
+- Aktifkan halaman Rekap Sakit & Izin (/wali-kelas/rekap-sakit-izin)
+- Buat halaman placeholder Penanganan Siswa (/admin/siswa/penanganan)
+- Buat tabel tb_absensi_sakit_izin di Supabase
+- Buat Storage bucket bukti-sakit-izin di Supabase
+- Install library html5-qrcode
+- Revamp total halaman Absen Hadir Mandiri (NISN search + Real Camera QR Scan)
+- Integrasi Kamera HP untuk scan QR Code di Absen Hadir Mandiri
+- Validasi QR Code JSON (Regex kelas_id ke format database)
+- Sinkronisasi Otomatis: Input Sakit/Izin langsung mengisi tabel absensi utama (locked)
+- Sinkronisasi Otomatis: Scan QR Hadir langsung mengisi tabel absensi utama (locked)
+- Integrasi halaman Sekretaris: Badge ONLINE/SCAN QR & Lock tombol status inputan sistem
+- Integrasi halaman Rekap Kehadiran: Data Sakit/Izin otomatis masuk ke rekap
+- Fix bug Timezone: Semua input tanggal diseragamkan menggunakan format WIB (toLocaleDateString 'sv-SE')
+- Tambah filter kelas/jurusan dan statistik di Rekap Sakit & Izin
+- Tambah kolom Peta (Google Maps link) di Rekap Sakit & Izin
+- Tambah logika Tolak Pengajuan (Otomatis ubah status jadi Alpha di tabel absensi)
+- Fix upload foto bukti (Jika bucket storage gagal, data tetap tersimpan tanpa foto)

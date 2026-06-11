@@ -306,7 +306,7 @@ export default function AppShell({ children }) {
 
           {/* MENU SISWA */}
           <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SISWA</p>
-          <NavLink icon={HeartPulse} title="Absen Sakit & Izin" menuId="sakit" />
+          <NavLink icon={HeartPulse} title="Absen Sakit & Izin" href="/absen-sakit-izin" menuId="sakit" />
           <NavLink icon={Search} title="Cari Data Siswa" menuId="cari" />
           <NavLink icon={UserCheck} title="Absen Hadir Mandiri" href="/absen-mandiri" menuId="absen-mandiri" />
 
@@ -337,7 +337,7 @@ export default function AppShell({ children }) {
                 <SubLink icon={Award} title="Entri Reward" />
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
                 <SubLink icon={FileWarning} title="Rekap Pelanggaran" />
-                <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" />
+                <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
                 <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
               </DropdownMenu>
             </>

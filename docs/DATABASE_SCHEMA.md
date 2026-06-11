@@ -71,3 +71,35 @@
 absensi
 * input_by: Menerima nilai 'Sekretaris Kelas', 'Administrator', 'Sistem Otomatis', 'QR Mandiri', 'Sakit/Izin Online'
 * status: Menerima nilai 'Hadir', 'Sakit', 'Izin', 'Alpha'
+
+## tb_absensi_sakit_izin
+
+* id (int8)
+* tanggal (date)
+* jam (time)
+* nisn (text)
+* nama_siswa (text)
+* kelas (varchar)
+* jurusan (varchar)
+* jenis_absensi (varchar) -- Nilai: 'Sakit', 'Izin'
+* alasan (text)
+* foto_bukti (text)
+* latitude (numeric)
+* longitude (numeric)
+* akurasi_gps (numeric)
+* status_verifikasi (varchar) -- Nilai: 'MENUNGGU VERIFIKASI', 'DISETUJUI', 'DITOLAK'
+* verifikator (int8)
+* waktu_verifikasi (timestamptz)
+* catatan_wali_kelas (text)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+
+## Supabase Storage Buckets
+
+* logos (public) -- Untuk logo jurusan
+* bukti-sakit-izin (public) -- Untuk foto bukti sakit/izin siswa
+
+## Catatan Penggunaan Nilai (Value Constraints)
+* absensi
+
+* input_by: Ditambahkan nilai 'Sakit/Izin Online', 'QR Mandiri'

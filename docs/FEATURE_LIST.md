@@ -159,3 +159,51 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Absen Sakit & Izin
+
+- Halaman pengajuan ketidakhadiran untuk siswa
+- Input NISN untuk verifikasi identitas siswa
+- Batas waktu pengajuan 06:00 WIB - 09:04 WIB (Admin bebas waktu)
+- Pilihan Jenis: Sakit atau Izin
+- Wajib ambil foto langsung dari kamera (bukan galeri)
+- Kompresi foto otomatis (target 100-300 KB)
+- Deteksi lokasi GPS otomatis (Wajib untuk siswa, opsional admin)
+- Sinkronisasi Otomatis ke Tabel Absensi Utama (locked=true, input_by='Sakit/Izin Online')
+- Cegah duplikasi pengajuan (1x per hari)
+- Mode Admin (Bebas waktu, GPS & Foto opsional)
+
+Status: ACTIVE
+
+## Rekap Sakit & Izin (Wali Kelas)
+
+- Halaman verifikasi pengajuan untuk Wali Kelas & Administrator
+- Statistik Pengajuan (Total, Menunggu, Disetujui, Ditolak)
+- Filter Kelas & Jurusan (Otomatis untuk Wali Kelas, Dropdown untuk Admin)
+- Tab Filter Status (Menunggu, Disetujui, Ditolak)
+- Kolom Peta (Link Google Maps berdasarkan koordinat siswa)
+- Lihat Bukti Foto (Modal pop-up)
+- Aksi Setujui (Status di absensi utama tetap Sakit/Izin)
+- Aksi Tolak (Status di absensi utama otomatis berubah menjadi Alpha, wajib isi catatan)
+- Reset Filter
+
+Status: ACTIVE
+
+## Absen Hadir Mandiri (Revamp)
+
+- Input NISN untuk mencari data siswa
+- Integrasi Kamera HP via library html5-qrcode
+- Scan QR Code Kelas (Format JSON dari halaman QR Absensi)
+- Validasi Kelas (Jika QR kelas tidak cocok, sistem menolak)
+- Sinkronisasi Otomatis ke Tabel Absensi Utama (locked=true, input_by='QR Mandiri')
+
+Status: ACTIVE
+
+## Integrasi Absensi Otomatis
+
+- Data dari Sakit/Izin & QR Mandiri langsung masuk ke Tabel Absensi Utama
+- Status otomatis terkunci (locked=true) bagi Sekretaris
+- Badge Keterangan di halaman Sekretaris (ONLINE / SCAN QR)
+- Sekretaris tidak dapat mengubah status yang dikunci dari sistem online
+- Timezone Sinkron (Semua halaman menggunakan format tanggal WIB 'sv-SE')
+
+Status: ACTIVE

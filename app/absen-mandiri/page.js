@@ -1,207 +1,188 @@
-"use client";
+"use client"
 
-import React, { useState, useEffect } from 'react';
-import { UserCheck, Camera, MapPin, Clock, Shield, AlertTriangle, CheckCircle, QrCode, LogIn } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react'
+import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X } from 'lucide-react'
+import { getSiswaByNISN, submitAbsenMandiri } from '@/app/actions/absensiActions'
 
-export default function AbsenMandiriPage() {
-  const [step, setStep] = useState('idle'); // idle, camera, scanning, validating, success, failed
-  const [message, setMessage] = useState('');
-  const [locationStatus, setLocationStatus] = useState(null);
-  const [timeStatus, setTimeStatus] = useState(null);
+export default function AbsenHadirMandiri() {
+  const [nisnInput, setNisnInput] = useState('')
+  const [siswa, setSiswa] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [toast, setToast] = useState(null)
+  
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
+  const [scannedResult, setScannedResult] = useState('')
+  const html5QrCodeRef = useRef(null)
 
-  // Cek apakah user login
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const todayStr = new Date().toLocaleDateString('sv-SE')
 
   useEffect(() => {
-    const loggedIn = localStorage.getItem('isLoggedIn');
-    setIsLoggedIn(loggedIn === 'true');
-  }, []);
+    if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t) }
+  }, [toast])
 
-  // Validasi GPS (Simulasi)
-  const checkGPS = () => {
-    setLocationStatus('checking');
-    // Di dunia nyata, gunakan navigator.geolocation.getCurrentPosition
-    // lalu hitung jarak ke koordinat sekolah (Haversine formula)
-    setTimeout(() => {
-      // Simulasi berhasil (dalam radius)
-      setLocationStatus('valid');
-    }, 1500);
-  };
-
-  // Validasi Waktu (Simulasi)
-  const checkTime = () => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const time = hours * 60 + minutes;
+  const handleVerifyNISN = async (e) => {
+    e.preventDefault()
+    if (!nisnInput) return
+    setLoading(true)
+    setSiswa(null)
+    setIsSubmitted(false)
     
-    // Jam masuk 06:00 - 07:15 (360 - 435)
-    if (time >= 360 && time <= 435) {
-      setTimeStatus('valid');
-      return 'Hadir';
+    const res = await getSiswaByNISN(nisnInput)
+    if (res.data) {
+      setSiswa(res.data)
+    } else {
+      setToast({ type: 'error', message: res.error || 'NISN tidak ditemukan!' })
     }
-    // Terlambat 07:16 - 08:00 (436 - 480)
-    else if (time > 435 && time <= 480) {
-      setTimeStatus('valid');
-      return 'Terlambat';
-    }
-    // Di luar jam
-    else {
-      setTimeStatus('invalid');
-      return 'Diluar Jam Absensi';
-    }
-  };
+    setLoading(false)
+  }
 
-  const startScan = () => {
-    if (!isLoggedIn) {
-      setStep('failed');
-      setMessage('Anda harus login sebagai siswa aktif terlebih dahulu.');
-      return;
-    }
-    setStep('camera');
-    checkGPS();
-  };
-
-  const handleScanSimulation = () => {
-    setStep('validating');
+  const startCamera = async () => {
+    setScannedResult('')
+    setIsCameraOpen(true)
     
-    // Cek GPS
-    if (locationStatus !== 'valid') {
-      setStep('failed');
-      setMessage('Anda berada di luar area sekolah. Silakan lakukan absensi dari lingkungan sekolah.');
-      return;
+    const { Html5Qrcode } = await import('html5-qrcode')
+    const html5QrCode = new Html5Qrcode("qr-reader")
+    html5QrCodeRef.current = html5QrCode
+
+    try {
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          setScannedResult(decodedText)
+          stopCamera()
+          validateAndSubmit(decodedText)
+        },
+        () => {}
+      )
+    } catch (err) {
+      setToast({ type: 'error', message: 'Gagal membuka kamera. Pastikan izin kamera diaktifkan.' })
+      setIsCameraOpen(false)
+    }
+  }
+
+  const stopCamera = async () => {
+    if (html5QrCodeRef.current) {
+      try { await html5QrCodeRef.current.stop() } catch (e) {}
+      html5QrCodeRef.current = null
+    }
+    setIsCameraOpen(false)
+  }
+
+  const validateAndSubmit = async (qrText) => {
+    if (!siswa) return
+    
+    const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
+    let kelasFromQR = ""
+    
+    // PERBAIKAN: Parse format JSON dari QR Absensi SIPANDU
+    try {
+      const qrData = JSON.parse(qrText)
+      if (qrData.kelas_id) {
+        // Ganti strip dengan spasi (X-TKRO-1 menjadi X TKRO 1)
+        kelasFromQR = qrData.kelas_id.replace(/-/g, ' ')
+      }
+    } catch (e) {
+      // Jika bukan format JSON, gunakan teks aslinya
+      kelasFromQR = qrText
+    }
+    
+    // Cek kecocokan kelas
+    if (kelasFromQR !== fullKelasSiswa) {
+      setToast({ type: 'error', message: `Gagal! QR ini untuk kelas ${kelasFromQR}, sedangkan Anda siswa kelas ${fullKelasSiswa}.` })
+      return
     }
 
-    // Cek Waktu
-    const timeResult = checkTime();
-    if (timeStatus === 'invalid') {
-      setStep('failed');
-      setMessage(`Absensi gagal. ${timeResult}. Jam absensi adalah 06:00 - 08:00.`);
-      return;
+    setLoading(true)
+    const res = await submitAbsenMandiri(nisnInput, todayStr, fullKelasSiswa)
+    if (res.success) {
+      setIsSubmitted(true)
+      setToast({ type: 'success', message: 'Absensi Hadir berhasil dicatat!' })
+    } else {
+      setToast({ type: 'error', message: res.error || 'Gagal mencatat absensi' })
     }
-
-    // Simulasi Cek Duplikat
-    const alreadyScan = false; // Di dunia nyata, cek ke Supabase
-    if (alreadyScan) {
-      setStep('failed');
-      setMessage('Anda sudah melakukan absensi hari ini.');
-      return;
-    }
-
-    // Simulasi Cek Kelas
-    const correctClass = true; // Di dunia nyata, bandingkan QR kelas dengan kelas siswa
-    if (!correctClass) {
-      setStep('failed');
-      setMessage('QR Code tidak sesuai dengan kelas Anda.');
-      return;
-    }
-
-    // Semua valid
-    setTimeout(() => {
-      setStep('success');
-      setMessage(`Absensi berhasil dicatat pada ${new Date().toLocaleTimeString()} dengan status: ${timeResult}`);
-    }, 1500);
-  };
+    setLoading(false)
+  }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-6 bg-gray-50">
-      <div className="w-full max-w-md">
-        
-        {/* Idle State */}
-        {step === 'idle' && (
-          <div className="bg-white rounded-2xl shadow-lg border p-8 text-center animate-fadeIn">
-            <div className="bg-blue-50 p-4 rounded-full inline-block mb-5">
-              <QrCode size={40} className="text-blue-600" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800 mb-3">Absen Hadir Mandiri</h1>
-            <p className="text-gray-500 text-sm mb-8">
-              Pastikan Anda berada di lingkungan sekolah dan dalam jam absensi yang ditentukan.
-            </p>
-            
-            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-left mb-6 text-xs text-yellow-700 space-y-2">
-              <p className="font-bold text-sm mb-2 flex items-center gap-2"><AlertTriangle size={14}/> Syarat Absensi:</p>
-              <p className="flex items-center gap-2"><CheckCircle size={12}/> Login sebagai siswa aktif</p>
-              <p className="flex items-center gap-2"><CheckCircle size={12}/> Berada di area sekolah (Max 100m)</p>
-              <p className="flex items-center gap-2"><CheckCircle size={12}/> Dilakukan pada jam 06:00 - 08:00</p>
-              <p className="flex items-center gap-2"><CheckCircle size={12}/> Belum absen hari ini</p>
-            </div>
+    <div className="p-6 md:p-8 max-w-2xl mx-auto space-y-6 bg-gray-50/50 min-h-screen">
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[9999] px-5 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-2 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+          {toast.type === 'error' ? <XCircle size={16}/> : <CheckCircle size={16}/>} {toast.message}
+        </div>
+      )}
 
-            <button onClick={startScan} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md">
-              <Camera size={20}/> Mulai Scan QR Kelas
-            </button>
-          </div>
-        )}
-
-        {/* Camera / Scanning State */}
-        {(step === 'camera' || step === 'scanning') && (
-          <div className="bg-white rounded-2xl shadow-lg border p-6 text-center animate-fadeIn">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Scan QR Code Kelas</h3>
-            
-            {/* Camera Viewport Mockup */}
-            <div className="relative bg-gray-900 w-full h-64 rounded-xl mb-4 flex items-center justify-center overflow-hidden">
-              <div className="absolute w-40 h-40 border-4 border-blue-400 rounded-2xl opacity-80 animate-pulse"></div>
-              <Camera size={40} className="text-gray-600"/>
-            </div>
-
-            {/* Validations List */}
-            <div className="space-y-2 text-left text-sm mb-4">
-              <div className="flex items-center gap-2 text-gray-600">
-                <MapPin size={16} className={locationStatus === 'valid' ? 'text-green-500' : 'text-yellow-500'}/> 
-                {locationStatus === 'valid' ? 'Lokasi Terverifikasi' : locationStatus === 'checking' ? 'Mengecek lokasi...' : 'Menunggu lokasi'}
-              </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <Clock size={16} className="text-green-500"/> Jam absensi aktif
-              </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <LogIn size={16} className="text-green-500"/> Siswa aktif terautentikasi
-              </div>
-            </div>
-
-            <button onClick={handleScanSimulation} className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md">
-              <QrCode size={20}/> Simulasikan Scan Berhasil
-            </button>
-          </div>
-        )}
-
-        {/* Validating State */}
-        {step === 'validating' && (
-          <div className="bg-white rounded-2xl shadow-lg border p-8 text-center animate-fadeIn">
-            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Memvalidasi Absensi...</h3>
-            <p className="text-sm text-gray-500">Cek lokasi, waktu, dan data kehadiran</p>
-          </div>
-        )}
-
-        {/* Success State */}
-        {step === 'success' && (
-          <div className="bg-white rounded-2xl shadow-lg border p-8 text-center animate-fadeIn">
-            <div className="bg-green-50 p-4 rounded-full inline-block mb-5">
-              <CheckCircle size={40} className="text-green-600" />
-            </div>
-            <h3 className="text-xl font-bold text-green-700 mb-2">Absensi Berhasil!</h3>
-            <p className="text-gray-600 text-sm mb-6">{message}</p>
-            <button onClick={() => setStep('idle')} className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-all">Kembali</button>
-          </div>
-        )}
-
-        {/* Failed State */}
-        {step === 'failed' && (
-          <div className="bg-white rounded-2xl shadow-lg border p-8 text-center animate-fadeIn">
-            <div className="bg-red-50 p-4 rounded-full inline-block mb-5">
-              <AlertTriangle size={40} className="text-red-600" />
-            </div>
-            <h3 className="text-xl font-bold text-red-700 mb-2">Absensi Ditolak</h3>
-            <p className="text-gray-600 text-sm mb-6">{message}</p>
-            <button onClick={() => setStep('idle')} className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-all">Coba Lagi</button>
-          </div>
-        )}
-
+      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-2xl text-white shadow-xl">
+        <h1 className="text-2xl font-extrabold flex items-center gap-2"><UserCheck size={28}/> ABSEN HADIR MANDIRI</h1>
+        <p className="text-emerald-100 mt-1 text-sm">{today}</p>
+        <p className="text-emerald-100 mt-2 text-sm">Masukkan NISN, lalu scan QR Code yang tertempel di meja kelas Anda menggunakan kamera.</p>
       </div>
 
-      <style jsx>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-      `}</style>
+      {isSubmitted ? (
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
+          <ShieldCheck size={64} className="mx-auto text-emerald-500 mb-4"/>
+          <h2 className="text-2xl font-bold text-gray-800">Absensi Berhasil!</h2>
+          <p className="text-gray-500 mt-2">Anda telah dicatat <span className="font-bold text-emerald-600">HADIR</span> hari ini.</p>
+          <div className="mt-4 inline-flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
+            <CheckCircle size={16} className="text-emerald-600"/> <span className="text-sm font-bold text-emerald-700">QR Mandiri Terverifikasi</span>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
+          <div>
+            <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Search size={18}/> Langkah 1: Cari Data Siswa</h3>
+            <form onSubmit={handleVerifyNISN} className="flex gap-3">
+              <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN Anda..." className="flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              <button type="submit" disabled={!nisnInput || loading} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
+                {loading && !siswa ? <Loader2 className="animate-spin" size={16}/> : <Search size={16}/>} Cari
+              </button>
+            </form>
+          </div>
+
+          {siswa && (
+            <>
+              <div className="flex items-center gap-5 bg-gray-50 p-4 rounded-xl border">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xl font-bold shadow flex-shrink-0">
+                  {siswa.nama?.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">{siswa.nama}</h3>
+                  <p className="text-sm text-gray-500">NISN: {siswa.nis} • Kelas: {siswa.kelas} {siswa.jurusan}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-6">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><QrCode size={18}/> Langkah 2: Scan QR Code Kelas</h3>
+                
+                {!isCameraOpen && !scannedResult ? (
+                  <button onClick={startCamera} disabled={loading} className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-500/30 hover:shadow-xl transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <Camera size={20}/> BUKA KAMERA & SCAN QR
+                  </button>
+                ) : isCameraOpen ? (
+                  <div className="space-y-4">
+                    <div className="relative rounded-xl overflow-hidden border-2 border-emerald-500 shadow-inner">
+                      <div id="qr-reader" style={{ width: "100%" }}></div>
+                      <button onClick={stopCamera} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 z-10">
+                        <X size={16}/>
+                      </button>
+                    </div>
+                    <p className="text-center text-sm text-gray-500 animate-pulse">Arahkan kamera ke QR Code di meja/dinding kelas Anda...</p>
+                  </div>
+                ) : null}
+
+                {scannedResult && !isSubmitted && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center mt-4">
+                    <CheckCircle className="text-emerald-600 mx-auto mb-2" size={32}/>
+                    <p className="font-bold text-emerald-800">QR Terbaca & Sedang Divalidasi!</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
-  );
+  )
 }

@@ -336,3 +336,228 @@ export async function checkPendingRequest(userId, tanggal) {
     requestId: latest?.id || null,
   }
 }
+
+// ============================
+// SAKIT & IZIN ACTIONS
+// ============================
+
+// Get Siswa Profile from logged-in user
+export async function getSiswaProfileFromUser(nama, kelas) {
+  const { data, error } = await supabaseAdmin
+    .from('siswa')
+    .select('id, nis, nama, kelas, jurusan')
+    .ilike('nama', nama)
+    .eq('kelas', kelas)
+    .limit(1)
+    .single()
+
+  if (error) return { error: 'Data siswa tidak ditemukan di database' }
+  return { data }
+}
+
+// Check if already submitted today
+export async function checkSakitIzinToday(nisn, tanggal) {
+  const { data, error } = await supabaseAdmin
+    .from('tb_absensi_sakit_izin')
+    .select('id, status_verifikasi')
+    .eq('nisn', nisn)
+    .eq('tanggal', tanggal)
+    .maybeSingle()
+
+  if (error) return { error: error.message }
+  return { data }
+}
+
+// Get Sakit/Izin for Wali Kelas
+export async function getSakitIzinWaliKelas(kelas, jurusan) {
+  const query = supabaseAdmin
+    .from('tb_absensi_sakit_izin')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (kelas) query.eq('kelas', kelas)
+  if (jurusan) query.eq('jurusan', jurusan)
+
+  const { data, error } = await query
+  if (error) return { data: [], error: error.message }
+  return { data }
+}
+
+// ============================
+// SUBMIT SAKIT/IZIN (Langsung masuk rekap absensi & Dikunci)
+// ============================
+export async function submitSakitIzin(formData) {
+  let fotoUrl = null
+  
+  // 1. Upload foto (Jika ada fileData dan berhasil, simpan URL. Jika gagal, lanjutkan tanpa foto)
+  try {
+    if (formData.fileData && formData.fileData.length > 0) {
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        .from('bukti-sakit-izin')
+        .upload(`${formData.tanggal}/${formData.nisn}_${Date.now()}.jpg`, formData.fileData, {
+          contentType: 'image/jpeg',
+          upsert: true
+        })
+
+      if (!uploadError && uploadData) {
+        const { data: publicUrlData } = supabaseAdmin.storage.from('bukti-sakit-izin').getPublicUrl(uploadData.path)
+        fotoUrl = publicUrlData.publicUrl
+      }
+    }
+  } catch (err) {
+    console.error("Foto upload error, melanjutkan tanpa foto:", err)
+  }
+
+  // 2. Masukkan ke tabel tb_absensi_sakit_izin
+  const { error: insertError } = await supabaseAdmin
+    .from('tb_absensi_sakit_izin')
+    .insert([{
+      tanggal: formData.tanggal,
+      jam: formData.jam,
+      nisn: formData.nisn,
+      nama_siswa: formData.nama_siswa,
+      kelas: formData.kelas,
+      jurusan: formData.jurusan,
+      jenis_absensi: formData.jenis_absensi,
+      alasan: formData.alasan,
+      foto_bukti: fotoUrl,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      akurasi_gps: formData.akurasi_gps,
+      status_verifikasi: 'MENUNGGU VERIFIKASI'
+    }])
+
+  if (insertError) return { error: "Gagal menyimpan pengajuan: " + insertError.message }
+
+  // 3. Cari ID Siswa untuk tabel absensi utama
+  const { data: siswaData, error: siswaError } = await supabaseAdmin
+    .from('siswa')
+    .select('id')
+    .eq('nis', formData.nisn)
+    .single()
+
+  if (siswaError || !siswaData) return { error: "Data siswa tidak ditemukan di database untuk sinkronisasi rekap!" }
+
+  // 4. Langsung Upsert ke tabel absensi utama (Sakit/Izin) dan DIKUNCI UNTUK SEKRETARIS
+  const { error: absensiError } = await supabaseAdmin
+    .from('absensi')
+    .upsert({
+      siswa_id: siswaData.id,
+      tanggal: formData.tanggal,
+      status: formData.jenis_absensi,
+      input_by: 'Sakit/Izin Online',
+      locked: true, // KUNCI PENTING: Sekretaris tidak bisa edit
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'siswa_id,tanggal' })
+
+  if (absensiError) return { error: "Gagal sinkronisasi ke tabel absensi utama: " + absensiError.message }
+
+  return { success: true }
+}
+
+// ============================
+// VERIFY SAKIT/IZIN (Jika Ditolak jadi Alpha)
+// ============================
+export async function verifySakitIzin(id, status, catatan, waliKelasId, nisn, tanggal, jenisAbsensi) {
+  const { error: updateError } = await supabaseAdmin
+    .from('tb_absensi_sakit_izin')
+    .update({
+      status_verifikasi: status,
+      verifikator: waliKelasId,
+      waktu_verifikasi: new Date().toISOString(),
+      catatan_wali_kelas: catatan,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+
+  if (updateError) return { error: updateError.message }
+
+  if (status === 'DITOLAK') {
+    const { data: siswaData } = await supabaseAdmin
+      .from('siswa')
+      .select('id')
+      .eq('nis', nisn)
+      .single()
+
+    if (siswaData) {
+      await supabaseAdmin
+        .from('absensi')
+        .upsert({
+          siswa_id: siswaData.id,
+          tanggal: tanggal,
+          status: 'Alpha',
+          input_by: 'Sistem Otomatis',
+          locked: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'siswa_id,tanggal' })
+    }
+  }
+
+  return { success: true }
+}
+
+// ============================
+// SUBMIT ABSEN HADIR MANDIRI (QR Scan + Validasi Kelas)
+// ============================
+export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {
+  // 1. Cari data siswa berdasarkan NISN
+  const { data: siswa, error: siswaError } = await supabaseAdmin
+    .from('siswa')
+    .select('id, nis, nama, kelas, jurusan')
+    .eq('nis', nisn)
+    .single()
+
+  if (siswaError || !siswa) return { error: 'NISN tidak ditemukan dalam database!' }
+
+  // 2. Validasi Kelas QR Code (Hanya jika sedang proses scan, bukan cek awal)
+  if (scannedKelas && scannedKelas !== '') {
+    const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
+    if (fullKelasSiswa !== scannedKelas.trim()) {
+      return { error: `Gagal! Anda siswa kelas ${fullKelasSiswa}, namun mencoba scan QR kelas ${scannedKelas}.` }
+    }
+  }
+
+  // 3. Cek apakah siswa sudah pernah absen hari ini
+  const { data: existingAbsensi } = await supabaseAdmin
+    .from('absensi')
+    .select('id, status, input_by')
+    .eq('siswa_id', siswa.id)
+    .eq('tanggal', tanggal)
+    .maybeSingle()
+
+  if (existingAbsensi) {
+    return { error: `Anda sudah tercatat hari ini dengan status: ${existingAbsensi.status} (${existingAbsensi.input_by})` }
+  }
+
+  // 4. Simpan ke tabel absensi utama sebagai Hadir (Hanya jika sedang proses scan)
+  if (scannedKelas && scannedKelas !== '') {
+    const { error: absensiError } = await supabaseAdmin
+      .from('absensi')
+      .upsert({
+        siswa_id: siswa.id,
+        tanggal: tanggal,
+        status: 'Hadir',
+        input_by: 'QR Mandiri',
+        locked: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'siswa_id,tanggal' })
+
+    if (absensiError) return { error: absensiError.message }
+  }
+
+  return { success: true, data: siswa }
+}
+
+// ============================
+// GET SISWA BY NISN (For Sakit/Izin Page)
+// ============================
+export async function getSiswaByNISN(nisn) {
+  const { data, error } = await supabaseAdmin
+    .from('siswa')
+    .select('*')
+    .eq('nis', nisn)
+    .single()
+
+  if (error || !data) return { error: 'NISN tidak ditemukan dalam database!' }
+  return { data }
+}
