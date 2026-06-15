@@ -112,6 +112,30 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Manajemen User (Update)
+
+- Statistik Pengguna (Count-Up Animation, 5 Kartu Gradient)
+- Tambah User (Modal Form + Upload Foto Profil)
+- Edit User
+- Hapus User (Modal Konfirmasi Ketik "HAPUS")
+- Hapus Semua Data (2x Konfirmasi Ketik "HAPUS SEMUA", Validasi ID Admin)
+- Import Excel/CSV (Support .xlsx, .xls, .csv via library xlsx)
+- Unduh Format CSV Template (Di dalam Modal Import)
+- Export CSV (Filtered Data)
+- Cetak Data (Print Browser, Header sinkron dengan kolom tabel utama)
+- Filter Dinamis (Peran, Kelas, Status)
+- Pencarian Realtime (Nama/Username/Email/WhatsApp)
+- Sorting Kolom Tabel (Klik Header)
+- Pagination
+- Upload Foto Profil ke Supabase Storage
+- Kolom Jurusan di Form & Tabel
+- Pemilihan Kelas via 3 Dropdown (Tingkat + Jurusan + Nomor) dengan Auto-Compose
+- Validasi Kelas Wajib untuk Non-Administrator
+- Avatar Default Gradient (Jika Tidak Ada Foto)
+- Fix Layout Tabel (Horizontal Scroll, min-width agar tidak berantakan)
+
+Status: ACTIVE
+
 ## Profil Saya
 
 - Modal Profil Pengguna di Sidebar
@@ -205,5 +229,53 @@ Status: ACTIVE
 - Badge Keterangan di halaman Sekretaris (ONLINE / SCAN QR)
 - Sekretaris tidak dapat mengubah status yang dikunci dari sistem online
 - Timezone Sinkron (Semua halaman menggunakan format tanggal WIB 'sv-SE')
+
+Status: ACTIVE
+
+## Menu OSIS
+
+- Entri Reward
+- Entri Pelanggaran
+
+Status: ACTIVE
+
+## Menu Wali Kelas
+
+- Entri Reward
+- Entri Pelanggaran
+- Rekap Pelanggaran
+- Rekap Sakit & Izin
+- Rekap Kehadiran
+
+Status: ACTIVE
+
+## Menu Rekap Reward (Update)
+
+- Statistik Pengguna (Count-Up Animation, 4 Kartu Gradient: Siswa Dapat Reward, Total Poin Sekolah, Siswa Berprestasi, Entri Bulan Ini)
+- Tiga Besar Peraih Poin Reward Tertinggi (Dinamis dari Database)
+- Tabel Rekap Data Siswa Berpoint (Kolom NISN, Nama, Kelas, Total Poin, Kategori, Reward Terakhir, Aksi Detail)
+- Grafik Batang Reward Per Kelas (Dinamis dari Database)
+- Grafik Lingkaran (Donut) Reward Per Jurusan (Dinamis dari Database)
+- Grafik Garis Perkembangan Reward Bulanan (Dinamis dari Database)
+- Filter Data (Kelas & Jurusan)
+- Detail Siswa (Modal Timeline Riwayat Reward)
+- Hapus Reward (Kurangi poin otomatis)
+- Kalkulasi Poin Otomatis (Langsung dari tb_reward_siswa, tidak bergantung pada kolom total_reward di tabel siswa)
+
+Status: ACTIVE
+
+## Entri Reward & Pelanggaran (Update)
+
+- Pencarian Siswa Realtime (Berdasarkan Nama atau NISN, Min 3 Karakter)
+- Fix Bug Pencarian (Sinkronisasi nama kolom NISN di database)
+
+Status: ACTIVE
+
+## Menu Rekap Kehadiran (Update)
+
+- Tab Harian (Tabel Detail, Kolom NISN, Status Badge, Sumber Absensi, Waktu)
+- Tab Bulanan (Freeze Table Nama & Header, Kolom Nomor Urut, Kolom Tanggal 1-31, Tanpa Kolom NISN)
+- Tab Semester (6 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
+- Tab Tahunan (12 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
 
 Status: ACTIVE

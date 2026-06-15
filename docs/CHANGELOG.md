@@ -139,3 +139,30 @@
 - Tambah kolom Peta (Google Maps link) di Rekap Sakit & Izin
 - Tambah logika Tolak Pengajuan (Otomatis ubah status jadi Alpha di tabel absensi)
 - Fix upload foto bukti (Jika bucket storage gagal, data tetap tersimpan tanpa foto)
+
+## 2026-06-12
+
+- Fix layout tabel Manajemen User (tambah min-w-[1200px], whitespace-nowrap, truncate)
+- Fix header cetak PDF Manajemen User (Sync kolom: No, Nama, Username, Email, Peran, Kelas, Jurusan, WhatsApp, Status)
+- Fix validasi "Hapus Semua User" (Error ID Admin tidak valid, tambah pengecekan userData)
+- Migrasi fitur Import dari CSV murni ke Excel/CSV (Menggunakan library xlsx)
+- Tambah tombol "Unduh Format CSV" di dalam Modal Import User
+- Skip data duplikat saat Import User (Skip jika username sudah ada di DB/kosong)
+
+## 2026-06-14
+
+- Aktifkan halaman entri reward
+- Aktifkan halaman entri pelanggaran
+- Aktifkan halaman rekap pelanggaran
+- Aktifkan halaman rekap reward
+
+## 2026-06-15
+
+- Revamp Kalkulasi Reward (Hitung langsung dari tb_reward_siswa, tidak bergantung pada kolom siswa)
+- Aktifkan 3 Grafik di Rekap Reward (Bar Chart Per Kelas, Donut Chart Per Jurusan, Line Chart Perkembangan Bulanan)
+- Tambah kolom NISN di Tabel Rekap Data Siswa Berpoint & Modal Detail Reward
+- Perbaikan bug Entri Reward (Pencarian siswa tidak muncul setelah 3 huruf karena mismatch kolom nis/nisn)
+- Standardisasi kolom database (Merubah pemanggilan nis menjadi nisn di seluruh Server Actions & Frontend sesuai schema Supabase terbaru)
+- Penyesuaian tampilan Rekap Kehadiran (NISN hanya muncul di tab Harian)
+- Tambah kolom Nomor Urut di tab Bulanan Rekap Kehadiran
+- Hapus fungsi duplikat Reward di rekapActions.js (Sudah terakomodasi di rewardActions.js)

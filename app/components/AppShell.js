@@ -73,7 +73,16 @@ export default function AppShell({ children }) {
   useEffect(() => {
     if (pathname === '/') setActiveMenu('beranda');
     else if (pathname.includes('/absen-mandiri')) setActiveMenu('absen-mandiri');
-    else if (pathname.includes('/rekap-kehadiran')) {
+    else if (pathname.includes('/osis/entri-reward')) {
+      setActiveMenu('osis');
+      setOpenMenus(prev => ({ ...prev, osis: true }));
+    } else if (pathname.includes('/wali-kelas/entri-reward')) {
+      setActiveMenu('wali');
+      setOpenMenus(prev => ({ ...prev, wali: true }));
+    } else if (pathname.includes('/wali-kelas/rekap-sakit-izin')) {
+      setActiveMenu('wali');
+      setOpenMenus(prev => ({ ...prev, wali: true }));
+    } else if (pathname.includes('/rekap-kehadiran')) {
       setActiveMenu('wali');
       setOpenMenus(prev => ({ ...prev, wali: true }));
     } else if (pathname.includes('/admin/users')) {
@@ -118,7 +127,6 @@ export default function AppShell({ children }) {
 
   // ============================
   // FIX: Label peran + kelas lengkap
-  // Contoh: "Sekretaris XI LPKKK 2"
   // ============================
   const getRoleLabel = () => {
     if (!userData) return '';
@@ -323,9 +331,9 @@ export default function AppShell({ children }) {
             <>
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU OSIS</p>
               <DropdownMenu title="Piket OSIS" icon={CalendarDays} menuKey="osis" menuId="osis">
-                <SubLink icon={Award} title="Entri Reward" />
-                <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
-              </DropdownMenu>
+  <SubLink icon={Award} title="Entri Reward" href="/osis/entri-reward" />
+  <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/osis/entri-pelanggaran" />
+</DropdownMenu>
             </>
           )}
 
@@ -334,12 +342,12 @@ export default function AppShell({ children }) {
             <>
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU WALI KELAS</p>
               <DropdownMenu title="Wali Kelas" icon={User} menuKey="wali" menuId="wali">
-                <SubLink icon={Award} title="Entri Reward" />
-                <SubLink icon={AlertTriangle} title="Entri Pelanggaran" />
-                <SubLink icon={FileWarning} title="Rekap Pelanggaran" />
-                <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
-                <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
-              </DropdownMenu>
+  <SubLink icon={Award} title="Entri Reward" href="/wali-kelas/entri-reward" />
+  <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/wali-kelas/entri-pelanggaran" />
+  <SubLink icon={FileWarning} title="Rekap Pelanggaran" href="/wali-kelas/rekap-pelanggaran" />
+  <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
+  <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
+</DropdownMenu>
             </>
           )}
 
@@ -350,9 +358,9 @@ export default function AppShell({ children }) {
               <DropdownMenu title="Administrator" icon={Shield} menuKey="admin" menuId="admin">
                 <SubLink icon={Users} title="Daftar Siswa" href="/admin/siswa" />
                 <SubLink icon={UserCog} title="Penanganan Siswa" href="/admin/siswa/penanganan" />
-                <SubLink icon={BarChart2} title="Rekap Reward" />
-                <SubLink icon={FileText} title="Rekap Formulir" />
-                <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" />
+                <SubLink icon={BarChart2} title="Rekap Reward" href="/admin/rekap-reward" />
+                <SubLink icon={FileText} title="Rekap Formulir" href="/admin/rekap-formulir" />
+                <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" href="/admin/rekap-pindah-keluar" />
               </DropdownMenu>
             </>
           )}

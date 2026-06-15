@@ -299,7 +299,7 @@ export default function AbsensiKehadiran() {
                     return (
                       <tr key={siswa.id} className="hover:bg-blue-50/20 transition-colors">
                         <td className="py-3 px-4 text-gray-500 font-medium">{idx + 1}</td>
-                        <td className="py-3 px-4 text-gray-600 font-mono text-xs">{siswa.nis || '—'}</td>
+                        <td className="py-3 px-4 text-gray-600 font-mono text-xs">{siswa.nisn || '—'}</td>
                         <td className="py-3 px-4 font-semibold text-gray-800">{siswa.nama}</td>
                         <td className="py-3 px-4 text-center text-gray-600 text-xs">{siswa.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
                         <td className="py-3 px-4">

@@ -93,7 +93,6 @@ export async function saveUserAction(userData, editMode) {
 
   if (editMode) {
     if (!id) return { error: 'ID user tidak ditemukan' }
-    // Jika password kosong saat edit, hapus dari update
     if (!dataWithoutId.password || dataWithoutId.password.trim() === '') {
       delete dataWithoutId.password
     }
@@ -131,24 +130,24 @@ export async function deleteUserAction(id) {
 }
 
 // ============================
-// DELETE ALL USERS
+// DELETE ALL USERS (FIX: support fallback identifier via username)
 // ============================
-export async function deleteAllUsersAction(excludeUserId) {
-  // Konversi excludeUserId ke Integer karena tipe id di Supabase adalah bigint
-  const safeAdminId = excludeUserId ? parseInt(excludeUserId, 10) : null;
-
+export async function deleteAllUsersAction(excludeUserId, excludeUsername) {
   let query = supabaseAdmin
     .from('users')
     .delete();
 
-  // Jika safeAdminId valid (berhasil di-parse jadi angka), kecualikan admin tersebut
+  const safeAdminId = excludeUserId ? parseInt(excludeUserId, 10) : null;
+
   if (!isNaN(safeAdminId) && safeAdminId !== null) {
     query = query.neq('id', safeAdminId);
-  } else {
-    // Jika ID admin tidak valid (undefined/NaN/null), batalkan operasi demi keamanan
-    // agar tidak ikut menghapus akun admin yang sedang login
-    console.error("ID Admin tidak valid, operasi hapus semua dibatalkan.");
-    return { error: "ID Admin tidak valid. Gagal menghapus data demi keamanan akun Anda." };
+  }
+  else if (excludeUsername && excludeUsername.trim() !== '') {
+    query = query.neq('username', excludeUsername.trim());
+  }
+  else {
+    console.error("ID dan Username Admin tidak valid, operasi hapus semua dibatalkan.");
+    return { error: "Identitas admin tidak valid. Gagal menghapus data demi keamanan akun Anda." };
   }
 
   const { error } = await query;
@@ -158,45 +157,79 @@ export async function deleteAllUsersAction(excludeUserId) {
 }
 
 // ============================
-// IMPORT CSV
+// IMPORT USERS EXCEL (Fix Case-Insensitive & Better Debug)
 // ============================
-export async function importUsersCSV(csvText) {
-  const rows = csvText.split('\n').filter(r => r.trim() !== '')
-  if (rows.length < 2) return { error: 'File CSV kosong atau tidak valid' }
-
-  const headers = rows[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''))
-  const users = []
-
-  for (let i = 1; i < rows.length; i++) {
-    const values = rows[i].split(',').map(v => v.trim().replace(/"/g, ''))
-    const user = {}
-    headers.forEach((h, idx) => { user[h] = values[idx] || null })
-
-    if (user.nama && user.username && user.email && user.password && user.role) {
-      users.push({
-        nama: user.nama,
-        username: user.username,
-        email: user.email,
-        password: user.password,
-        role: user.role,
-        kelas: user.kelas || '',
-        jurusan: user.jurusan || '',
-        whatsapp: user.whatsapp || '',
-        status: user.status || 'Aktif',
-        foto_url: user.foto_url || '',
-      })
-    }
+export async function importUsersCSV(usersData) {
+  if (!usersData || usersData.length === 0) {
+    return { error: 'Tidak ada data untuk diimpor' };
   }
 
-  if (users.length === 0) return { error: 'Tidak ada data valid untuk diimport' }
+  const getVal = (obj, key) => {
+    const found = Object.keys(obj).find(k => k.toLowerCase().trim() === key.toLowerCase());
+    return found ? (obj[found] || '').trim() : '';
+  };
 
-  const { data, error } = await supabaseAdmin
+  const { data: existingUsers, error: fetchError } = await supabaseAdmin
     .from('users')
-    .insert(users)
-    .select()
+    .select('username');
 
-  if (error) return { error: error.message }
-  return { success: true, count: data.length }
+  if (fetchError) {
+    return { error: 'Gagal memeriksa data user yang sudah ada di database' };
+  }
+
+  const existingUsernames = new Set(existingUsers.map(u => u.username));
+  const seenUsernames = new Set();
+  const usersToInsert = [];
+
+  for (const user of usersData) {
+    const username = getVal(user, 'username');
+
+    if (!username) continue;
+    if (existingUsernames.has(username) || seenUsernames.has(username)) {
+      continue;
+    }
+
+    seenUsernames.add(username);
+
+    // ============================
+    // FIX: Tambahkan kolom jurusan yang sebelumnya lupa dimasukkan
+    // ============================
+    usersToInsert.push({
+      nama: getVal(user, 'nama'),
+      username: username,
+      email: getVal(user, 'email'),
+      password: getVal(user, 'password') || 'user123',
+      role: getVal(user, 'role') || 'Siswa',
+      kelas: getVal(user, 'kelas'),
+      jurusan: getVal(user, 'jurusan'), // DITAMBAHKAN
+      whatsapp: getVal(user, 'whatsapp'),
+      status: getVal(user, 'status') || 'Aktif',
+    });
+  }
+
+  if (usersToInsert.length === 0) {
+    const sampleKeys = usersData.length > 0 ? Object.keys(usersData[0]).join(', ') : 'Tidak ada kolom';
+    return {
+      error: `0 user diimpor. Pastikan kolom header Excel Anda bernama: nama, username, email, password, role, kelas, jurusan, whatsapp, status. (Header terbaca dari file Anda: "${sampleKeys}")`
+    };
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from('users')
+    .insert(usersToInsert);
+
+  if (insertError) {
+    return { error: 'Gagal menyimpan data: ' + insertError.message };
+  }
+
+  const skippedCount = usersData.length - usersToInsert.length;
+
+  return {
+    success: true,
+    count: usersToInsert.length,
+    skipped: skippedCount,
+    message: `${usersToInsert.length} user berhasil diimpor.${skippedCount > 0 ? ` ${skippedCount} data dilewati (username sudah ada/kosong).` : ''}`
+  };
 }
 
 // ============================
@@ -220,7 +253,7 @@ export async function loginUserAction(username, password) {
 // ============================
 export async function updateProfileData(id, data) {
   if (!id) return { error: 'ID user tidak ditemukan' }
-  
+
   const updateData = {}
   if (data.nama !== undefined) updateData.nama = data.nama
   if (data.email !== undefined) updateData.email = data.email

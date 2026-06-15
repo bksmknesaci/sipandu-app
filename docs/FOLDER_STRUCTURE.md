@@ -18,11 +18,15 @@ SIPANDU-APP/
 │   ├── actions/
 │   │   ├── absensiActions.js
 │   │   ├── majorLogoActions.js
+│   │   ├── pelanggaranActions.js   
 │   │   ├── rekapActions.js
+│   │   ├── rewardActions.js       
 │   │   ├── siswaActions.js
 │   │   └── userActions.js
 │   │
 │   ├── admin/
+│   │   ├── rekap-reward/          
+│   │   │   └── page.js
 │   │   ├── siswa/
 │   │   │   ├── penanganan/
 │   │   │   │   └── page.js
@@ -34,6 +38,8 @@ SIPANDU-APP/
 │   │   ├── AksesCepatInformasi.js
 │   │   ├── AppShell.js
 │   │   ├── DaftarTidakHadir.js
+│   │   ├── EntriPelanggaran.js     
+│   │   ├── EntriReward.js          
 │   │   ├── MajorLogoManager.js
 │   │   ├── RekapPelanggaran.js
 │   │   ├── RekapReward.js
@@ -43,6 +49,12 @@ SIPANDU-APP/
 │   │
 │   ├── login/
 │   │   └── page.js
+│   │
+│   ├── osis/
+│   │   ├── entri-pelanggaran/           
+│   │   │   └── page.js
+│   │   └── entri-reward/                
+│   │       └── page.js
 │   │
 │   ├── rekap-kehadiran/   
 │   │   └── page.js
@@ -55,6 +67,12 @@ SIPANDU-APP/
 │   │   └── page.js
 │   │
 │   ├── wali-kelas/
+│   │   ├── entri-pelanggaran/           
+│   │   │   └── page.js
+│   │   ├── entri-reward/                
+│   │   │   └── page.js
+│   │   ├── rekap-pelanggaran/           
+│   │   │   └── page.js
 │   │   └── rekap-sakit-izin/
 │   │       └── page.js
 │   │
@@ -71,6 +89,7 @@ SIPANDU-APP/
 │   └── PROJECT_CONTEXT.md
 │
 ├── lib/
+│   ├── getCurrentUser.js
 │   ├── supabase-admin.js
 │   └── supabase.js
 │

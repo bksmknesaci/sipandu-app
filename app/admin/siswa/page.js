@@ -83,7 +83,7 @@ export default function ManajemenSiswa() {
   // FILTER & PENCARIAN
   // ============================================
     const filteredSiswa = siswa.filter(s => {
-    const matchSearch = s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || s.nis?.includes(searchTerm);
+    const matchSearch = s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || s.nisn?.includes(searchTerm);
     
     // Filter Tingkat (X, XI, XII)
     const matchTingkat = !filterKelas || 
@@ -282,7 +282,7 @@ export default function ManajemenSiswa() {
     const archiveStudents = siswa.filter(s => selectedIds.includes(s.id));
     const headers = ['No', 'NISN', 'Nama Siswa', 'L/P', 'Kelas', 'Jurusan', 'Status'];
     const rows = archiveStudents.map((s, idx) => [
-      idx + 1, s.nis || '', s.nama || '', s.jenis_kelamin || '', s.kelas || '', s.jurusan || '', s.status || ''
+      idx + 1, s.nisn || '', s.nama || '', s.jenis_kelamin || '', s.kelas || '', s.jurusan || '', s.status || ''
     ]);
     const csvContent = [
       headers.join(','),
@@ -329,7 +329,7 @@ export default function ManajemenSiswa() {
     const headers = ['No', 'NISN', 'Nama Siswa', 'L/P', 'Kelas', 'Jurusan', 'Status'];
     const rows = filteredSiswa.map((s, idx) => [
       idx + 1,
-      s.nis || '',
+      s.nisn || '',
       s.nama || '',
       s.jenis_kelamin || '',
       s.kelas || '',
@@ -424,7 +424,7 @@ export default function ManajemenSiswa() {
     const tableRows = filteredSiswa.map((s, idx) => `
       <tr>
         <td style="border:1px solid #ccc; padding:6px; text-align:center;">${idx + 1}</td>
-        <td style="border:1px solid #ccc; padding:6px;">${s.nis || ''}</td>
+        <td style="border:1px solid #ccc; padding:6px;">${s.nisn || ''}</td>
         <td style="border:1px solid #ccc; padding:6px;">${s.nama || ''}</td>
         <td style="border:1px solid #ccc; padding:6px; text-align:center;">${s.jenis_kelamin || ''}</td>
         <td style="border:1px solid #ccc; padding:6px; text-align:center;">${s.kelas || ''}</td>
@@ -619,7 +619,7 @@ export default function ManajemenSiswa() {
                   {paginatedSiswa.map((s, idx) => (
                     <tr key={s.id} className="border-b hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4 text-gray-600">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                      <td className="py-3 px-4 font-medium" style={blackText}>{s.nis}</td>
+                      <td className="py-3 px-4 font-medium font-mono text-xs" style={blackText}>{s.nisn || '—'}</td>
                       <td className="py-3 px-4 font-medium" style={blackText}>{s.nama}</td>
                       <td className="py-3 px-4 text-center">
                         <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${s.jenis_kelamin === 'P' ? 'bg-pink-100' : 'bg-blue-100'}`} style={blackText}>
@@ -879,7 +879,7 @@ export default function ManajemenSiswa() {
                           <input type="checkbox" checked={isSelected} onChange={() => toggleStudentSelection(s.id)} className="w-4 h-4 rounded text-blue-600"/>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm text-gray-800 truncate">{s.nama}</p>
-                            <p className="text-xs text-gray-400">{s.nis} • {s.kelas}</p>
+                            <p className="text-xs text-gray-400">{s.nisn || '—'} • {s.kelas}</p>
                           </div>
                           <div className="text-xs font-semibold text-right flex-shrink-0">
                             <span className="text-gray-400">{s.kelas}</span>

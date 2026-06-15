@@ -125,7 +125,7 @@ export default function RekapKehadiran() {
   }
 
   const getStudentAttendance = (siswaId, date) => attendance.find(a => a.siswa_id === siswaId && a.tanggal === date)
-  const filteredStudents = students.filter(s => s.nama.toLowerCase().includes(searchTerm.toLowerCase()) || s.nis?.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredStudents = students.filter(s => s.nama.toLowerCase().includes(searchTerm.toLowerCase()) || s.nisn?.toLowerCase().includes(searchTerm.toLowerCase()))
 
   const getMonthAtt = (siswaId, monthIndex) => {
     const mStr = monthIndex < 10 ? `0${monthIndex}` : `${monthIndex}`;
@@ -164,7 +164,7 @@ export default function RekapKehadiran() {
     headers.push('Total H', 'Total S', 'Total I', 'Total A', '%Hadir')
 
     const rows = filteredStudents.map((s, idx) => {
-      const row = [idx + 1, s.nis, s.nama, s.jenis_kelamin, s.kelas, s.jurusan]
+      const row = [idx + 1, s.nisn, s.nama, s.jenis_kelamin, s.kelas, s.jurusan]
       let tH = 0, tS = 0, tI = 0, tA = 0
       semMonths.forEach(m => {
         const c = getCounts(getMonthAtt(s.id, m.m))
@@ -207,7 +207,7 @@ export default function RekapKehadiran() {
       const totalAll = tH + tS + tI + tA
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center">${idx + 1}</td>
-        <td style="border:1px solid #000;padding:6px;font-size:10px">${s.nis}</td>
+        <td style="border:1px solid #000;padding:6px;font-size:10px">${s.nisn || '—'}</td>
         <td style="border:1px solid #000;padding:6px;font-size:10px;font-weight:bold">${s.nama}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center">${s.jenis_kelamin}</td>
         ${monthCells}
@@ -428,7 +428,7 @@ export default function RekapKehadiran() {
                             return (
                               <tr key={s.id} className="hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => setSelectedStudent(s)}>
                                 <td className="py-3 px-4 text-gray-500">{idx+1}</td>
-                                <td className="py-3 px-4 font-mono text-xs text-black">{s.nis}</td>
+                                <td className="py-3 px-4 font-mono text-xs text-black">{s.nisn || '—'}</td>
                                 <td className="py-3 px-4 font-semibold" style={blackText}>{s.nama}</td>
                                 <td className="py-3 px-4 text-gray-600">{s.jenis_kelamin}</td>
                                 <td className="py-3 px-4 text-gray-600 text-xs">{s.kelas}</td>
@@ -446,28 +446,30 @@ export default function RekapKehadiran() {
                 )}
 
                 {activeTab === 'bulanan' && (
-                  <div className="overflow-auto max-h-[70vh]">
-                    <table className="w-full text-sm text-left border-collapse">
-                      <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
-                        <tr>
-                          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-0 bg-gray-50 z-30 min-w-[200px]">Nama Siswa</th>
-                          <th className="py-3 px-2 font-bold text-xs text-gray-600 sticky left-[200px] bg-gray-50 z-30 w-10 border-r border-gray-200">L/P</th>
-                          {Array.from({length: 31}, (_, i) => i+1).map(d => (<th key={d} className="py-3 px-2 font-bold text-xs text-gray-600 text-center w-10">{d}</th>))}
-                          <th className="py-3 px-2 font-bold text-xs text-emerald-600 text-center w-10">H</th>
-                          <th className="py-3 px-2 font-bold text-xs text-amber-600 text-center w-10">S</th>
-                          <th className="py-3 px-2 font-bold text-xs text-blue-600 text-center w-10">I</th>
-                          <th className="py-3 px-2 font-bold text-xs text-red-600 text-center w-10">A</th>
-                          <th className="py-3 px-2 font-bold text-xs text-indigo-600 text-center w-16">%H</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {filteredStudents.map(s => {
-                          const monthStr = dateFilter.substring(0, 7)
-                          let cH=0, cS=0, cI=0, cA=0;
-                          return (
-                            <tr key={s.id} className="hover:bg-blue-50/30 group cursor-pointer" onClick={() => setSelectedStudent(s)}>
-                              <td className="py-2 px-4 font-semibold text-gray-800 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{s.nama}</td>
-                              <td className="py-2 px-2 text-gray-500 sticky left-[200px] bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{s.jenis_kelamin}</td>
+  <div className="overflow-auto max-h-[70vh]">
+    <table className="w-full text-sm text-left border-collapse">
+      <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
+        <tr>
+          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-0 bg-gray-50 z-30 w-[40px]">No</th>
+          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[40px] bg-gray-50 z-30 min-w-[200px] border-r border-gray-200">Nama Siswa</th>
+          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[240px] bg-gray-50 z-30 w-10">L/P</th>
+          {Array.from({length: 31}, (_, i) => i+1).map(d => (<th key={d} className="py-3 px-2 font-bold text-xs text-gray-600 text-center w-10">{d}</th>))}
+          <th className="py-3 px-2 font-bold text-xs text-emerald-600 text-center w-10">H</th>
+          <th className="py-3 px-2 font-bold text-xs text-amber-600 text-center w-10">S</th>
+          <th className="py-3 px-2 font-bold text-xs text-blue-600 text-center w-10">I</th>
+          <th className="py-3 px-2 font-bold text-xs text-red-600 text-center w-10">A</th>
+          <th className="py-3 px-2 font-bold text-xs text-indigo-600 text-center w-16">%H</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-200">
+        {filteredStudents.map((s, idx) => {
+          const monthStr = dateFilter.substring(0, 7)
+          let cH=0, cS=0, cI=0, cA=0;
+          return (
+            <tr key={s.id} className="hover:bg-blue-50/30 group cursor-pointer" onClick={() => setSelectedStudent(s)}>
+              <td className="py-2 px-4 text-gray-500 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10">{idx + 1}</td>
+              <td className="py-2 px-4 font-semibold text-gray-800 sticky left-[40px] bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{s.nama}</td>
+              <td className="py-2 px-2 text-gray-500 sticky left-[240px] bg-white group-hover:bg-blue-50/30 z-10">{s.jenis_kelamin}</td>
                               {Array.from({length: 31}, (_, i) => i+1).map(d => {
                                 const dayStr = d < 10 ? `0${d}` : `${d}`
                                 const dateStr = `${monthStr}-${dayStr}`

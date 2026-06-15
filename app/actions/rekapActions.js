@@ -18,6 +18,7 @@ function parseKelasJurusan(kelas) {
 // GET REKAP KEHADIRAN
 // ============================
 export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, userKelas }) {
+  // select('*') sudah mencakup kolom 'nis' sehingga NISN akan tersedia di frontend
   let studentQuery = supabaseAdmin.from('siswa').select('*').eq('status', 'Aktif');
   
   if (userRole === 'Wali Kelas' && userKelas) {
@@ -35,7 +36,7 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
 
   const studentIds = students.map(s => s.id);
   
-  // PERBAIKAN: Ambil data 1 tahun ajaran penuh (Juli - Juni) agar Tab Semester & Bulan terisi
+  // Ambil data 1 tahun ajaran penuh (Juli - Juni) agar Tab Semester & Bulan terisi
   const year = parseInt(date.substring(0, 4));
   const month = parseInt(date.substring(5, 7));
   const academicStartYear = month >= 7 ? year : year - 1;
@@ -175,3 +176,9 @@ export async function resetAllAbsensi({ tingkat, jurusan, userRole, userKelas })
   if (error) return { error: error.message };
   return { success: true };
 }
+
+// ==========================================
+// CATATAN: Fungsi Reward yang sebelumnya ada di bagian bawah sini
+// SUDAH DIHAPUS karena duplikat dan sudah diperbaiki sepenuhnya di:
+// app/actions/rewardActions.js
+// ==========================================

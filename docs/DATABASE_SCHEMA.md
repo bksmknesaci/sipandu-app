@@ -103,3 +103,42 @@ absensi
 * absensi
 
 * input_by: Ditambahkan nilai 'Sakit/Izin Online', 'QR Mandiri'
+
+## tb_reward_siswa
+
+* id (int8)
+* tanggal (date)
+* nisn (text)
+* nama_siswa (text)
+* kelas (varchar)
+* jurusan (varchar)
+* reward_kode (varchar)
+* reward_nama (text)
+* reward_poin (int4)
+* catatan (text)
+* bukti_file (text)
+* diberikan_oleh (varchar)
+* role_pemberi (varchar)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+
+## tb_pelanggaran_siswa
+
+* id (int8)
+* tanggal (date)
+* waktu (time)
+* nisn (text)
+* nama_siswa (text)
+* kelas (varchar)
+* jurusan (varchar)
+* kategori (varchar)
+* jenis_pelanggaran (text)
+* poin (int4)
+* lokasi (varchar)
+* kronologi (text)
+* bukti_file (text)
+* dicatat_oleh (varchar)
+* role_pencatat (varchar)
+* catatan_pembinaan (text)
+* created_at (timestamptz)
+* updated_at (timestamptz)

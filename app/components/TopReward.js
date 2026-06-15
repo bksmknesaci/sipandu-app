@@ -1,59 +1,81 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, Trophy } from 'lucide-react';
+import { getTopRewardStudents } from '@/app/actions/rewardActions';
 
-// ============================================
-// DATA MOCKUP (Sesuai Referensi)
-// ============================================
-const topSiswa = [
-  {
-    rank: 1,
-    nama: "AVINDA SEPTIYANI",
-    kelas: "X RPL 2",
-    poin: 85,
-    maxPoin: 100,
-    penghargaan: "Anugerah Waluya Utama",
-    theme: {
-      color: '#D4AF37',      // Emas
-      bg: '#FFF9E5',         // Krem emas
-      ring: '#F7E7A0',       // Cincin tipis
-    }
-  },
-  {
-    rank: 2,
-    nama: "NUHA ENJELA",
-    kelas: "XII RPL 1",
-    poin: 60,
-    maxPoin: 100,
-    penghargaan: "Anugerah Waluya Madya",
-    theme: {
-      color: '#A2A2A2',      // Perak
-      bg: '#F5F5F5',         // Abu muda
-      ring: '#D1D5DB',       // Cincin tipis
-    }
-  },
-  {
-    rank: 3,
-    nama: "HANIFA MAULIDA PUTRI",
-    kelas: "X LPKKK 2",
-    poin: 35,
-    maxPoin: 100,
-    penghargaan: "Anugerah Waluya Muda",
-    theme: {
-      color: '#CD7F32',      // Perunggu
-      bg: '#FFF0E5',         // Krem perunggu
-      ring: '#E8C8A8',       // Cincin tipis
-    }
-  }
+// Tema Kartu Berdasarkan Peringkat
+const rankThemes = [
+  { color: '#D4AF37', bg: '#FFF9E5', ring: '#F7E7A0' }, // Emas
+  { color: '#A2A2A2', bg: '#F5F5F5', ring: '#D1D5DB' }, // Perak
+  { color: '#CD7F32', bg: '#FFF0E5', ring: '#E8C8A8' }, // Perunggu
 ];
+
+// Logika Penghargaan
+const getPenghargaan = (poin) => {
+  if (poin > 150) return "Anugerah Waluya Utama";
+  if (poin >= 126) return "Anugerah Waluya Madya";
+  if (poin >= 100) return "Anugerah Waluya Muda";
+  return "Belum Bergelar";
+};
 
 export default function TopReward() {
   const [mounted, setMounted] = useState(false);
+  const [topSiswa, setTopSiswa] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Fetch data dari database
+    const fetchData = async () => {
+      const res = await getTopRewardStudents();
+      if (res.data && res.data.length > 0) {
+        const formattedData = res.data.map((siswa, index) => ({
+          rank: index + 1,
+          nama: siswa.nama,
+          kelas: `${siswa.kelas} ${siswa.jurusan}`,
+          poin: siswa.total_reward || 0,
+          maxPoin: 150, // Maksimal donut chart visual (bisa disesuaikan)
+          penghargaan: getPenghargaan(siswa.total_reward || 0),
+          theme: rankThemes[index] || rankThemes[2] // Fallback ke perunggu jika index tidak ada
+        }));
+        setTopSiswa(formattedData);
+      }
+      setLoading(false);
+    };
+
+    fetchData();
+
+    // Auto refresh setiap 30 detik agar terintegrasi realtime dengan Entri Reward
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="bg-[#FFFBF5] p-6 md:p-10 rounded-2xl border border-gray-300/60 shadow-sm animate-pulse">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+          <div className="flex-grow h-1 bg-gray-200 rounded-full"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {Array.from({length: 3}).map((_, i) => <div key={i} className="h-64 bg-gray-100 rounded-xl"></div>)}
+        </div>
+      </div>
+    );
+  }
+
+  // Empty State
+  if (topSiswa.length === 0) {
+    return (
+      <div className="bg-[#FFFBF5] p-6 md:p-10 rounded-2xl border border-gray-300/60 shadow-sm text-center py-16">
+        <Trophy className="mx-auto text-gray-300 mb-3" size={48}/>
+        <p className="text-gray-400 font-semibold">Belum ada siswa yang memiliki poin reward</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#FFFBF5] p-6 md:p-10 rounded-2xl border border-gray-300/60 shadow-sm font-poppins relative overflow-hidden">
@@ -67,7 +89,7 @@ export default function TopReward() {
       {/* Kartu Peringkat */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {topSiswa.map((siswa) => {
-          const percentage = (siswa.poin / siswa.maxPoin) * 100;
+          const percentage = Math.min((siswa.poin / siswa.maxPoin) * 100, 100); // Cap di 100%
           const deg = mounted ? (percentage / 100) * 360 : 0;
 
           return (
