@@ -17,18 +17,26 @@ SIPANDU-APP/
 │   │
 │   ├── actions/
 │   │   ├── absensiActions.js
+│   │   ├── effectiveDaysActions.js
+│   │   ├── formulirActions.js
 │   │   ├── majorLogoActions.js
-│   │   ├── pelanggaranActions.js   
+│   │   ├── pelanggaranActions.js
+│   │   ├── penangananActions.js
+│   │   ├── penanggungJawabActions.js
 │   │   ├── rekapActions.js
-│   │   ├── rewardActions.js       
+│   │   ├── rewardActions.js
 │   │   ├── siswaActions.js
 │   │   └── userActions.js
 │   │
 │   ├── admin/
-│   │   ├── rekap-reward/          
+│   │   ├── rekap-formulir/
+│   │   │   └── page.js
+│   │   ├── rekap-reward/
 │   │   │   └── page.js
 │   │   ├── siswa/
 │   │   │   ├── penanganan/
+│   │   │   │   └── page.js
+│   │   │   ├── pindah-keluar/
 │   │   │   │   └── page.js
 │   │   │   └── page.js
 │   │   └── users/
@@ -38,28 +46,42 @@ SIPANDU-APP/
 │   │   ├── AksesCepatInformasi.js
 │   │   ├── AppShell.js
 │   │   ├── DaftarTidakHadir.js
-│   │   ├── EntriPelanggaran.js     
-│   │   ├── EntriReward.js          
+│   │   ├── EntriPelanggaran.js
+│   │   ├── EntriReward.js
 │   │   ├── MajorLogoManager.js
+│   │   ├── PJInfoCard.js
 │   │   ├── RekapPelanggaran.js
 │   │   ├── RekapReward.js
 │   │   ├── RekapSiswa.js
 │   │   ├── SiswaBerprestasiBerita.js
 │   │   └── TopReward.js
 │   │
+│   ├── formulir/
+│   │   ├── pemetaan-karir/
+│   │   │   └── page.js
+│   │   ├── snbp-snbt/
+│   │   │   └── page.js
+│   │   ├── tracer-studi/
+│   │   │   └── page.js
+│   │   └── page.js
+│   │
 │   ├── login/
 │   │   └── page.js
 │   │
 │   ├── osis/
-│   │   ├── entri-pelanggaran/           
+│   │   ├── entri-pelanggaran/
 │   │   │   └── page.js
-│   │   └── entri-reward/                
+│   │   └── entri-reward/
 │   │       └── page.js
 │   │
-│   ├── rekap-kehadiran/   
+│   ├── rekap-kehadiran/
 │   │   └── page.js
 │   │
 │   ├── setting/
+│   │   ├── hari-efektif/
+│   │   │   └── page.js
+│   │   ├── penanggung-jawab/
+│   │   │   └── page.js
 │   │   └── profil/
 │   │       └── page.js
 │   │
@@ -67,11 +89,11 @@ SIPANDU-APP/
 │   │   └── page.js
 │   │
 │   ├── wali-kelas/
-│   │   ├── entri-pelanggaran/           
+│   │   ├── entri-pelanggaran/
 │   │   │   └── page.js
-│   │   ├── entri-reward/                
+│   │   ├── entri-reward/
 │   │   │   └── page.js
-│   │   ├── rekap-pelanggaran/           
+│   │   ├── rekap-pelanggaran/
 │   │   │   └── page.js
 │   │   └── rekap-sakit-izin/
 │   │       └── page.js

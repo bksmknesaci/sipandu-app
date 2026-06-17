@@ -166,3 +166,49 @@
 - Penyesuaian tampilan Rekap Kehadiran (NISN hanya muncul di tab Harian)
 - Tambah kolom Nomor Urut di tab Bulanan Rekap Kehadiran
 - Hapus fungsi duplikat Reward di rekapActions.js (Sudah terakomodasi di rewardActions.js)
+
+## 2026-06-16
+
+- Aktifkan halaman Penanganan Siswa (Menu Administrator)
+- Aktifkan halaman Rekap Pindah & Keluar (Menu Administrator)
+- Buat tabel baru di Supabase: tb_penanganan_siswa, tb_penanganan_history, tb_pindah_keluar, tb_pindah_keluar_dokumen
+- Buat Storage bucket baru: dokumen-penanganan
+- Tambah server action penangananActions.js (CRUD Penanganan, Stats, Reset, Dokumen Upload)
+- Integrasi logika pembinaan bertahap (BK -> SP1 -> SP2 -> SP3 -> Pindah/Keluar)
+- Siswa Pindah/Keluar otomatis dikunci, diberi tanda merah di tabel, dan dipindah ke bawah daftar
+- Kartu statistik Dalam Pembinaan kini memasukkan total siswa yang sedang dalam SP1/SP2/SP3
+- Tambah fungsi Reset Semua Penanganan (Mengembalikan semua status ke awal)
+- Tambah kolom Alasan Pindah/Keluar di halaman Rekap
+- Fix filter status penanganan agar bisa memfilter status Pindah/Keluar dengan benar
+
+## 2026-06-17
+
+- Ganti menu "Informasi" menjadi "Formulir" di Header AppShell
+- Aktifkan halaman Pusat Formulir (/formulir) dengan 3 kartu pilihan
+- Aktifkan halaman Rekap Formulir (/admin/rekap-formulir)
+- Buat 3 tabel baru di Supabase: form_tracer_studi, form_pemetaan_karir, form_snbp_snbt
+- Buat Storage bucket baru: bukti-formulir
+- Tambah server action formulirActions.js (Save Tracer, Save Karir, Save SNBP, Get Stats, Get Rekap, Reset All)
+- Implementasi UI Form Tracer Studi (Field dinamis berdasarkan status saat ini)
+- Implementasi UI Form Pemetaan Karir (Multi-select minat karir)
+- Implementasi UI Form SNBP/SNBT (Jalur, Prodi, Upload bukti)
+- Integrasi widget Statistik Formulir di Dashboard Utama
+- Tambah tombol Reset Semua Data Formulir di halaman Rekap Admin
+- Update link di Footer agar mengarah ke halaman formulir yang benar
+
+## 2026-06-18
+
+- Aktifkan halaman Penanggung Jawab Kelas (/setting/penanggung-jawab)
+- Data PJ otomatis derive dari Manajemen User (Role Wali Kelas/Sekretaris)
+- Tambah komponen PJInfoCard (integrasi ke Rekap Kehadiran & Penanganan Siswa)
+- Hapus widget Monitoring PJ dari Dashboard (atas permintaan user)
+- Tambah Badge Oranye/Ungu untuk No. WhatsApp di tabel PJ
+- Aktifkan halaman Hari Efektif (/setting/hari-efektif)
+- Buat tabel baru: effective_days, academic_calendar, effective_day_logs
+- Fitur Hari Efektif: CRUD Libur, Import/Export CSV, Hapus Semua, Setup Kalender Pendidikan
+- Tambah tab Preview Kalender & Audit Trail (Riwayat Aktivitas)
+- Integrasi Hari Efektif ke Rekap Kehadiran:
+- Tab Bulanan: Blok merah pekat untuk Sabtu/Minggu/Libur, tambah kolom E (Efektif)
+- Tab Semester/Tahunan: Tambah kolom Hari Efektif
+- Perhitungan Persentase Kehadiran menggunakan Hari Efektif
+- Sesuaikan Export Excel (Data Bulanan) & PDF (Data Semester) dengan Hari Efektif

@@ -279,3 +279,99 @@ Status: ACTIVE
 - Tab Tahunan (12 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
 
 Status: ACTIVE
+
+## Menu Penanganan Siswa (Administrator & Wali Kelas)
+
+- Halaman monitoring dan tindak lanjut siswa berdasarkan akumulasi pelanggaran
+- Statistik Kartu Pembinaan (Dalam Pembinaan, SP1, SP2, SP3, Pindah, Keluar) dengan Count Animation
+- Tabel Daftar Siswa per kelas (Termasuk siswa Pindah/Keluar diletakkan di baris bawah dengan latar merah)
+- Kolom Status Saat Ini dengan Badge (Belum Pembinaan, Pembinaan BK, SP1, SP2, SP3, Pindah[Hijau], Keluar[Merah])
+- Filter Dinamis (Tingkat, Jurusan, Status Penanganan, Pencarian Nama/NISN)
+- Reset Semua Penanganan (Hapus riwayat dan kembalikan status siswa ke Aktif)
+- Modal Detail Siswa:
+  * Tab Riwayat Pelanggaran
+  * Tab Riwayat Reward
+  * Tab Kehadiran Hari Ini
+  * Tab Form Penanganan (Layanan BK, Tahap, SP1/2/3 & Tanggal, Status Akhir, Tanggal Keputusan, Catatan, Upload Dokumen)
+- Logika Otomatis: Siswa SP1/SP2/SP3 otomatis masuk hitungan kartu "Dalam Pembinaan"
+- Logika Kunci: Siswa Pindah/Keluar tidak bisa diedit formnya (Terkunci) dan otomatis tidak masuk hitungan aktif
+- Integrasi: Mengubah status ke Pindah/Keluar otomatis mengubah status tabel siswa dan mengirim data ke Rekap Pindah & Keluar
+
+Status: ACTIVE
+
+## Menu Rekap Pindah & Keluar (Administrator)
+
+- Halaman daftar siswa yang sudah tidak aktif karena pindah atau keluar sekolah
+- Statistik Kartu (Total Pindah, Total Keluar, Total Tahun Ini, Total Semester Ini)
+- Tabel Rekap (NISN, Nama, Kelas, Jurusan, L/P, Status, Tgl Keputusan, Alasan Pindah/Keluar, Dokumen, Aksi)
+- Filter Dinamis (Status, Kelas, Jurusan, Pencarian)
+- Export CSV & Cetak Data (Print Browser dengan format tabel rapi)
+- Modal Detail Siswa (Profil, Alasan, Dokumen Pendukung, Total Pelanggaran/Reward)
+
+Status: ACTIVE
+
+## Menu Formulir (Siswa & Alumni)
+
+- Ganti menu "Informasi" menjadi "Formulir" di Header (AppShell)
+- Halaman Pusat Formulir (3 Kartu Pilihan dengan gradient & hover animasi)
+- Form Tracer Studi Lulusan (Dinamis berdasarkan status: Kuliah, Bekerja, Wirausaha)
+- Form Pemetaan Karir (Multi-select minat karir)
+- Form Pendataan SNBP & SNBT (Upload bukti PDF/JPG/PNG)
+- Upload file bukti ke Supabase Storage (Bucket: bukti-formulir)
+- Halaman sukses setelah submit formulir
+
+Status: ACTIVE
+
+## Menu Rekap Formulir (Administrator)
+
+- Halaman rekapitulasi seluruh isian formulir siswa & alumni
+- Statistik Kartu (Total Tracer, Total Karir, Total SNBP, Total Semua) dengan Count Animation
+- Tab Modern (Tracer Studi, Pemetaan Karir, SNBP/SNBT)
+- Tabel Rekap Dinamis dengan Pencarian real-time
+- Export CSV & Cetak Data (Print Browser dengan format tabel rapi)
+- Modal Detail Data Formulir (Menampilkan semua field dinamis termasuk link file bukti)
+- Tombol Reset Semua Data Formulir (Hapus permanen semua isian dari 3 tabel)
+
+Status: ACTIVE
+
+## Dashboard (Update)
+
+- Tambah widget Statistik Formulir (Total Formulir Masuk, Tracer, Karir, SNBP)
+- Update link footer (Tracer Studi, SNBP/SNBT, Pemetaan Karir mengarah ke /formulir/...)
+
+Status: ACTIVE
+
+## Menu Penanggung Jawab Kelas (Setting)
+
+- Halaman Manajemen Penanggung Jawab (/setting/penanggung-jawab)
+- Data Wali Kelas & Sekretaris otomatis diambil dari Manajemen User (Role & Kelas)
+- Kartu Statistik (Total Kelas Aktif, Total Wali, Total Sekretaris, Total PJ)
+- Tabel Data PJ dengan Badge WhatsApp (Oranye untuk Wali, Ungu untuk Sekretaris)
+- Filter Pencarian Realtime
+- Modal Detail Penanggung Jawab
+- Komponen PJInfoCard yang terintegrasi di Rekap Kehadiran & Penanganan Siswa
+
+Status: ACTIVE
+
+## Menu Hari Efektif (Setting)
+
+- Halaman Manajemen Hari Efektif & Kalender Akademik (/setting/hari-efektif)
+- Kartu Statistik (Hari Efektif, Libur Nasional, Libur Sekolah, Total Non-Efektif)
+- 4 Tab Navigasi: Hari Libur Manual, Kalender Pendidikan, Preview Kalender, Riwayat Aktivitas
+- Tab Libur: CRUD Hari Libur, Import/Export CSV, Tombol Hapus Semua Data
+- Tab Kalender: Setup Tahun Pelajaran, Semester, Tanggal, Hanya 1 Kalender Boleh Aktif
+- Tab Preview: Tampilan Kalender Bulan Ini (Warna blok sesuai status)
+- Tab Riwayat: Audit Trail aktivitas admin
+- Otomatis Sabtu & Minggu dihitung sebagai hari non-efektif
+
+Status: ACTIVE
+
+## Integrasi Hari Efektif dengan Rekap Kehadiran
+
+- Tab Bulanan: Tanggal hari libur dan Sabtu/Minggu otomatis diberi blok merah pekat tanpa inisial
+- Tab Bulanan: Penambahan kolom E (Efektif) di samping kiri kolom H
+- Tab Semester/Tahunan: Penambahan kolom "Hari Efektif" di samping kiri Total H
+- Perhitungan Persentase Kehadiran otomatis menggunakan Hari Efektif
+- Export Excel/PDF menyesuaikan format dan kolom Hari Efektif
+
+Status: ACTIVE

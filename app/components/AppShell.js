@@ -360,7 +360,7 @@ export default function AppShell({ children }) {
                 <SubLink icon={UserCog} title="Penanganan Siswa" href="/admin/siswa/penanganan" />
                 <SubLink icon={BarChart2} title="Rekap Reward" href="/admin/rekap-reward" />
                 <SubLink icon={FileText} title="Rekap Formulir" href="/admin/rekap-formulir" />
-                <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" href="/admin/rekap-pindah-keluar" />
+                <SubLink icon={ArrowRightLeft} title="Rekap Pindah & Keluar" href="/admin/siswa/pindah-keluar" />
               </DropdownMenu>
             </>
           )}
@@ -372,9 +372,9 @@ export default function AppShell({ children }) {
               <DropdownMenu title="Pengaturan" icon={Settings} menuKey="setting" menuId="setting">
                 <SubLink icon={Building2} title="Profil SIPANDU" href="/setting/profil" />
                 <SubLink icon={UserCog} title="Managemen User" href="/admin/users" />
-                <SubLink icon={UserCheck} title="Penanggung Jawab" />
-                <SubLink icon={CalendarCheck} title="Hari Efektif" />
-                <SubLink icon={Newspaper} title="Pos Berita" />
+                <SubLink icon={UserCheck} title="Penanggung Jawab" href="/setting/penanggung-jawab" />
+                <SubLink icon={CalendarCheck} title="Hari Efektif" href="/setting/hari-efektif" />
+                <SubLink icon={Newspaper} title="Pos Berita" href="/setting/pos-berita" />
               </DropdownMenu>
             </>
           )}
@@ -395,7 +395,7 @@ export default function AppShell({ children }) {
           <div className="flex items-center gap-4 md:gap-6 text-gray-300 font-medium text-sm">
             <Link href="/" className="flex items-center gap-1 hover:text-white"><Home size={18}/> <span className="hidden md:inline-block">Home</span></Link>
             <Link href="/tentang" className="flex items-center gap-1 hover:text-white"><Info size={18}/> <span className="hidden md:inline-block">Tentang</span></Link>
-            <Link href="/" className="flex items-center gap-1 hover:text-white"><Bell size={18}/> <span className="hidden md:inline-block">Informasi</span></Link>
+            <Link href="/formulir" className="flex items-center gap-1 hover:text-white"><ClipboardList size={18}/> <span className="hidden md:inline-block">Formulir</span></Link>
             {isLoggedIn ? (
               <button onClick={handleLogout} className="flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
                 <LogOut size={16}/> <span className="hidden md:inline-block">Logout</span>
@@ -412,7 +412,7 @@ export default function AppShell({ children }) {
       {/* --- BOTTOM NAVIGATION MOBILE --- */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 md:hidden flex justify-around items-center h-16 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2"><HeartPulse size={20}/><span className="text-[10px] mt-1 font-medium">Izin</span></Link>
-        <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2"><ClipboardList size={20}/><span className="text-[10px] mt-1 font-medium">Absensi</span></Link>
+        <Link href="/formulir" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2"><ClipboardList size={20}/><span className="text-[10px] mt-1 font-medium">Formulir</span></Link>
         <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2"><CalendarDays size={20}/><span className="text-[10px] mt-1 font-medium">Osis</span></Link>
         <Link href="/" className="flex flex-col items-center justify-center text-gray-500 hover:text-blue-600 transition-colors py-1 px-2"><User size={20}/><span className="text-[10px] mt-1 font-medium">Wali Kelas</span></Link>
         {isLoggedIn ? (

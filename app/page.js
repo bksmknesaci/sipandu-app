@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Search, ExternalLink, Award, AlertTriangle, MessageCircle, Camera, PlayCircle, Music2, ChevronRight, FileText, Users, BookOpen } from 'lucide-react';
+import { Search, ExternalLink, Award, AlertTriangle, MessageCircle, Camera, PlayCircle, Music2, ChevronRight, FileText, Users, BookOpen, ClipboardList, GraduationCap, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 import RekapReward from '@/app/components/RekapReward';
@@ -12,6 +12,7 @@ import DaftarTidakHadir from '@/app/components/DaftarTidakHadir';
 import RekapSiswa from './components/RekapSiswa';
 import SiswaBerprestasiBerita from '@/app/components/SiswaBerprestasiBerita';
 import AksesCepatInformasi from '@/app/components/AksesCepatInformasi';
+import { getFormulirStats } from '@/app/actions/formulirActions';
 
 const allRewardData = [
   [{ name: 'X RPL', reward: 85 }, { name: 'XI TKJ', reward: 72 }, { name: 'XII MM', reward: 90 }],
@@ -33,12 +34,24 @@ export default function SIPANDU() {
     alamat: '', tentang: '', facebook: '', instagram: '', youtube: '', tiktok: '', tim: '' 
   });
 
+  // State untuk Statistik Formulir
+  const [formStats, setFormStats] = useState({ totalTracer: 0, totalKarir: 0, totalSnbp: 0, totalAll: 0 });
+
   useEffect(() => {
     const fetchSettings = async () => {
       const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
       if (data) setSettings(data);
     };
     fetchSettings();
+  }, []);
+
+  // Fetch Statistik Formulir
+  useEffect(() => {
+    const loadFormStats = async () => {
+      const res = await getFormulirStats();
+      if (res) setFormStats(res);
+    };
+    loadFormStats();
   }, []);
 
   useEffect(() => {
@@ -89,6 +102,39 @@ export default function SIPANDU() {
       </section>
 
       <div className="p-4 md:p-8">
+        
+        {/* STATISTIK FORMULIR WIDGET */}
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-slate-700 to-slate-800 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><ClipboardList size={24}/></div>
+            <div>
+              <p className="text-3xl font-extrabold">{formStats.totalAll}</p>
+              <p className="text-xs opacity-90 font-medium mt-1">Total Formulir Masuk</p>
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><GraduationCap size={24}/></div>
+            <div>
+              <p className="text-3xl font-extrabold">{formStats.totalTracer}</p>
+              <p className="text-xs opacity-90 font-medium mt-1">Alumni Tracer Studi</p>
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><Briefcase size={24}/></div>
+            <div>
+              <p className="text-3xl font-extrabold">{formStats.totalKarir}</p>
+              <p className="text-xs opacity-90 font-medium mt-1">Pemetaan Karir</p>
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-500 to-amber-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><FileText size={24}/></div>
+            <div>
+              <p className="text-3xl font-extrabold">{formStats.totalSnbp}</p>
+              <p className="text-xs opacity-90 font-medium mt-1">Pendaftar SNBP/SNBT</p>
+            </div>
+          </div>
+        </div>
+
         {/* SISWA BERPRESTASI & BERITA */}
         <SiswaBerprestasiBerita />
 
@@ -115,11 +161,11 @@ export default function SIPANDU() {
               <p className="text-xs md:text-sm">{settings.alamat || 'Jl. Raya Cikedung, Indramayu, Jawa Barat'}</p>
             </div>
             <div>
-              <h4 className="text-white font-bold mb-3 text-sm md:text-base">Informasi</h4>
+              <h4 className="text-white font-bold mb-3 text-sm md:text-base">Formulir</h4>
               <ul className="space-y-2 text-xs md:text-sm">
-                <li><a href="#" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />SNBP</a></li>
-                <li><a href="#" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />SNBT</a></li>
-                <li><a href="#" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />Tracer Studi</a></li>
+                <li><a href="/formulir/tracer-studi" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />Tracer Studi</a></li>
+                <li><a href="/formulir/snbp-snbt" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />SNBP / SNBT</a></li>
+                <li><a href="/formulir/pemetaan-karir" className="flex items-center gap-2 hover:text-white transition-colors active:scale-95 active:text-sky-400"><ChevronRight size={14} className="text-sky-400" />Pemetaan Karir</a></li>
               </ul>
             </div>
             <div>

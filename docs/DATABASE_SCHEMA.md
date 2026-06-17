@@ -142,3 +142,143 @@ absensi
 * catatan_pembinaan (text)
 * created_at (timestamptz)
 * updated_at (timestamptz)
+
+## tb_penanganan_siswa
+
+* id (BIGSERIAL PRIMARY KEY)
+* siswa_id (BIGINT REFERENCES siswa(id) ON DELETE CASCADE)
+* nisn (TEXT)
+* total_poin (INT DEFAULT 0)
+* tahap (VARCHAR(50) DEFAULT 'Pembinaan BK')
+* layanan_bk (VARCHAR(50) DEFAULT 'Belum')
+* sp1 (BOOLEAN DEFAULT FALSE)
+* tgl_sp1 (DATE)
+* sp2 (BOOLEAN DEFAULT FALSE)
+* tgl_sp2 (DATE)
+* sp3 (BOOLEAN DEFAULT FALSE)
+* tgl_sp3 (DATE)
+* catatan_bk (TEXT)
+* status_akhir (VARCHAR(50) DEFAULT 'Aktif')
+* updated_at (TIMESTAMPTZ DEFAULT NOW())
+* UNIQUE(siswa_id)
+
+## tb_penanganan_history
+
+* id (BIGSERIAL PRIMARY KEY)
+* penanganan_id (BIGINT REFERENCES tb_penanganan_siswa(id) ON DELETE CASCADE)
+* updated_by (BIGINT)
+* action (TEXT)
+* note (TEXT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## tb_pindah_keluar
+
+* id (BIGSERIAL PRIMARY KEY)
+* siswa_id (BIGINT REFERENCES siswa(id) ON DELETE SET NULL)
+* nisn (TEXT)
+* nama (TEXT)
+* kelas (VARCHAR)
+* jurusan (VARCHAR)
+* jenis_kelamin (VARCHAR)
+* status (VARCHAR(50)) -- Nilai: 'Pindah', 'Keluar'
+* tanggal_keputusan (DATE)
+* alasan (TEXT)
+* ditetapkan_oleh (BIGINT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## tb_pindah_keluar_dokumen
+
+* id (BIGSERIAL PRIMARY KEY)
+* pindah_keluar_id (BIGINT REFERENCES tb_pindah_keluar(id) ON DELETE CASCADE)
+* file_url (TEXT)
+* file_name (TEXT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## form_tracer_studi
+
+* id (BIGSERIAL PRIMARY KEY)
+* nisn (TEXT)
+* nama (TEXT)
+* tahun_lulus (VARCHAR)
+* jurusan (VARCHAR)
+* whatsapp (VARCHAR)
+* email (VARCHAR)
+* status_saat_ini (VARCHAR) -- Nilai: 'Kuliah', 'Bekerja', 'Wirausaha', dll
+* kuliah_nama_pt (TEXT), kuliah_prodi (VARCHAR), kuliah_jenjang (VARCHAR), kuliah_kota (VARCHAR), kuliah_provinsi (VARCHAR)
+* bekerja_nama_perusahaan (TEXT), bekerja_jabatan (VARCHAR), bekerja_bidang (VARCHAR), bekerja_kota (VARCHAR), bekerja_provinsi (VARCHAR)
+* wirausaha_nama (TEXT), wirausaha_bidang (VARCHAR), wirausaha_lama (VARCHAR)
+testimoni (TEXT)
+* foto_aktivitas_url (TEXT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## form_pemetaan_karir
+
+* id (BIGSERIAL PRIMARY KEY)
+* nisn (TEXT)
+* nama (TEXT)
+* kelas (VARCHAR)
+* jurusan (VARCHAR)
+* minat_karir (JSONB) -- Array string minat karir
+* cita_cita (TEXT)
+* rencana_setelah_lulus (VARCHAR)
+* pt_impian (TEXT)
+* prodi_impian (TEXT)
+* perusahaan_impian (TEXT)
+* keterangan_tambahan (TEXT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## form_snbp_snbt
+
+* id (BIGSERIAL PRIMARY KEY)
+* nisn (TEXT)
+* nama (TEXT)
+* kelas (VARCHAR)
+* jurusan (VARCHAR)
+* whatsapp (VARCHAR)
+* jalur_pendaftaran (VARCHAR) -- Nilai: 'SNBP', 'SNBT', 'SNBP & SNBT'
+* pt_tujuan (TEXT)
+* prodi_1 (TEXT), prodi_2 (TEXT), prodi_3 (TEXT)
+* status_hasil (VARCHAR DEFAULT 'Belum Pengumuman') -- Nilai: 'Belum Pengumuman', 'Lulus', 'Tidak Lulus', 'Cadangan'
+* bukti_file_url (TEXT)
+* catatan (TEXT)
+* created_at (TIMESTAMPTZ DEFAULT NOW())
+
+## Supabase Storage Buckets (Update)
+* logos (public) -- Untuk logo jurusan
+* bukti-sakit-izin (public) -- Untuk foto bukti sakit/izin siswa
+* dokumen-penanganan (public) -- Untuk dokumen pendukung SP/Pindah/Keluar
+* bukti-formulir (public) -- Untuk upload bukti formulir (foto aktivitas, bukti SNBP/SNBT) <------- BARU
+
+## effective_days
+
+* id (int8)
+* date (date)
+* holiday_name (text)
+* category (varchar) -- Nilai: 'Nasional', 'Sekolah', 'Semester', 'Ujian', 'Kegiatan Sekolah', 'Khusus'
+* description (text)
+* created_by (int8)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+
+## academic_calendar
+
+* id (int8)
+* school_year (varchar)
+* semester (varchar) -- Nilai: 'Ganjil', 'Genap'
+* start_date (date)
+* end_date (date)
+* pas_date (date)
+* pat_date (date)
+* pkl_date (date)
+* mpls_date (date)
+* semester_break_date (date)
+* is_active (boolean)
+* created_at (timestamptz)
+
+## effective_day_logs
+
+* id (int8)
+* admin_id (int8)
+* activity (text)
+* detail (jsonb)
+* created_at (timestamptz)
