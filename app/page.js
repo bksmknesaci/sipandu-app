@@ -11,6 +11,7 @@ import TopReward from '@/app/components/TopReward';
 import DaftarTidakHadir from '@/app/components/DaftarTidakHadir';
 import RekapSiswa from './components/RekapSiswa';
 import SiswaBerprestasiBerita from '@/app/components/SiswaBerprestasiBerita';
+import CariDataSiswaWidget from '@/app/components/CariDataSiswaWidget';
 import AksesCepatInformasi from '@/app/components/AksesCepatInformasi';
 import { getFormulirStats } from '@/app/actions/formulirActions';
 
@@ -94,46 +95,12 @@ export default function SIPANDU() {
           <div className="border-2 border-sky-400 p-2 md:p-3 inline-block rounded-lg bg-sky-500/20 backdrop-blur-sm mb-8">
             <p className="text-sm md:text-lg font-bold tracking-widest text-sky-300">{typedText}<span className="animate-pulse">|</span></p>
           </div>
-          <div className="w-full max-w-xl mx-auto relative">
-            <input type="text" placeholder="Cari Data Siswa... Nama/NISN" className="w-full py-3 px-5 pr-14 rounded-full text-gray-800 bg-white shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
-            <button className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 transition-colors"><Search size={20} /></button>
-          </div>
+          <CariDataSiswaWidget />
         </div>
       </section>
 
       <div className="p-4 md:p-8">
-        
-        {/* STATISTIK FORMULIR WIDGET */}
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-slate-700 to-slate-800 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
-            <div className="bg-white/20 p-3 rounded-xl"><ClipboardList size={24}/></div>
-            <div>
-              <p className="text-3xl font-extrabold">{formStats.totalAll}</p>
-              <p className="text-xs opacity-90 font-medium mt-1">Total Formulir Masuk</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
-            <div className="bg-white/20 p-3 rounded-xl"><GraduationCap size={24}/></div>
-            <div>
-              <p className="text-3xl font-extrabold">{formStats.totalTracer}</p>
-              <p className="text-xs opacity-90 font-medium mt-1">Alumni Tracer Studi</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
-            <div className="bg-white/20 p-3 rounded-xl"><Briefcase size={24}/></div>
-            <div>
-              <p className="text-3xl font-extrabold">{formStats.totalKarir}</p>
-              <p className="text-xs opacity-90 font-medium mt-1">Pemetaan Karir</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-500 to-amber-600 p-5 rounded-2xl text-white shadow-lg flex items-center gap-4">
-            <div className="bg-white/20 p-3 rounded-xl"><FileText size={24}/></div>
-            <div>
-              <p className="text-3xl font-extrabold">{formStats.totalSnbp}</p>
-              <p className="text-xs opacity-90 font-medium mt-1">Pendaftar SNBP/SNBT</p>
-            </div>
-          </div>
-        </div>
+        <AksesCepatInformasi />
 
         {/* SISWA BERPRESTASI & BERITA */}
         <SiswaBerprestasiBerita />
@@ -148,7 +115,6 @@ export default function SIPANDU() {
           <TopReward />
           <DaftarTidakHadir />
           <RekapSiswa settings={settings} />
-          <AksesCepatInformasi />
         </div>
 
         <div className="h-8"></div>

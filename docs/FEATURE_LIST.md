@@ -13,7 +13,7 @@ Status: ACTIVE
 
 ---
 
-## Dashboard
+## Beranda
 - Siswa Berprestasi & Berita
 - Tiga Besar Peraih Poin Reward Tertinggi
 - Daftar Siswa Tidak Hadir
@@ -88,6 +88,8 @@ Status: ACTIVE (Simulasi UI)
 
 Status: ACTIVE
 
+---
+
 ## Managemen User
 - Statistik Pengguna (Count-Up Animation, 5 Kartu Gradient)
 - Tambah User (Modal Form + Upload Foto Profil)
@@ -112,8 +114,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Manajemen User (Update)
+---
 
+## Manajemen User (Update)
 - Statistik Pengguna (Count-Up Animation, 5 Kartu Gradient)
 - Tambah User (Modal Form + Upload Foto Profil)
 - Edit User
@@ -136,8 +139,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Profil Saya
+---
 
+## Profil Saya
 - Modal Profil Pengguna di Sidebar
 - Tampilkan Foto, Nama, Peran + Kelas, Username, Email, WhatsApp, Kelas, Jurusan, Status
 - Mode Edit (Email & WhatsApp)
@@ -147,8 +151,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Role-Based Navigation
+---
 
+## Role-Based Navigation
 - Administrator: Semua Menu (Umum, Siswa, Sekretaris, OSIS, Wali Kelas, Admin, Setting)
 - Wali Kelas: Menu Umum, Siswa, Wali Kelas
 - Sekretaris Kelas: Menu Umum, Siswa, Sekretaris
@@ -159,8 +164,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Rekap Kehadiran
+---
 
+## Menu Rekap Kehadiran
 - Halaman Rekap Kehadiran (Akses: Wali Kelas & Administrator)
 - Tab Harian (Tabel Detail, Status Badge, Sumber Absensi, Waktu)
 - Tab Bulanan (Freeze Table Nama & Header, Kolom Tanggal 1-31, Auto-Alpha di tanggal kosong)
@@ -176,15 +182,17 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Dashboard - Daftar Siswa Tidak Hadir
+---
 
+## Beranda - Daftar Siswa Tidak Hadir
 - Integrasi Supabase Realtime Subscription (Auto-update tanpa reload)
 - Perbaikan Label Kelas (Gabungan Kelas + Jurusan, cont: "XI TKRO 1")
 
 Status: ACTIVE
 
-## Absen Sakit & Izin
+---
 
+## Absen Sakit & Izin
 - Halaman pengajuan ketidakhadiran untuk siswa
 - Input NISN untuk verifikasi identitas siswa
 - Batas waktu pengajuan 06:00 WIB - 09:04 WIB (Admin bebas waktu)
@@ -198,8 +206,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Rekap Sakit & Izin (Wali Kelas)
+---
 
+## Rekap Sakit & Izin (Wali Kelas)
 - Halaman verifikasi pengajuan untuk Wali Kelas & Administrator
 - Statistik Pengajuan (Total, Menunggu, Disetujui, Ditolak)
 - Filter Kelas & Jurusan (Otomatis untuk Wali Kelas, Dropdown untuk Admin)
@@ -212,8 +221,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Absen Hadir Mandiri (Revamp)
+---
 
+## Absen Hadir Mandiri (Revamp)
 - Input NISN untuk mencari data siswa
 - Integrasi Kamera HP via library html5-qrcode
 - Scan QR Code Kelas (Format JSON dari halaman QR Absensi)
@@ -222,8 +232,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Integrasi Absensi Otomatis
+---
 
+## Integrasi Absensi Otomatis
 - Data dari Sakit/Izin & QR Mandiri langsung masuk ke Tabel Absensi Utama
 - Status otomatis terkunci (locked=true) bagi Sekretaris
 - Badge Keterangan di halaman Sekretaris (ONLINE / SCAN QR)
@@ -232,15 +243,17 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu OSIS
+---
 
+## Menu OSIS
 - Entri Reward
 - Entri Pelanggaran
 
 Status: ACTIVE
 
-## Menu Wali Kelas
+---
 
+## Menu Wali Kelas
 - Entri Reward
 - Entri Pelanggaran
 - Rekap Pelanggaran
@@ -249,8 +262,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Rekap Reward (Update)
+---
 
+## Menu Rekap Reward (Update)
 - Statistik Pengguna (Count-Up Animation, 4 Kartu Gradient: Siswa Dapat Reward, Total Poin Sekolah, Siswa Berprestasi, Entri Bulan Ini)
 - Tiga Besar Peraih Poin Reward Tertinggi (Dinamis dari Database)
 - Tabel Rekap Data Siswa Berpoint (Kolom NISN, Nama, Kelas, Total Poin, Kategori, Reward Terakhir, Aksi Detail)
@@ -264,15 +278,17 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Entri Reward & Pelanggaran (Update)
+---
 
+## Entri Reward & Pelanggaran (Update)
 - Pencarian Siswa Realtime (Berdasarkan Nama atau NISN, Min 3 Karakter)
 - Fix Bug Pencarian (Sinkronisasi nama kolom NISN di database)
 
 Status: ACTIVE
 
-## Menu Rekap Kehadiran (Update)
+---
 
+## Menu Rekap Kehadiran (Update)
 - Tab Harian (Tabel Detail, Kolom NISN, Status Badge, Sumber Absensi, Waktu)
 - Tab Bulanan (Freeze Table Nama & Header, Kolom Nomor Urut, Kolom Tanggal 1-31, Tanpa Kolom NISN)
 - Tab Semester (6 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
@@ -280,8 +296,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Penanganan Siswa (Administrator & Wali Kelas)
+---
 
+## Menu Penanganan Siswa (Administrator & Wali Kelas)
 - Halaman monitoring dan tindak lanjut siswa berdasarkan akumulasi pelanggaran
 - Statistik Kartu Pembinaan (Dalam Pembinaan, SP1, SP2, SP3, Pindah, Keluar) dengan Count Animation
 - Tabel Daftar Siswa per kelas (Termasuk siswa Pindah/Keluar diletakkan di baris bawah dengan latar merah)
@@ -299,8 +316,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Rekap Pindah & Keluar (Administrator)
+---
 
+## Menu Rekap Pindah & Keluar (Administrator)
 - Halaman daftar siswa yang sudah tidak aktif karena pindah atau keluar sekolah
 - Statistik Kartu (Total Pindah, Total Keluar, Total Tahun Ini, Total Semester Ini)
 - Tabel Rekap (NISN, Nama, Kelas, Jurusan, L/P, Status, Tgl Keputusan, Alasan Pindah/Keluar, Dokumen, Aksi)
@@ -310,8 +328,8 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+---
 ## Menu Formulir (Siswa & Alumni)
-
 - Ganti menu "Informasi" menjadi "Formulir" di Header (AppShell)
 - Halaman Pusat Formulir (3 Kartu Pilihan dengan gradient & hover animasi)
 - Form Tracer Studi Lulusan (Dinamis berdasarkan status: Kuliah, Bekerja, Wirausaha)
@@ -322,8 +340,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Rekap Formulir (Administrator)
+---
 
+## Menu Rekap Formulir (Administrator)
 - Halaman rekapitulasi seluruh isian formulir siswa & alumni
 - Statistik Kartu (Total Tracer, Total Karir, Total SNBP, Total Semua) dengan Count Animation
 - Tab Modern (Tracer Studi, Pemetaan Karir, SNBP/SNBT)
@@ -334,15 +353,17 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Dashboard (Update)
+---
 
+## Beranda (Update)
 - Tambah widget Statistik Formulir (Total Formulir Masuk, Tracer, Karir, SNBP)
 - Update link footer (Tracer Studi, SNBP/SNBT, Pemetaan Karir mengarah ke /formulir/...)
 
 Status: ACTIVE
 
-## Menu Penanggung Jawab Kelas (Setting)
+---
 
+## Menu Penanggung Jawab Kelas (Setting)
 - Halaman Manajemen Penanggung Jawab (/setting/penanggung-jawab)
 - Data Wali Kelas & Sekretaris otomatis diambil dari Manajemen User (Role & Kelas)
 - Kartu Statistik (Total Kelas Aktif, Total Wali, Total Sekretaris, Total PJ)
@@ -353,8 +374,9 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Menu Hari Efektif (Setting)
+---
 
+## Menu Hari Efektif (Setting)
 - Halaman Manajemen Hari Efektif & Kalender Akademik (/setting/hari-efektif)
 - Kartu Statistik (Hari Efektif, Libur Nasional, Libur Sekolah, Total Non-Efektif)
 - 4 Tab Navigasi: Hari Libur Manual, Kalender Pendidikan, Preview Kalender, Riwayat Aktivitas
@@ -366,12 +388,270 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Integrasi Hari Efektif dengan Rekap Kehadiran
+---
 
+## Integrasi Hari Efektif dengan Rekap Kehadiran
 - Tab Bulanan: Tanggal hari libur dan Sabtu/Minggu otomatis diberi blok merah pekat tanpa inisial
 - Tab Bulanan: Penambahan kolom E (Efektif) di samping kiri kolom H
 - Tab Semester/Tahunan: Penambahan kolom "Hari Efektif" di samping kiri Total H
 - Perhitungan Persentase Kehadiran otomatis menggunakan Hari Efektif
 - Export Excel/PDF menyesuaikan format dan kolom Hari Efektif
+
+Status: ACTIVE
+
+---
+
+## Menu Pos Berita (Setting)
+- Halaman manajemen berita terpusat (/setting/pos-berita)
+- Kartu Statistik (Total Berita, Berita Sekolah, Siswa Berprestasi, Dilihat Bulan Ini)
+- Tab Navigasi: Semua, Siswa Berprestasi, Berita Sekolah, Draft
+- CRUD Berita (Modal Form)
+- Fitur Upload Cover dengan Kompresi Otomatis (Max 800x600, 80% Quality)
+- Toggle Featured News (Berita Utama)
+- Tab View Counter otomatis bertambah saat berita dibaca
+- Tombol Hapus Semua Berita
+- Fix referrer policy untuk menampilkan gambar dari Supabase Storage
+
+Status: ACTIVE
+
+---
+
+## Integrasi Berita ke Dashboard & Halaman Publik
+- Widget "Siswa Berprestasi & Berita" di Dashboard kini mengambil data dinamis dari database (5 berita terbaru berstatus Publish)
+- Halaman Publik Siswa Berprestasi (/siswa-berprestasi) menampilkan grid card berita kategori prestasi
+- Halaman Publik Berita Sekolah (/berita-sekolah) menampilkan grid card berita kategori sekolah
+- Halaman Detail Berita (/berita/[slug]) menampilkan isi berita, view counter, dan berita terkait
+- Tombol "Seputar Sekolah" di Akses Cepat Informasi mengarah ke /berita-sekolah
+- Tombol "Siswa Berprestasi" di Sidebar mengarah ke /siswa-berprestasi
+
+Status: ACTIVE
+
+---
+
+## Integrasi Berita ke Dashboard & Halaman Publik (Update)
+- Widget "Siswa Berprestasi & Berita" di Dashboard kini mengambil data dinamis dari database (5 berita terbaru berstatus Publish)
+- Berita yang dicentang "Featured" otomatis tampil sebagai konten utama (kolom kiri besar) di Dashboard
+- Halaman Publik Semua Berita (/semua-berita) menampilkan gabungan Siswa Berprestasi & Berita Sekolah dalam satu halaman dengan tab filter
+- Halaman Publik Siswa Berprestasi (/siswa-berprestasi) menampilkan grid card berita kategori prestasi
+- Halaman Publik Berita Sekolah (/berita-sekolah) menampilkan grid card berita kategori sekolah
+- Halaman Detail Berita (/berita/[slug]) menampilkan isi berita, view counter, dan berita terkait
+- Fungsi getImageUrl() menangani semua format URL cover (lengkap, relatif, null) dengan fallback SVG rapi
+- Atribut referrerPolicy="no-referrer" pada setiap tagagar gambar Supabase Storage muncul
+- Konfigurasi images.remotePatterns di next.config.ts untuk domain *.supabase.co
+- Tombol "LIHAT SEMUA BERITA" di Dashboard mengarah ke /semua-berita (gabungan dua kategori)
+- Halaman Pos Berita, Siswa Berprestasi, Berita Sekolah, Semua Berita, dan Detail Berita tidak menggunakan AppShell (menghindari layout ganda)
+
+Status: ACTIVE
+
+---
+
+## Akses Cepat Informasi (Update)
+- Kartu Pemetaan Karir ditambahkan (arah ke /formulir/pemetaan-karir)
+- Total 4 kartu: Tracer Studi, SNBP/SNBT, Pemetaan Karir, Seputar Sekolah
+- Grid 4 kolom di desktop, 2 kolom di HP
+- Efek hover: kartu timbul naik (translate-y) + bayangan membesar + lingkaran dekoratif membesar
+- Animasi ikon naik turun (bounce-slow 2 detik) dengan delay berbeda tiap kartu
+- Posisi dipindahkan ke atas widget Siswa Berprestasi & Berita di Dashboard
+- Tombol "Seputar Sekolah" menggunakan useRouter().push() (fix navigasi tidak berfungsi)
+
+Status: ACTIVE
+
+---
+
+## Pos Berita (Update)
+- Kompresi gambar cover ditingkatkan: max 1400px (sebelumnya 800px), quality 92% (sebelumnya 80%)
+- Thumbnail di tabel menggunakan fungsi getImageUrl() + fallback SVG
+- Halaman tidak menggunakan AppShell (menghindari layout ganda)
+
+Status: ACTIVE
+
+---
+## Server Action getPublishedNews (Update)
+- Penambahan order('featured', { ascending: false }) sebelum order tanggal
+- Berita Featured selalu muncul paling atas dalam daftar
+
+Status: ACTIVE
+
+---
+
+## Portal Orang Tua (/portal-ortu)
+- Halaman search NISN untuk akses dashboard (tidak memerlukan login)
+- Pencarian fleksibel: mencocokkan kolom nisn dan nis (fallback untuk format lama)
+- Hero Section: foto profil, nama, NISN, kelas, jurusan, tahun pelajaran, status hadir hari ini
+- Badge status hadir: 🟢 Hadir, 🟡 Izin, 🟠 Sakit, 🔴 Alpha, 🔴 Belum Absen
+- 6 Summary Card: Kehadiran (%), Total Reward, Pelanggaran, Status Hari Ini, Ranking Reward, Pesan WK
+- Profil Akademik & Siswa: data lengkap dari tabel siswa + info Wali Kelas & Sekretaris dari tabel users (matching fleksibel)
+- Kehadiran Bulan Ini: Donut Chart SVG custom (persentase di tengah), statistik H/I/S/A, timeline riwayat terakhir
+- Status Kehadiran Hari Ini: card besar dengan ikon, jam, metode absensi
+- Kalender Akademik Interaktif: navigasi bulan, highlight warna (hijau=efektif, merah=libur nasional, kuning=libur sekolah, biru=ujian, ungu=kegiatan, abu=weekend)
+- Pesan Wali Kelas: layout chat modern, kirim pesan, riwayat percakapan, badge belum dibaca
+- Kedisiplinan & Prestasi: panel kiri (reward + grafik bar bulanan), panel kanan (pelanggaran + grafik bar bulanan)
+- Catatan Surat Peringatan (SP): integrasi dengan tb_penanganan_siswa, tampil SP1/SP2/SP3 dengan tanggal dan keterangan, status pembinaan BK, catatan BK, total poin
+- Ringkasan Perkembangan: Radar Chart (Kehadiran, Prestasi, Disiplin, Aktivitas, Akademik) skala 0-100
+- Riwayat Aktivitas Terbaru: timeline gabungan (reward, pelanggaran, pesan)
+- Notification Center: dropdown notifikasi dengan badge unread, mark as read
+- Export PDF Laporan Bulanan: buka window baru dengan laporan kehadiran, reward, pelanggaran
+- Tombol Ganti Siswa untuk kembali ke halaman search
+- Skeleton loading saat memuat data
+- Halaman tidak menggunakan AppShell (standalone page)
+- Matching Wali Kelas & Sekretaris menggunakan logika fleksibel (exact, tingkat, substring)
+
+Status: ACTIVE
+
+---
+
+## Halaman Semua Berita (/semua-berita)
+- Halaman gabungan Siswa Berprestasi & Berita Sekolah
+- Tab filter: Semua Berita, Siswa Berprestasi, Berita Sekolah
+- Pencarian real-time (judul, ringkasan)
+- Grid card responsif dengan cover, kategori badge, view counter
+- Halaman tidak menggunakan AppShell (standalone page)
+
+Status: ACTIVE
+
+---
+
+## Integrasi Berita ke Dashboard & Halaman Publik (Update)
+- Widget "Siswa Berprestasi & Berita" menggunakan getPublishedNews dari server action
+- Berita Featured otomatis tampil sebagai konten utama (kolom kiri besar) di Dashboard
+- Fungsi getImageUrl() menangani semua format URL cover (lengkap, relatif, null) dengan fallback SVG rapi
+- Atribut referrerPolicy="no-referrer" pada setiap tagberita
+- Konfigurasi images.remotePatterns di next.config.ts untuk domain *.supabase.co
+- Tombol "LIHAT SEMUA BERITA" di Dashboard mengarah ke /semua-berita
+
+Status: ACTIVE
+
+---
+
+## Akses Cepat Informasi (Update)
+- 4 kartu: Tracer Studi, SNBP/SNBT, Pemetaan Karir, Seputar Sekolah
+- Grid 4 kolom desktop, 2 kolom HP
+- Efek hover: kartu timbul naik (translate-y-3), bayangan membesar, lingkaran dekoratif scale
+- Animasi ikon naik turun (bounce-slow 2 detik) dengan delay berbeda tiap kartu (0s, 0.3s, 0.6s, 0.9s)
+- Posisi dipindahkan ke atas Siswa Berprestasi & Berita di Dashboard
+- Tombol Seputar Sekolah menggunakan useRouter().push() (fix navigasi tidak berfungsi)
+
+Status: ACTIVE
+
+
+## Pos Berita (Update)
+- Kompresi gambar cover: max 1400px, quality 92% (sebelumnya 800px/80%)
+- Thumbnail di tabel menggunakan getImageUrl() + fallback SVG abu-abu
+- Halaman tidak menggunakan AppShell (menghindari layout ganda)
+
+Status: ACTIVE
+
+---
+
+## getPublishedNews Server Action (Update)
+- Penambahan order('featured', { ascending: false }) sebelum order tanggal
+- Berita Featured selalu muncul paling atas dalam daftar
+
+Status: ACTIVE
+
+---
+
+## Sidebar Navigation (Update)
+- Fix NavLink active state: menggunakan href sebagai fallback identifier ketika menuId tidak diberikan
+- Menu umum (Portal Orang Tua, Siswa Berprestasi, Tracer Studi) sekarang masing-masing highlight secara independen
+
+Status: ACTIVE
+
+---
+
+## parentPortalActions.js (Server Action Baru)
+- searchStudentByNIS: pencarian fleksibel di kolom nisn dan nis
+- getDashboardData: mengambil seluruh data dashboard dalam satu panggilan (kehadiran, - reward, pelanggaran, penanganan, PJ, kalender, pesan, notifikasi, ranking)
+- sendParentMessage: kirim pesan dari orang tua
+- markNotificationRead: tandai notifikasi sudah dibaca
+
+Status: ACTIVE
+
+---
+
+## Cari Data Siswa (Dashboard Widget)
+- Search bar di Dashboard dengan tombol lingkaran biru
+- Autocomplete realtime (debounce 300ms, minimal 3 huruf)
+- Pencarian berdasarkan: Nama, NISN, Kelas
+- Dropdown via Portal (tidak terpotong parent overflow)
+- Posisi dropdown mengikuti scroll secara realtime
+- Tampilan responsif: full-width di HP, sesuai lebar input di desktop
+- Menampilkan: Avatar inisial, Nama, Kelas, Jurusan, NISN, Status Kehadiran Hari Ini
+- Klik siswa langsung buka halaman detail
+- Tombol "Lihat Semua Hasil" ke halaman pencarian penuh
+- Filter otomatis mengecualikan siswa Pindah/Keluar/Lulus
+
+Status: ACTIVE
+
+---
+
+## Halaman Cari Data Siswa (/cari-data-siswa)
+- Header gradient biru dengan judul dan deskripsi
+- Search box besar dengan tombol lingkaran biru
+- Tag pencarian: Nama, NISN, Kelas
+- Auto-search dari URL parameter (?q=...)
+- Skeleton loading saat mencari
+- Hasil pencarian berupa card modern (grid 3 kolom)
+- Setiap card: Avatar, Nama, NISN, Kelas, Jurusan, Status Kehadiran, Tombol "Lihat Detail"
+- Hover effect: timbul naik + garis gradient biru muncul
+- State kosong: ilustrasi "Mulai Pencarian"
+- State tidak ditemukan: ilustrasi "Siswa Tidak Ditemukan"
+- Halaman tidak menggunakan AppShell (standalone page)
+
+Status: ACTIVE
+
+---
+
+## Halaman Detail Siswa (/cari-data-siswa/[id])
+- Sticky top bar (Kembali + Cetak Profil)
+- Section 1 — Profil Siswa: Gradient biru, avatar inisial, Nama, NISN, Kelas, Jurusan, Status, QR Code profil
+- Stat Cards Kehadiran: 4 kartu gradient (Hadir hijau, Sakit kuning, Izin biru, Alpha merah) dengan icon modern, hover timbul, 2 kolom di HP
+- Section 2 — Status Kehadiran Hari Ini: Badge status dengan icon, metode, jam
+- Section 3 — Statistik Kehadiran: Donut Chart SVG custom, persentase di tengah, legend warna
+- Section 4 — Riwayat Absensi Terakhir: Tabel dengan filter Minggu/Bulan/Semester
+- Section 5 — Reward & Prestasi: Total reward, total poin, timeline prestasi
+- Section 6 — Pelanggaran: Total pelanggaran, total poin, kategori ringan/sedang/berat, timeline
+- Section 7 — Status Penanganan Siswa: Timeline visual BK → SP1 → SP2 → SP3, catatan BK
+- Section 8 — Ringkasan Siswa: 4 skor circular progress (Kehadiran, Disiplin, Prestasi, Keseluruhan), badge status, 2 kolom di HP
+- Export PDF Profil Siswa (window baru, kop, semua data terintegrasi)
+- QR Code per siswa (scan langsung buka halaman profil)
+- Skeleton loading saat memuat data
+- Halaman tidak menggunakan AppShell (standalone page)
+- Tidak menampilkan fitur Portal Orang Tua (chat, WA, kontak guru)
+
+Status: ACTIVE
+
+---
+
+## Cari Data Siswa (Server Action)
+- searchSiswa: Pencarian realtime siswa berdasarkan nama/NISN/kelas via supabaseAdmin
+- getSiswaDetail: Mengambil seluruh data siswa dalam satu panggilan (profil, absensi hari ini, semua absensi, statistik semester, reward, pelanggaran, penanganan)
+- Integrasi tanggal WIB (toLocaleDateString 'sv-SE')
+- Filter absensi semester berdasarkan academic_calendar aktif
+- Match NISN siswa ke tb_reward_siswa.nisn dan tb_pelanggaran_siswa.nisn
+
+Status: ACTIVE
+
+---
+
+## Dashboard Baru (Update — 2026-06-23)
+- Tambah menu Dashboard (atas Umum, hanya login), ganti Tracer Studi → Seputar Sekolah
+- 4 server actions untuk 4 role
+- Dashboard Administrator lengkap dengan 12 stat cards, 3 chart Recharts, top 10 reward/pelanggaran, monitoring per kelas, berita, aktivitas
+- placeholder fungsional
+- placeholder fungsional dengan progress ring
+- +3 fungsi extended: getWaliKelasDashboardFull (top 5 reward/pelanggaran + pesan ortu), getSekretarisDashboardFull (chart 7 hari + izin pending), getOsisDashboardFull (chart 30 hari + prestasi news)
+- Wali Kelas : Full: donut chart kehadiran, siswa belum absen, izin pending, top 5 reward/pelanggaran, penanganan aktif, chat pesan orang tua
+- Sekretaris : Full: progress ring animasi, bar chart 7 hari (H/S/I/A), izin pending, daftar belum absen, 3 quick action buttons
+- Osis : Full: bar chart 30 hari (reward vs pelanggaran), timeline reward/pelanggaran, tab berita/prestasi dengan card modern
+- Fix Total Siswa mentok di angka 1000: Ganti data.length ke { count: 'exact', head: true } di seluruh query count (4 role)
+- Fix NISN muncul di kolom Nama pada Top 10 Reward & Top 10 Pelanggaran: Ambil field nama_siswa dari tabel tb_reward_siswa / tb_pelanggaran_siswa, bukan nisn
+- Fix Line Chart 30 Hari Admin: Ganti Math.random() dengan data real dari query absensi 30 hari terakhir
+- Fix Bar Chart 30 Hari OSIS: Ganti data kosong dengan data real dari query tb_reward_siswa & tb_pelanggaran_siswa 30 hari terakhir
+- Fix Bar Chart 7 Hari Sekretaris: Data real dari query absensi 7 hari terakhir
+- Tambah komponen RankBadge di Top 10 Siswa Berprestasi (posisi 4-10 menggunakan lingkaran berangka, bukan teks #4)
+- Upgrade CountUp ke requestAnimationFrame (presisi tinggi untuk angka besar di atas 1000)
+- Tambah null safety (|| 0, || []) pada seluruh properti data di 4 dashboard
+- Tambah empty state untuk setiap section yang bisa kosong (chart, tabel, list)
 
 Status: ACTIVE

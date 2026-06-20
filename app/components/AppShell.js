@@ -11,7 +11,8 @@ import {
   Settings, ChevronDown, ChevronRight, Users, FileText, UserMinus, 
   MessageCircle, Camera, PlayCircle, Music2, ExternalLink,
   UserCheck, ArrowRightLeft, BarChart2, FileWarning, UserCog, Newspaper, CalendarCheck, Building2, ClipboardCheck,
-  UserCircle, Mail, Phone, BookOpenCheck, ToggleLeft, Save, Edit3
+  UserCircle, Mail, Phone, BookOpenCheck, ToggleLeft, Save, Edit3,
+  LayoutGrid // ✅ PERUBAHAN 1: Tambah import icon Dashboard
 } from 'lucide-react';
 
 export default function AppShell({ children }) {
@@ -29,9 +30,6 @@ export default function AppShell({ children }) {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileToast, setProfileToast] = useState(null);
 
-  // ============================
-  // CEK LOGIN & USER DATA
-  // ============================
   useEffect(() => {
     const checkLogin = () => {
       const loggedIn = localStorage.getItem('isLoggedIn');
@@ -69,11 +67,13 @@ export default function AppShell({ children }) {
     fetchSettings();
   }, []);
 
-  // Sinkronkan active menu + auto-open dropdown
+  // ✅ PERUBAHAN 2: Tambah cek dashboard di active menu
   useEffect(() => {
-    if (pathname === '/') setActiveMenu('beranda');
-    else if (pathname.includes('/absen-mandiri')) setActiveMenu('absen-mandiri');
-    else if (pathname.includes('/osis/entri-reward')) {
+  if (pathname === '/') setActiveMenu('beranda');
+else if (pathname === '/dashboard') setActiveMenu('dashboard');
+    else if (pathname.includes('/absen-mandiri')) {
+      setActiveMenu('absen-mandiri');
+    } else if (pathname.includes('/osis/entri-reward')) {
       setActiveMenu('osis');
       setOpenMenus(prev => ({ ...prev, osis: true }));
     } else if (pathname.includes('/wali-kelas/entri-reward')) {
@@ -97,7 +97,6 @@ export default function AppShell({ children }) {
     } else if (pathname.includes('/tentang')) setActiveMenu('tentang');
   }, [pathname]);
 
-  // Toast auto-hide
   useEffect(() => {
     if (profileToast) {
       const t = setTimeout(() => setProfileToast(null), 3000);
@@ -116,18 +115,12 @@ export default function AppShell({ children }) {
   const toggleMenu = (menu) => setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
   const closeSidebarMobile = () => setSidebarOpen(false);
 
-  // ============================
-  // ROLE LOGIC
-  // ============================
   const userRole = userData?.role || '';
   const isAdmin = userRole === 'Administrator';
   const isWaliKelas = userRole === 'Wali Kelas';
   const isSekretaris = userRole === 'Sekretaris Kelas';
   const isOsis = userRole === 'OSIS';
 
-  // ============================
-  // FIX: Label peran + kelas lengkap
-  // ============================
   const getRoleLabel = () => {
     if (!userData) return '';
     const kelas = userData.kelas || '';
@@ -138,9 +131,6 @@ export default function AppShell({ children }) {
     return userRole;
   };
 
-  // ============================
-  // PROFIL MODAL HANDLERS
-  // ============================
   const openProfileModal = () => {
     if (userData) {
       setProfileForm({
@@ -170,20 +160,16 @@ export default function AppShell({ children }) {
         setProfileSaving(false);
         return;
       }
-
       const result = await updateProfileData(userData.id, {
         nama: profileForm.nama,
         email: profileForm.email,
         whatsapp: profileForm.whatsapp,
       });
-
       if (result.error) {
         setProfileToast({ type: 'error', message: result.error });
         setProfileSaving(false);
         return;
       }
-
-      // Update localStorage
       const updatedUserData = {
         ...userData,
         nama: profileForm.nama,
@@ -201,15 +187,15 @@ export default function AppShell({ children }) {
     setProfileSaving(false);
   };
 
-  // ============================
-  // NAV COMPONENTS
-  // ============================
-  const NavLink = ({ icon: Icon, title, href="/", menuId }) => (
-    <Link href={href} onClick={() => { setActiveMenu(menuId); closeSidebarMobile(); }} className={`flex items-center gap-3 py-3 pl-6 pr-3 rounded-lg mx-2 text-slate-300 transition-colors duration-150 whitespace-nowrap ${activeMenu === menuId ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md active:scale-95 active:bg-slate-600'}`}>
+  const NavLink = ({ icon: Icon, title, href = "/", menuId }) => {
+    const id = menuId || href;
+    return (
+    <Link href={href} onClick={() => { setActiveMenu(id); closeSidebarMobile(); }} className={`flex items-center gap-3 py-3 pl-6 pr-3 rounded-lg mx-2 text-slate-300 transition-colors duration-150 whitespace-nowrap ${activeMenu === id ? 'bg-blue-600 shadow-lg text-white' : 'hover:bg-slate-700 hover:shadow-md active:scale-95 active:bg-slate-600'}`}>
       <div className="flex-shrink-0 w-5 inline-flex justify-center"><Icon size={20} /></div>
       <span className="inline-block md:hidden md:group-hover:inline-block">{title}</span>
     </Link>
-  );
+    );
+  };
 
   const DropdownMenu = ({ title, icon: Icon, menuKey, children, menuId }) => (
     <div className="mx-2">
@@ -265,12 +251,9 @@ export default function AppShell({ children }) {
           <button className="md:hidden text-slate-400" onClick={closeSidebarMobile}><X size={24}/></button>
         </div>
 
-        {/* ============================ */}
-        {/* PROFIL PENGGUNA              */}
-        {/* ============================ */}
+        {/* PROFIL PENGGUNA */}
         {isLoggedIn && userData && (
           <div className="flex-shrink-0 border-b border-slate-700 p-4">
-            {/* Info Profil */}
             <div className="flex items-center gap-3 mb-3">
               <div className="relative flex-shrink-0">
                 {userData.foto_url ? (
@@ -287,7 +270,6 @@ export default function AppShell({ children }) {
                 <p className="text-[11px] text-slate-400 truncate">{getRoleLabel()}</p>
               </div>
             </div>
-            {/* Tombol Profil Saya (kiri) & Logout (kanan) */}
             <div className="flex gap-2 inline-block md:hidden md:group-hover:inline-block">
               <button onClick={openProfileModal}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 text-xs font-semibold transition">
@@ -301,21 +283,28 @@ export default function AppShell({ children }) {
           </div>
         )}
 
-        {/* ============================ */}
-        {/* NAVIGASI BERDASARKAN ROLE    */}
-        {/* ============================ */}
+        {/* NAVIGASI BERDASARKAN ROLE */}
         <nav className="flex-1 overflow-y-auto py-4 space-y-1 text-sm scrollbar-thin scrollbar-thumb-slate-700">
 
+          {/* ✅ PERUBAHAN 3: Menu Dashboard (hanya saat login, di atas Umum) */}
+          {isLoggedIn && (
+            <>
+              <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-2 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">DASHBOARD</p>
+              <NavLink icon={LayoutGrid} title="Dashboard" href="/dashboard" menuId="dashboard" />
+            </>
+          )}
+
           {/* MENU UMUM */}
-          <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-2 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU UMUM</p>
-          <NavLink icon={Users} title="Portal Orang Tua" menuId="portal" />
-          <NavLink icon={Award} title="Siswa Berprestasi" menuId="prestasi" />
-          <NavLink icon={GraduationCap} title="Tracer Studi Lulusan" menuId="tracer" />
+          <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU UMUM</p>
+          <NavLink icon={Users} title="Portal Orang Tua" href="/portal-ortu" />
+          <NavLink icon={Award} title="Siswa Berprestasi" href="/siswa-berprestasi" />
+          {/* ✅ PERUBAHAN 4: Tracer Studi → Seputar Sekolah */}
+          <NavLink icon={Newspaper} title="Seputar Sekolah" href="/berita-sekolah" />
 
           {/* MENU SISWA */}
           <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU SISWA</p>
           <NavLink icon={HeartPulse} title="Absen Sakit & Izin" href="/absen-sakit-izin" menuId="sakit" />
-          <NavLink icon={Search} title="Cari Data Siswa" menuId="cari" />
+          <NavLink icon={Search} title="Cari Data Siswa" href="/cari-data-siswa" menuId="cari" />
           <NavLink icon={UserCheck} title="Absen Hadir Mandiri" href="/absen-mandiri" menuId="absen-mandiri" />
 
           {/* MENU SEKRETARIS */}
@@ -331,9 +320,9 @@ export default function AppShell({ children }) {
             <>
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU OSIS</p>
               <DropdownMenu title="Piket OSIS" icon={CalendarDays} menuKey="osis" menuId="osis">
-  <SubLink icon={Award} title="Entri Reward" href="/osis/entri-reward" />
-  <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/osis/entri-pelanggaran" />
-</DropdownMenu>
+                <SubLink icon={Award} title="Entri Reward" href="/osis/entri-reward" />
+                <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/osis/entri-pelanggaran" />
+              </DropdownMenu>
             </>
           )}
 
@@ -342,12 +331,12 @@ export default function AppShell({ children }) {
             <>
               <p className="px-6 text-[10px] text-slate-500 font-bold mb-2 mt-4 whitespace-nowrap inline-block md:hidden md:group-hover:inline-block">MENU WALI KELAS</p>
               <DropdownMenu title="Wali Kelas" icon={User} menuKey="wali" menuId="wali">
-  <SubLink icon={Award} title="Entri Reward" href="/wali-kelas/entri-reward" />
-  <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/wali-kelas/entri-pelanggaran" />
-  <SubLink icon={FileWarning} title="Rekap Pelanggaran" href="/wali-kelas/rekap-pelanggaran" />
-  <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
-  <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
-</DropdownMenu>
+                <SubLink icon={Award} title="Entri Reward" href="/wali-kelas/entri-reward" />
+                <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/wali-kelas/entri-pelanggaran" />
+                <SubLink icon={FileWarning} title="Rekap Pelanggaran" href="/wali-kelas/rekap-pelanggaran" />
+                <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
+                <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
+              </DropdownMenu>
             </>
           )}
 
@@ -402,7 +391,8 @@ export default function AppShell({ children }) {
               </button>
             ) : (
               <Link href="/login" className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                <LogIn size={16}/> <span className="hidden md:inline-block">Login</span></Link>
+                <LogIn size={16}/> <span className="hidden md:inline-block">Login</span>
+              </Link>
             )}
           </div>
         </header>
@@ -422,14 +412,10 @@ export default function AppShell({ children }) {
         )}
       </div>
 
-      {/* ============================ */}
-      {/* MODAL PROFIL SAYA            */}
-      {/* ============================ */}
+      {/* MODAL PROFIL SAYA */}
       {showProfileModal && userData && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[999] flex items-center justify-center p-4" onClick={() => { setShowProfileModal(false); setProfileEditMode(false); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-scaleIn overflow-hidden" onClick={e => e.stopPropagation()}>
-            
-            {/* Header Biru */}
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 pt-6 pb-12 relative">
               <button onClick={() => { setShowProfileModal(false); setProfileEditMode(false); }}
                 className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition">
@@ -448,37 +434,24 @@ export default function AppShell({ children }) {
                 </div>
               </div>
             </div>
-
-            {/* Info Detail */}
             <div className="pt-12 pb-4 px-5">
-              {/* Toast */}
               {profileToast && (
                 <div className={`mb-3 px-3 py-2 rounded-lg text-xs font-semibold text-center ${profileToast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                   {profileToast.message}
                 </div>
               )}
-
               <div className="text-center mb-4">
                 <h2 className="text-base font-bold text-gray-800 leading-tight">{userData.nama || 'User'}</h2>
                 <p className="text-xs text-blue-600 font-semibold mt-0.5">{getRoleLabel()}</p>
               </div>
-
               <div className="space-y-2">
-                {/* Username */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><User size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">Username</p>
-                    {profileEditMode ? (
-                      <input name="username" value={profileForm.username} onChange={handleProfileInputChange} readOnly
-                        className="w-full text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 outline-none" />
-                    ) : (
-                      <p className="text-xs text-gray-800 font-medium truncate">{userData.username || '-'}</p>
-                    )}
+                    <p className="text-xs text-gray-800 font-medium truncate">{userData.username || '-'}</p>
                   </div>
                 </div>
-
-                {/* Email */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><Mail size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
@@ -491,8 +464,6 @@ export default function AppShell({ children }) {
                     )}
                   </div>
                 </div>
-
-                {/* WhatsApp */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><Phone size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
@@ -505,8 +476,6 @@ export default function AppShell({ children }) {
                     )}
                   </div>
                 </div>
-
-                {/* Kelas */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><BookOpenCheck size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
@@ -514,8 +483,6 @@ export default function AppShell({ children }) {
                     <p className="text-xs text-gray-800 font-medium truncate">{userData.kelas || '-'}</p>
                   </div>
                 </div>
-
-                {/* Jurusan */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><GraduationCap size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
@@ -523,26 +490,19 @@ export default function AppShell({ children }) {
                     <p className="text-xs text-gray-800 font-medium truncate">{userData.jurusan || '-'}</p>
                   </div>
                 </div>
-
-                {/* Status */}
                 <div className="flex items-center gap-2.5 py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="w-7 h-7 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0"><ToggleLeft size={13} className="text-blue-600"/></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">Status</p>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${userData.status === 'Aktif' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${userData.status === 'Aktif' ? 'bg-green-500' : 'bg-red-500'}`}/>
-                      {userData.status || 'Aktif'}
+                      <span className={`w-1.5 h-1.5 rounded-full ${userData.status === 'Aktif' ? 'bg-green-500' : 'bg-red-500'}`}/>{userData.status || 'Aktif'}
                     </span>
                   </div>
                 </div>
               </div>
-
-              {/* Tombol Aksi */}
               <div className="flex gap-2 mt-4">
                 <button onClick={() => { setShowProfileModal(false); setProfileEditMode(false); }}
-                  className="flex-1 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  Tutup
-                </button>
+                  className="flex-1 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">Tutup</button>
                 {!profileEditMode ? (
                   <button onClick={() => setProfileEditMode(true)}
                     className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-1 shadow-lg shadow-blue-500/25">

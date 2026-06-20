@@ -20,7 +20,7 @@
 ## siswa
 
 * id (int8)
-* nis (text)
+* nisn (text)
 * nama (varchar)
 * kelas (varchar)
 * jurusan (varchar)
@@ -93,11 +93,6 @@ absensi
 * catatan_wali_kelas (text)
 * created_at (timestamptz)
 * updated_at (timestamptz)
-
-## Supabase Storage Buckets
-
-* logos (public) -- Untuk logo jurusan
-* bukti-sakit-izin (public) -- Untuk foto bukti sakit/izin siswa
 
 ## Catatan Penggunaan Nilai (Value Constraints)
 * absensi
@@ -247,7 +242,8 @@ testimoni (TEXT)
 * logos (public) -- Untuk logo jurusan
 * bukti-sakit-izin (public) -- Untuk foto bukti sakit/izin siswa
 * dokumen-penanganan (public) -- Untuk dokumen pendukung SP/Pindah/Keluar
-* bukti-formulir (public) -- Untuk upload bukti formulir (foto aktivitas, bukti SNBP/SNBT) <------- BARU
+* bukti-formulir (public) -- Untuk upload bukti formulir (foto aktivitas, bukti SNBP/SNBT)
+* news-media (public) -- Untuk upload cover/foto berita (prestasi & sekolah)
 
 ## effective_days
 
@@ -282,3 +278,59 @@ testimoni (TEXT)
 * activity (text)
 * detail (jsonb)
 * created_at (timestamptz)
+
+## news_posts
+
+* id (int8)
+* title (text)
+* slug (text) -- Unique
+* excerpt (text)
+* content (text)
+* cover_url (text)
+* category (varchar) -- Nilai: 'Siswa Berprestasi', 'Berita Sekolah'
+* status (varchar) -- Nilai: 'Draft', 'Publish'
+* featured (boolean)
+* views (int4)
+* author_id (int8)
+* published_at (timestamptz)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+
+## Format URL cover_url di news_posts
+
+* Nilai bisa berupa: URL lengkap (https://xxx.supabase.co/...), path relatif (/storage/v1/object/public/...), atau null (belum ada cover)
+* Komponen frontend menggunakan fungsi getImageUrl() untuk menangani semua format URL tersebut secara otomatis
+
+## parent_messages
+
+* id (uuid, primary key, default: gen_random_uuid())
+* student_id (bigint, references siswa(id) on delete cascade)
+* sender_type (varchar(20)) -- Nilai: 'Orang Tua', 'Wali Kelas'
+* sender_id (bigint)
+* message (text)
+* is_read (boolean, default: false)
+* created_at (timestamptz, default: now())
+
+## parent_notifications
+
+* id (uuid, primary key, default: gen_random_uuid())
+* student_id (bigint, references siswa(id) on delete cascade)
+* title (text)
+* message (text)
+* type (varchar(50))
+* is_read (boolean, default: false)
+* created_at (timestamptz, default: now())
+* Catatan Tambahan
+
+## Format URL cover_url di news_posts
+
+* Nilai bisa berupa: URL lengkap (https://xxx.supabase.co/...), path relatif (/storage/v1/object/public/...), atau null (belum ada cover)
+* Komponen frontend menggunakan fungsi getImageUrl() untuk menangani semua format URL tersebut secara otomatis
+
+## RLS Policy Tambahan
+
+* parent_messages: "Admin full access messages" — FOR ALL USING (true)
+* parent_notifications: "Admin full access notifications" — FOR ALL USING (true)
+Index Tambahan
+* idx_parent_messages_student ON parent_messages(student_id)
+* idx_parent_notifications_student ON parent_notifications(student_id)

@@ -161,8 +161,6 @@
 - Revamp Kalkulasi Reward (Hitung langsung dari tb_reward_siswa, tidak bergantung pada kolom siswa)
 - Aktifkan 3 Grafik di Rekap Reward (Bar Chart Per Kelas, Donut Chart Per Jurusan, Line Chart Perkembangan Bulanan)
 - Tambah kolom NISN di Tabel Rekap Data Siswa Berpoint & Modal Detail Reward
-- Perbaikan bug Entri Reward (Pencarian siswa tidak muncul setelah 3 huruf karena mismatch kolom nis/nisn)
-- Standardisasi kolom database (Merubah pemanggilan nis menjadi nisn di seluruh Server Actions & Frontend sesuai schema Supabase terbaru)
 - Penyesuaian tampilan Rekap Kehadiran (NISN hanya muncul di tab Harian)
 - Tambah kolom Nomor Urut di tab Bulanan Rekap Kehadiran
 - Hapus fungsi duplikat Reward di rekapActions.js (Sudah terakomodasi di rewardActions.js)
@@ -212,3 +210,117 @@
 - Tab Semester/Tahunan: Tambah kolom Hari Efektif
 - Perhitungan Persentase Kehadiran menggunakan Hari Efektif
 - Sesuaikan Export Excel (Data Bulanan) & PDF (Data Semester) dengan Hari Efektif
+
+## 2026-06-19
+
+- Aktifkan halaman Pos Berita (/setting/pos-berita)
+- Buat tabel baru di Supabase: news_posts
+- Buat Storage bucket baru: news-media (public)
+- Tambah server action newsActions.js (CRUD, Stats, Upload Cover, View Counter)
+- Fitur upload cover berita dengan kompresi gambar otomatis (Canvas API)
+- Tambah tombol Hapus Semua Berita di halaman Pos Berita
+- Fix referrer policy (referrerPolicy="no-referrer") pada tag img agar gambar Supabase muncul
+- Update komponen SiswaBerprestasiBerita.js: Data mockup diganti dengan data dinamis dari database
+- Aktifkan halaman publik Siswa Berprestasi (/siswa-berprestasi)
+- Aktifkan halaman publik Berita Sekolah (/berita-sekolah)
+- Aktifkan halaman Detail Berita (/berita/[slug]) dengan View Counter & Berita Terkait
+- Integrasi tombol Akses Cepat Informasi (Seputar Sekolah) ke /berita-sekolah
+- Integrasi menu Sidebar (Siswa Berprestasi) ke /siswa-berprestasi
+
+## 2026-06-20
+
+- Perbaikan gambar berita tidak muncul di semua halaman (Dashboard, Pos Berita, Siswa Berprestasi, Berita Sekolah, Detail Berita, Semua Berita)
+- Tambah fungsi getImageUrl() di seluruh komponen berita untuk menangani format URL cover yang berbeda-beda
+- Tambah referrerPolicy="no-referrer" pada setiap tagberita
+- Tambah fallback SVG rapi saat cover_url null atau gambar gagal load (sebelumnya hitam pekat)
+- Tambah konfigurasi images.remotePatterns di next.config.ts untuk domain *.supabase.co
+- Fix layout ganda: Hapus AppShell wrapper dari halaman Pos Berita, Siswa Berprestasi, - Berita Sekolah, Semua Berita, dan Detail Berita
+- Fix tombol "Lihat Berita" di Akses Cepat Informasi tidak berfungsi (gunakan useRouter().push)
+- Buat halaman baru Semua Berita (/semua-berita) gabungan Siswa Berprestasi & Berita Sekolah dengan tab filter & pencarian
+- Ubah tombol "LIHAT SEMUA BERITA" di Dashboard mengarah ke /semua-berita
+- Fix Featured News tidak tampil di utama: Tambah order('featured', ascending: false) di getPublishedNews
+- Tingkatkan kualitas kompresi gambar cover: 800px/80% → 1400px/92%
+- Tambah kartu Pemetaan Karir di Akses Cepat Informasi (total 4 kartu)
+- Pindah posisi Akses Cepat Informasi ke atas Siswa Berprestasi & Berita di Dashboard
+- Tambah animasi hover pada kartu Akses Cepat: timbul naik, bayangan membesar, lingkaran dekoratif scale
+- Tambah animasi ikon naik turun (bounce-slow) dengan delay berbeda tiap kartu
+- Ubah grid Akses Cepat Informasi: 4 kolom desktop, 2 kolom HP
+- Perbaikan import: Ganti createClient menjadi supabase sesuai ekspor di lib/supabase.js
+
+## 2026-06-21
+
+- Aktifkan halaman Portal Orang Tua (/portal-ortu) sebagai Parent Monitoring Center
+- Buat Hero Section (profil siswa, NISN, kelas, jurusan, status hadir hari ini)
+- Buat 6 Summary Card (kehadiran %, total reward, pelanggaran, status hari ini, ranking, pesan WK)
+- Buat Section Profil Akademik & Siswa (integrasi tabel siswa + users untuk Wali Kelas & Sekretaris)
+- Buat Section Kehadiran Bulan Ini dengan Donut Chart SVG custom + statistik + timeline
+- Buat Section Status Kehadiran Hari Ini (card besar dengan detail metode absensi)
+- Buat Section Kalender Akademik Interaktif (navigasi bulan, 5 warna highlight)
+- Buat Section Pesan Wali Kelas (layout chat modern)
+- Buat Section Kedisiplinan & Prestasi (2 panel: reward + pelanggaran + grafik bar bulanan)
+- Buat Section Catatan Surat Peringatan (SP1/SP2/SP3, integrasi tb_penanganan_siswa)
+- Buat Section Ringkasan Perkembangan (Radar Chart 5 dimensi)
+- Buat Section Riwayat Aktivitas Terbaru (timeline gabungan)
+- Buat Notification Center (dropdown dengan badge unread)
+- Buat Export PDF Laporan Bulanan (window baru, kop, tabel kehadiran/reward/pelanggaran)
+- Buat 2 tabel baru di Supabase: parent_messages, parent_notifications + RLS + Index
+- Buat server action parentPortalActions.js (search, dashboard, messages, notifications)
+- Fix matching Wali Kelas & Sekretaris: logika fleksibel (exact, tingkat, substring)
+- Fix kelas/jurusan kosong: kirim langsung dari frontend, bukan query ulang di server
+- Fix date filter bulanan: ganti lt('tanggal', 'YYYY-MM-32') ke lte dengan last day yang dihitung benar
+- 2026-06-20
+- Perbaikan gambar berita tidak muncul di semua halaman (Dashboard, Pos Berita, Siswa Berprestasi, Berita Sekolah, Detail Berita, Semua Berita)
+- Tambah fungsi getImageUrl() di seluruh komponen berita untuk menangani format URL cover yang berbeda-beda
+- Tambah referrerPolicy="no-referrer" pada setiap tagberita
+- Tambah fallback SVG rapi saat cover_url null atau gambar gagal load
+- Tambah konfigurasi images.remotePatterns di next.config.ts untuk domain *.supabase.co
+- Fix layout ganda: Hapus AppShell wrapper dari halaman Pos Berita, Siswa Berprestasi, - Berita Sekolah, Semua Berita, dan Detail Berita
+- Fix tombol "Lihat Berita" di Akses Cepat Informasi tidak berfungsi (gunakan useRouter().push)
+- Buat halaman Semua Berita (/semua-berita) gabungan Siswa Berprestasi & Berita Sekolah dengan tab filter & pencarian
+- Ubah tombol "LIHAT SEMUA BERITA" di Dashboard mengarah ke /semua-berita
+- Fix Featured News tidak tampil di utama: Tambah order('featured', ascending: false) - di getPublishedNews
+- Tingkatkan kualitas kompresi gambar cover: 800px/80% → 1400px/92%
+- Tambah kartu Pemetaan Karir di Akses Cepat Informasi (total 4 kartu)
+- Pindah posisi Akses Cepat Informasi ke atas Siswa Berprestasi & Berita di Dashboard
+- Tambah animasi hover pada kartu Akses Cepat: timbul naik, bayangan membesar, lingkaran dekoratif scale
+- Tambah animasi ikon naik turun (bounce-slow) dengan delay berbeda tiap kartu
+- Ubah grid Akses Cepat Informasi: 4 kolom desktop, 2 kolom HP
+- Perbaikan import: Ganti createClient menjadi supabase sesuai ekspor di lib/supabase.js
+- Fix Sidebar NavLink active state: gunakan href sebagai fallback identifier untuk menu tanpa menuId
+
+## 2026-06-22
+
+- Aktifkan menu Cari Data Siswa (Sidebar + Kolom Pencarian Dashboard)
+- Buat halaman Cari Data Siswa (/cari-data-siswa) dengan autocomplete realtime
+- Buat halaman Detail Siswa (/cari-data-siswa/[id]) dengan 8 section terintegrasi
+- Buat komponen CariDataSiswaWidget di Dashboard (search bar + dropdown via Portal)
+- Buat server action cariSiswaActions.js (searchSiswa + getSiswaDetail)
+- Dropdown pencarian menggunakan createPortal ke document.body agar tidak terpotong
+- Posisi dropdown mengikuti scroll secara realtime (scroll listener)
+- Tampilan dropdown responsif: full-width di HP, sesuai lebar input di desktop
+- Stat Cards Kehadiran: 4 kartu gradient modern (Hadir/Sakit/Izin/Alpha) dengan icon SVG, hover timbul, 2 kolom HP
+- Donut Chart SVG custom untuk Statistik Kehadiran
+- Timeline visual Penanganan Siswa (BK → SP1 → SP2 → SP3)
+- Ringkasan Siswa: 4 skor circular progress (2 kolom HP)
+- Export PDF Profil Siswa (data lengkap: profil, kehadiran, reward, pelanggaran, ringkasan)
+- QR Code per siswa via dynamic import qrcode
+- Standardisasi kolom nisn di seluruh file Cari Data Siswa
+- Tambah menu Dashboard (atas Umum, hanya login)
+- Ganti Tracer Studi → Seputar Sekolah
+
+## 2026-06-23
+
+- Fix Total Siswa di kartu statistik Dashboard mentok di angka 1000 (ganti data.length ke count: 'exact')
+- Fix NISN muncul di kolom Nama pada tabel Top 10 Siswa Berprestasi (Admin Dashboard)
+- Fix NISN muncul di kolom Nama pada tabel Top 10 Pelanggaran Tertinggi (Admin Dashboard)
+- Fix NISN muncul di kolom Nama pada Top 5 Reward & Pelanggaran (Wali Kelas Dashboard)
+- Perbaiki icon peringkat Top 10 Siswa Berprestasi (posisi 4-10 pakai lingkaran berangka, bukan teks #4)
+- Ganti Line Chart 30 Hari Admin dari data random ke data real dari database
+- Ganti Bar Chart 30 Hari OSIS dari data kosong ke data real dari database
+- Upgrade komponen CountUp ke requestAnimationFrame (presisi tinggi untuk angka besar)
+- Tambah null safety pada seluruh properti data di 4 dashboard (Admin, Wali Kelas, Sekretaris, OSIS)
+- Tambah empty state untuk setiap section yang bisa kosong (chart, tabel, list)
+- Fix layout Dashboard Wali Kelas, Sekretaris, OSIS yang mepet ke tepi (tambah padding & max-width konsisten dengan Admin)
+- Fix error Tooltip is not defined di Wali Kelas Dashboard (Tambah Tooltip ke import recharts)
+- Tambah jam dan tanggal realtime di header Dashboard Wali Kelas, Sekretaris, dan OSIS
+- Lengkapi kode OsisDashboard.js yang sebelumnya terpotong (Bar Chart 30 Hari, Timeline Reward/Pelanggaran, Tab Berita/Prestasi)
