@@ -334,3 +334,32 @@ testimoni (TEXT)
 Index Tambahan
 * idx_parent_messages_student ON parent_messages(student_id)
 * idx_parent_notifications_student ON parent_notifications(student_id)
+
+## Notifications
+
+* id (uuid)
+* user_id (int8)
+* title (text)
+* message (text)
+* type (text)
+* priority (text)
+* reference_type (text)
+* reference_id (text)
+* action_url (text)
+* is_read (bool)
+* created_at (timestamptz)
+
+## qr_settings
+
+* id (int8)
+* setting_key (varchar) -- Nilai: 'gps_latitude', 'gps_longitude', 'gps_radius', 'jam_masuk', 'jam_terlambat', 'jam_tutup'
+* setting_value (text)
+* created_at (timestamptz)
+* updated_at (timestamptz)
+* UNIQUE(setting_key)
+
+## Catatan Penggunaan Nilai (Value Constraints)
+
+* qr_settings
+* setting_key: Menerima nilai 'gps_latitude', 'gps_longitude', 'gps_radius', 'jam_masuk', 'jam_terlambat', 'jam_tutup'
+* setting_value: Bisa berupa angka (koordinat, radius) atau format waktu (HH:MM), atau null (belum diatur)

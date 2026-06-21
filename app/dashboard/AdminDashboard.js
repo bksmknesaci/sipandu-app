@@ -6,6 +6,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
+import DashboardNotifications from '@/app/components/DashboardNotifications';
 
 // ─── Warna ──────────────────────────────────────────────────────
 const COLORS = { hadir: '#16A34A', sakit: '#F59E0B', izin: '#1E40AF', alpha: '#DC2626' };
@@ -62,6 +63,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState('');
   const [dateStr, setDateStr] = useState('');
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) setUserData(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     function tick() {
@@ -251,6 +260,9 @@ export default function AdminDashboard() {
           ) : <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">Belum ada data</div>}
         </div>
       </div>
+
+      {/* ── Notifikasi Terbaru ── */}
+      <DashboardNotifications userId={userData?.id} />
 
       {/* ── Top 10 Siswa Berprestasi ── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-6">

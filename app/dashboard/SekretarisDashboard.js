@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
+import DashboardNotifications from '@/app/components/DashboardNotifications';
 
 function CountUp({ target, duration = 1000 }) {
   const [val, setVal] = useState(0);
@@ -34,6 +35,14 @@ export default function SekretarisDashboard({ kelas }) {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState('');
   const [dateStr, setDateStr] = useState('');
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) setUserData(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     function tick() {
@@ -167,6 +176,9 @@ export default function SekretarisDashboard({ kelas }) {
           </ResponsiveContainer>
         ) : <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">Data 7 hari belum tersedia</div>}
       </div>
+
+      {/* ── Notifikasi Terbaru ── */}
+      <DashboardNotifications userId={userData?.id} />
 
       {/* Siswa Belum Absen */}
       {(data.belumAbsenList || []).length > 0 && (

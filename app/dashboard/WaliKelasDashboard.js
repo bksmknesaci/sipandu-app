@@ -5,6 +5,7 @@ import { getWaliKelasDashboardFull } from '@/app/actions/dashboardActions';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
 } from 'recharts';
+import DashboardNotifications from '@/app/components/DashboardNotifications';
 
 const COLORS = { hadir: '#16A34A', sakit: '#F59E0B', izin: '#1E40AF', alpha: '#DC2626' };
 
@@ -41,6 +42,14 @@ export default function WaliKelasDashboard({ kelas }) {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState('');
   const [dateStr, setDateStr] = useState('');
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) setUserData(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     function tick() {
@@ -249,6 +258,9 @@ export default function WaliKelasDashboard({ kelas }) {
           ) : <p className="text-gray-400 text-sm text-center py-6">Belum ada data pelanggaran</p>}
         </div>
       </div>
+
+      {/* ── Notifikasi Terbaru ── */}
+      <DashboardNotifications userId={userData?.id} />
 
       {/* Pesan Orang Tua */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

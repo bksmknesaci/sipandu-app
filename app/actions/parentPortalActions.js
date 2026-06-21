@@ -1,5 +1,6 @@
 'use server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getWaliKelasUserId, createNotification } from '@/app/actions/notificationActions';
 
 export async function searchStudentByNIS(nis) {
   const nisClean = nis.trim()
@@ -233,6 +234,32 @@ export async function sendParentMessage(studentId, message) {
     student_id: studentId, sender_type: 'Orang Tua', message
   })
   if (error) return { error: error.message }
+
+  // ── Kirim notifikasi ke Wali Kelas ──
+  try {
+    const { data: studentInfo } = await supabaseAdmin
+      .from('siswa')
+      .select('nama, kelas, jurusan')
+      .eq('id', studentId)
+      .single();
+
+    if (studentInfo) {
+      const waliId = await getWaliKelasUserId(studentInfo.kelas, studentInfo.jurusan);
+      if (waliId) {
+        await createNotification({
+          userId: waliId,
+          title: '💬 Pesan Baru dari Orang Tua',
+          message: `Orang tua ${studentInfo.nama || 'Siswa'} mengirim pesan.`,
+          type: 'parent_message',
+          priority: 'WARNING',
+          referenceType: 'parent_message',
+          referenceId: studentId,
+          actionUrl: `/portal-ortu`,
+        });
+      }
+    }
+  } catch (notifErr) { console.error('Gagal kirim notifikasi WK:', notifErr); }
+
   return { success: true }
 }
 

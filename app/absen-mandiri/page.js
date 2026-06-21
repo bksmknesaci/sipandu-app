@@ -1,22 +1,51 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X } from 'lucide-react'
+import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle } from 'lucide-react'
 import { getSiswaByNISN, submitAbsenMandiri } from '@/app/actions/absensiActions'
 
 export default function AbsenHadirMandiri() {
+  const [user, setUser] = useState(null)
   const [nisnInput, setNisnInput] = useState('')
   const [siswa, setSiswa] = useState(null)
   const [loading, setLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [toast, setToast] = useState(null)
-  
+
+  // Waktu
+  const [currentTime, setCurrentTime] = useState(new Date())
+  const [isWithinTime, setIsWithinTime] = useState(false)
+  const [timeMessage, setTimeMessage] = useState('')
+  const [countdown, setCountdown] = useState('')
+
+  // Kamera
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [scannedResult, setScannedResult] = useState('')
   const html5QrCodeRef = useRef(null)
 
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const todayStr = new Date().toLocaleDateString('sv-SE')
+  const isAdmin = user?.role === 'Administrator'
+
+  useEffect(() => {
+    const stored = localStorage.getItem('userData')
+    if (stored) setUser(JSON.parse(stored))
+  }, [])
+
+  // FIX: Batasan waktu 06:00 - 09:04 WIB (sama seperti Absen Sakit & Izin)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date()
+      setCurrentTime(now)
+      if (isAdmin) { setIsWithinTime(true); setTimeMessage('Mode Admin (Bebas Waktu)'); return }
+      const wibTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }))
+      const hours = wibTime.getHours(); const minutes = wibTime.getMinutes(); const totalMinutes = hours * 60 + minutes
+      if (totalMinutes >= 360 && totalMinutes <= 544) { setIsWithinTime(true); setTimeMessage('Absensi Dibuka') }
+      else if (totalMinutes < 360) { setIsWithinTime(false); setTimeMessage('Belum Dibuka'); const diff = (360 - totalMinutes) * 60 * 1000; const hrs = Math.floor(diff / 3600000); const mins = Math.floor((diff % 3600000) / 60000); const secs = Math.floor((diff % 60000) / 1000); setCountdown(`${hrs}j ${mins}m ${secs}d`) }
+      else { setIsWithinTime(false); setTimeMessage('Sudah Ditutup'); setCountdown('') }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [isAdmin])
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t) }
@@ -77,19 +106,15 @@ export default function AbsenHadirMandiri() {
     const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
     let kelasFromQR = ""
     
-    // PERBAIKAN: Parse format JSON dari QR Absensi SIPANDU
     try {
       const qrData = JSON.parse(qrText)
       if (qrData.kelas_id) {
-        // Ganti strip dengan spasi (X-TKRO-1 menjadi X TKRO 1)
         kelasFromQR = qrData.kelas_id.replace(/-/g, ' ')
       }
     } catch (e) {
-      // Jika bukan format JSON, gunakan teks aslinya
       kelasFromQR = qrText
     }
     
-    // Cek kecocokan kelas
     if (kelasFromQR !== fullKelasSiswa) {
       setToast({ type: 'error', message: `Gagal! QR ini untuk kelas ${kelasFromQR}, sedangkan Anda siswa kelas ${fullKelasSiswa}.` })
       return
@@ -115,12 +140,28 @@ export default function AbsenHadirMandiri() {
       )}
 
       <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-2xl text-white shadow-xl">
-        <h1 className="text-2xl font-extrabold flex items-center gap-2"><UserCheck size={28}/> ABSEN HADIR MANDIRI</h1>
-        <p className="text-emerald-100 mt-1 text-sm">{today}</p>
-        <p className="text-emerald-100 mt-2 text-sm">Masukkan NISN, lalu scan QR Code yang tertempel di meja kelas Anda menggunakan kamera.</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-extrabold flex items-center gap-2"><UserCheck size={28}/> ABSEN HADIR MANDIRI</h1>
+            <p className="text-emerald-100 mt-1 text-sm">{today}</p>
+            <p className="text-emerald-100 mt-2 text-sm">Masukkan NISN, lalu scan QR Code yang tertempel di meja kelas Anda.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold"><Clock size={14}/> {currentTime.toLocaleTimeString('id-ID')}</div>
+        </div>
+        <div className="mt-4 flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl">
+          {isWithinTime ? <span className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></span> : <span className="w-3 h-3 rounded-full bg-red-400"></span>}
+          <span className="font-semibold text-sm">{timeMessage} {countdown && `(${countdown})`}</span>
+        </div>
       </div>
 
-      {isSubmitted ? (
+      {/* FIX: Tampilan waktu ditutup / belum dibuka */}
+      {!isWithinTime && !isAdmin ? (
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
+          <AlertTriangle size={48} className="mx-auto text-amber-500 mb-3"/>
+          <h2 className="text-xl font-bold text-gray-800">{timeMessage === 'Belum Dibuka' ? '⏳ Absensi Belum Dibuka' : '❌ Waktu Absensi Telah Berakhir'}</h2>
+          <p className="text-gray-500 mt-2">Absen Hadir Mandiri hanya dapat dilakukan pukul 06:00 WIB s.d. 09:04 WIB.</p>
+        </div>
+      ) : isSubmitted ? (
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
           <ShieldCheck size={64} className="mx-auto text-emerald-500 mb-4"/>
           <h2 className="text-2xl font-bold text-gray-800">Absensi Berhasil!</h2>
@@ -133,9 +174,10 @@ export default function AbsenHadirMandiri() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
           <div>
             <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Search size={18}/> Langkah 1: Cari Data Siswa</h3>
-            <form onSubmit={handleVerifyNISN} className="flex gap-3">
-              <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN Anda..." className="flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              <button type="submit" disabled={!nisnInput || loading} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
+            {/* FIX: flex-col di HP, flex-row di SM ke atas */}
+            <form onSubmit={handleVerifyNISN} className="flex flex-col sm:flex-row gap-3">
+              <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN Anda..." className="w-full sm:flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              <button type="submit" disabled={!nisnInput || loading} className="w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
                 {loading && !siswa ? <Loader2 className="animate-spin" size={16}/> : <Search size={16}/>} Cari
               </button>
             </form>
@@ -149,7 +191,7 @@ export default function AbsenHadirMandiri() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-800">{siswa.nama}</h3>
-                  <p className="text-sm text-gray-500">NISN: {siswa.nis} • Kelas: {siswa.kelas} {siswa.jurusan}</p>
+                  <p className="text-sm text-gray-500">NISN: {siswa.nisn} • Kelas: {siswa.kelas} {siswa.jurusan}</p>
                 </div>
               </div>
 

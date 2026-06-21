@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createNotification, getAdminUserIds } from '@/app/actions/notificationActions';
 
 const kategoriPelanggaran = {
   Ringan: [
@@ -76,6 +77,28 @@ export async function savePelanggaranAction(pelanggaranData, file) {
     const deductPoin = deductMap[pelanggaranData.kategori] || 0
     const newTotalReward = Math.max(0, (current_total_reward || 0) - deductPoin)
     await supabaseAdmin.from('siswa').update({ total_reward: newTotalReward }).eq('nisn', pelanggaranData.nisn)
+
+    // ── Kirim notifikasi ke Admin jika pelanggaran BERAT ──
+    if (pelanggaranData.kategori === 'Berat') {
+      try {
+        const adminIds = await getAdminUserIds();
+        if (adminIds.length > 0) {
+          const lokasi = pelanggaranData.lokasi ? ` di ${pelanggaranData.lokasi}` : '';
+          await createNotification({
+            userId: adminIds[0],
+            title: '⚠️ Pelanggaran Berat Terdeteksi',
+            message: `${pelanggaranData.nama_siswa} (${pelanggaranData.kelas} ${pelanggaranData.jurusan}) melakukan pelanggaran berat: ${pelanggaranData.jenis_pelanggaran}${lokasi}. Poin: +${pelanggaranData.poin}`,
+            type: 'violation',
+            priority: 'DANGER',
+            referenceType: 'violation',
+            referenceId: pelanggaranData.nisn,
+            actionUrl: '/admin/siswa/penanganan',
+          });
+        }
+      } catch (notifErr) {
+        console.error('Gagal kirim notifikasi pelanggaran berat:', notifErr);
+      }
+    }
 
     return { success: true, newTotalPelanggaran, newTotalReward }
   } catch (err) {

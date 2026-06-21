@@ -151,10 +151,9 @@ export default function RekapKehadiran() {
     a: attList.filter(a => a.status === 'Alpha').length
   })
 
-  // Helper Hari Efektif
   const isHoliday = (dateStr) => {
     const day = new Date(dateStr + 'T00:00:00').getDay()
-    if (day === 0 || day === 6) return true // Sabtu/Minggu
+    if (day === 0 || day === 6) return true
     return holidays.some(h => h.date === dateStr)
   }
 
@@ -197,7 +196,6 @@ export default function RekapKehadiran() {
     setResettingAll(false)
   }
 
-  // Export Excel Data Bulanan
   const handleExportExcel = () => {
     const monthStr = dateFilter.substring(0, 7)
     const effDays = getEffectiveDaysInMonth(monthStr)
@@ -213,7 +211,7 @@ export default function RekapKehadiran() {
         const dateStr = `${monthStr}-${dayStr}`
         const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
         if (isHoliday(dateStr)) {
-          row.push('L') // Libur
+          row.push('L')
         } else {
           if (dateStr <= today) { cA++ }
           if (att) {
@@ -238,7 +236,6 @@ export default function RekapKehadiran() {
     link.click()
   }
 
-  // Export PDF Data Semester
   const handleExportPDF = () => {
     const w = window.open('', '_blank')
     const totalEffDays = getTotalEffectiveDays(semMonths)
@@ -331,6 +328,203 @@ export default function RekapKehadiran() {
 
   const isFilterEmpty = !tingkatFilter || !jurusanFilter;
 
+  // ============================
+  // SECTION: Siswa Alpha > 5x (Tab Bulanan)
+  // ============================
+  const AlphaWarningSection = () => {
+    const monthStr = dateFilter.substring(0, 7)
+    const effDays = getEffectiveDaysInMonth(monthStr)
+
+    const alphaStudents = filteredStudents.map(s => {
+      let alphaCount = 0
+      for (let d = 1; d <= 31; d++) {
+        const dayStr = d < 10 ? `0${d}` : `${d}`
+        const dateStr = `${monthStr}-${dayStr}`
+        if (isHoliday(dateStr) || dateStr > today) continue
+        const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
+        if (!att || att.status === 'Alpha') alphaCount++
+      }
+      return { ...s, alphaCount }
+    }).filter(s => s.alphaCount > 5).sort((a, b) => b.alphaCount - a.alphaCount)
+
+    if (alphaStudents.length === 0) return null
+
+    const maxAlpha = Math.max(...alphaStudents.map(s => s.alphaCount))
+    const avgAlpha = (alphaStudents.reduce((sum, s) => sum + s.alphaCount, 0) / alphaStudents.length).toFixed(1)
+    const kritisBerat = alphaStudents.filter(s => s.alphaCount >= 15).length
+    const kritisSedang = alphaStudents.filter(s => s.alphaCount >= 10 && s.alphaCount < 15).length
+    const kritisRingan = alphaStudents.filter(s => s.alphaCount > 5 && s.alphaCount < 10).length
+    const donutPct = Math.round((alphaStudents.length / filteredStudents.length) * 100)
+
+    return (
+      <div className="mt-6 space-y-5 animate-fadeIn">
+        <div className="relative overflow-hidden bg-gradient-to-r from-red-600 via-red-600 to-rose-700 rounded-2xl p-5 text-white shadow-xl shadow-red-500/20">
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          <div className="absolute bottom-0 left-1/3 w-24 h-24 bg-white/5 rounded-full translate-y-1/2"></div>
+          <div className="relative flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-3xl backdrop-blur-sm shrink-0 animate-pulse">
+              ⚠️
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold tracking-tight">Siswa Kritis — Alpha &gt; 5 Kali</h3>
+              <p className="text-red-100 text-sm mt-0.5">{alphaStudents.length} dari {filteredStudents.length} siswa membutuhkan penanganan atau pembinaan segera</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-white border border-red-200 rounded-2xl p-4 text-center shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 mx-auto mb-2 bg-red-100 rounded-xl flex items-center justify-center">
+              <AlertTriangle size={20} className="text-red-600" />
+            </div>
+            <p className="text-2xl font-extrabold text-red-600">{alphaStudents.length}</p>
+            <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">Siswa Kritis</p>
+          </div>
+          <div className="bg-white border border-orange-200 rounded-2xl p-4 text-center shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 mx-auto mb-2 bg-orange-100 rounded-xl flex items-center justify-center">
+              <span className="text-orange-600 font-black text-lg">↑</span>
+            </div>
+            <p className="text-2xl font-extrabold text-orange-600">{maxAlpha}x</p>
+            <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider">Alpha Tertinggi</p>
+          </div>
+          <div className="bg-white border border-amber-200 rounded-2xl p-4 text-center shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 mx-auto mb-2 bg-amber-100 rounded-xl flex items-center justify-center">
+              <span className="text-amber-600 font-black text-sm">Ø</span>
+            </div>
+            <p className="text-2xl font-extrabold text-amber-600">{avgAlpha}x</p>
+            <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">Rata-rata</p>
+          </div>
+          <div className="bg-white border border-rose-200 rounded-2xl p-4 text-center shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 mx-auto mb-2 bg-rose-100 rounded-xl flex items-center justify-center">
+              <span className="text-rose-600 font-black text-sm">!</span>
+            </div>
+            <p className="text-2xl font-extrabold text-rose-600">{kritisBerat}</p>
+            <p className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider">Sangat Kritis (≥15)</p>
+          </div>
+          <div className="col-span-2 md:col-span-1 bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
+            <div className="relative w-16 h-16 rounded-full" style={{ background: `conic-gradient(#EF4444 ${donutPct}%, #F3F4F6 ${donutPct}% 100%)` }}>
+              <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
+                <span className="text-xs font-extrabold text-gray-700">{donutPct}%</span>
+              </div>
+            </div>
+            <p className="text-[10px] font-semibold text-gray-400 mt-1.5 text-center">Rasio Kritis<br/>dari Total</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm">
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+            Sangat Kritis (≥15x): {kritisBerat} siswa
+          </div>
+          <div className="flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+            <div className="w-2 h-2 rounded-full bg-red-500"></div>
+            Kritis (10-14x): {kritisSedang} siswa
+          </div>
+          <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+            Perlu Perhatian (6-9x): {kritisRingan} siswa
+          </div>
+        </div>
+
+        <div className="bg-white border border-red-100 rounded-2xl p-5 shadow-sm">
+          <h4 className="font-bold text-gray-700 mb-4 text-sm flex items-center gap-2">
+            <div className="w-1.5 h-5 bg-red-500 rounded-full"></div>
+            Distribusi Alpha per Siswa (Top 10)
+          </h4>
+          <div className="space-y-2.5">
+            {alphaStudents.slice(0, 10).map((s, idx) => {
+              const barPct = (s.alphaCount / maxAlpha) * 100
+              const gradient = s.alphaCount >= 15
+                ? 'linear-gradient(90deg, #dc2626, #991b1b)'
+                : s.alphaCount >= 10
+                  ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                  : 'linear-gradient(90deg, #f87171, #ef4444)'
+              return (
+                <div key={s.id} className="flex items-center gap-3 group">
+                  <div className="w-5 text-right">
+                    <span className={`text-[10px] font-bold ${idx < 3 ? 'text-red-500' : 'text-gray-300'}`}>{idx + 1}</span>
+                  </div>
+                  <div className="w-28 md:w-36 truncate text-xs font-semibold text-gray-700 group-hover:text-red-600 transition-colors">{s.nama}</div>
+                  <div className="flex-1 bg-gray-100 rounded-full h-5 relative overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700 ease-out flex items-center justify-end pr-2 min-w-[40px]"
+                      style={{ width: `${Math.max(barPct, 12)}%`, background: gradient }}
+                    >
+                      <span className="text-[10px] font-extrabold text-white drop-shadow-sm">{s.alphaCount}x</span>
+                    </div>
+                  </div>
+                  <div className="w-14 text-right text-[10px] font-bold text-gray-400">
+                    {effDays > 0 ? Math.round((s.alphaCount / effDays) * 100) : 0}%
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {alphaStudents.length > 10 && (
+            <p className="text-xs text-gray-400 mt-3 text-center">...dan {alphaStudents.length - 10} siswa lainnya</p>
+          )}
+        </div>
+
+        <div className="bg-white border border-red-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-red-50 to-rose-50 px-5 py-3 border-b border-red-100 flex items-center justify-between">
+            <h4 className="font-bold text-red-700 text-sm flex items-center gap-2">
+              📋 Daftar Lengkap Siswa Kritis
+            </h4>
+            <span className="text-[10px] font-bold text-red-400 bg-red-100 px-2 py-0.5 rounded-full">{alphaStudents.length} siswa</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="py-2.5 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">No</th>
+                  <th className="py-2.5 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">NISN</th>
+                  <th className="py-2.5 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Nama Siswa</th>
+                  <th className="py-2.5 px-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">L/P</th>
+                  <th className="py-2.5 px-4 text-center text-[10px] font-bold text-red-500 uppercase tracking-wider">Total Alpha</th>
+                  <th className="py-2.5 px-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">% Alpha</th>
+                  <th className="py-2.5 px-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-red-50">
+                {alphaStudents.map((s, idx) => {
+                  const pct = effDays > 0 ? Math.round((s.alphaCount / effDays) * 100) : 0
+                  const severity = s.alphaCount >= 15
+                    ? { label: 'Sangat Kritis', cls: 'bg-red-600 text-white' }
+                    : s.alphaCount >= 10
+                      ? { label: 'Kritis', cls: 'bg-red-100 text-red-700' }
+                      : { label: 'Perlu Perhatian', cls: 'bg-amber-100 text-amber-700' }
+                  const rowBg = s.alphaCount >= 15 ? 'bg-red-50/60' : s.alphaCount >= 10 ? 'bg-orange-50/40' : ''
+                  return (
+                    <tr key={s.id} className={`hover:bg-red-50/80 transition-colors ${rowBg}`}>
+                      <td className="py-2.5 px-4 text-gray-400 font-medium">{idx + 1}</td>
+                      <td className="py-2.5 px-4 text-xs font-mono text-gray-500">{s.nisn || '—'}</td>
+                      <td className="py-2.5 px-4 font-semibold text-gray-800">{s.nama}</td>
+                      <td className="py-2.5 px-4 text-center text-gray-500">{s.jenis_kelamin}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        <span className="text-lg font-extrabold text-red-600">{s.alphaCount}</span>
+                        <span className="text-xs text-red-400 ml-0.5">x</span>
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-bold text-red-500">{pct}%</td>
+                      <td className="py-2.5 px-4 text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${severity.cls}`}>{severity.label}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="bg-gray-50 px-5 py-2.5 border-t border-gray-100 text-[10px] text-gray-400 font-medium">
+            * Siswa dengan alpha ≥15x disarankan untuk segera dipanggil orang tua dan diberikan Surat Peringatan. Data berdasarkan hari efektif bulan ini ({effDays} hari).
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================
+  // LongTermView (Semester & Tahunan)
+  // ============================
   const LongTermView = ({ monthsToShow }) => {
     const totalEffDays = getTotalEffectiveDays(monthsToShow)
     return (
@@ -339,9 +533,9 @@ export default function RekapKehadiran() {
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
               <tr>
-                <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-0 bg-gray-50 z-30 w-[40px] border-r border-gray-200">No</th>
-                <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[40px] bg-gray-50 z-30 min-w-[180px] border-r border-gray-200">Nama Siswa</th>
-                <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[220px] bg-gray-50 z-30 w-[40px]">L/P</th>
+                <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-0 md:bg-gray-50 md:z-30 w-[40px] md:border-r md:border-gray-200">No</th>
+                <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-[40px] md:bg-gray-50 md:z-30 min-w-[180px] md:border-r md:border-gray-200">Nama Siswa</th>
+                <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-[220px] md:bg-gray-50 md:z-30 w-[40px]">L/P</th>
                 {monthsToShow.map(m => <th key={m.m} className="py-3 px-4 font-bold text-xs text-gray-600 text-center min-w-[80px] border-l border-gray-200">{m.name}</th>)}
                 <th className="py-3 px-4 font-bold text-xs text-gray-800 text-center w-[60px] border-l border-gray-200 bg-gray-100">Hari Efektif</th>
                 <th className="py-3 px-4 font-bold text-xs text-emerald-600 text-center w-[60px] border-l border-gray-200">Total H</th>
@@ -356,9 +550,9 @@ export default function RekapKehadiran() {
                 let totalH = 0, totalS = 0, totalI = 0, totalA = 0;
                 return (
                   <tr key={s.id} className="hover:bg-blue-50/30 cursor-pointer group" onClick={() => setSelectedStudent(s)}>
-                    <td className="py-3 px-4 text-gray-500 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{idx + 1}</td>
-                    <td className="py-3 px-4 font-semibold text-gray-800 sticky left-[40px] bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{s.nama}</td>
-                    <td className="py-3 px-4 text-gray-600 sticky left-[220px] bg-white group-hover:bg-blue-50/30 z-10">{s.jenis_kelamin}</td>
+                    <td className="py-3 px-4 text-gray-500 md:sticky md:left-0 md:bg-white md:group-hover:bg-blue-50 md:z-10 md:border-r md:border-gray-200">{idx + 1}</td>
+                    <td className="py-3 px-4 font-semibold text-gray-800 md:sticky md:left-[40px] md:bg-white md:group-hover:bg-blue-50 md:z-10 md:border-r md:border-gray-200">{s.nama}</td>
+                    <td className="py-3 px-4 text-gray-600 md:sticky md:left-[220px] md:bg-white md:group-hover:bg-blue-50 md:z-10">{s.jenis_kelamin}</td>
                     
                     {monthsToShow.map(m => {
                       const monthAtt = getMonthAtt(s.id, m.m)
@@ -433,7 +627,8 @@ export default function RekapKehadiran() {
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2">📅 Rekap Kehadiran Siswa</h1>
           <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
             <span className="font-medium text-gray-700">{new Date(dateFilter).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            <span>•</span><span>Semester ${semNum} Tahun Ajaran ${academicStartYear}/${academicStartYear+1}</span>
+            <span>•</span>
+            <span>{`Semester ${semNum} Tahun Ajaran ${academicStartYear}/${academicStartYear + 1}`}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700">
@@ -455,7 +650,6 @@ export default function RekapKehadiran() {
          <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-gray-100"><GraduationCap size={64} className="mx-auto text-gray-200 mb-4"/><p className="text-gray-500 font-semibold text-lg">Pilih Tingkat & Jurusan Terlebih Dahulu</p></div>
       ) : (
         <>
-          {/* KARTU INFO PENANGGUNG JAWAB KELAS */}
           <PJInfoCard kelas={tingkatFilter} jurusan={jurusanFilter} />
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -513,65 +707,69 @@ export default function RekapKehadiran() {
                 )}
 
                 {activeTab === 'bulanan' && (
-                  <div className="overflow-auto max-h-[70vh]">
-                    <table className="w-full text-sm text-left border-collapse">
-                      <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
-                        <tr>
-                          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-0 bg-gray-50 z-30 w-[40px]">No</th>
-                          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[40px] bg-gray-50 z-30 min-w-[200px] border-r border-gray-200">Nama Siswa</th>
-                          <th className="py-3 px-4 font-bold text-xs text-gray-600 sticky left-[240px] bg-gray-50 z-30 w-10">L/P</th>
-                          {Array.from({length: 31}, (_, i) => i+1).map(d => (<th key={d} className="py-3 px-2 font-bold text-xs text-gray-600 text-center w-10">{d}</th>))}
-                          <th className="py-3 px-2 font-bold text-xs text-gray-800 text-center w-10 bg-gray-100">E</th>
-                          <th className="py-3 px-2 font-bold text-xs text-emerald-600 text-center w-10">H</th>
-                          <th className="py-3 px-2 font-bold text-xs text-amber-600 text-center w-10">S</th>
-                          <th className="py-3 px-2 font-bold text-xs text-blue-600 text-center w-10">I</th>
-                          <th className="py-3 px-2 font-bold text-xs text-red-600 text-center w-10">A</th>
-                          <th className="py-3 px-2 font-bold text-xs text-indigo-600 text-center w-16">%H</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {filteredStudents.map((s, idx) => {
-                          const monthStr = dateFilter.substring(0, 7)
-                          const effDays = getEffectiveDaysInMonth(monthStr)
-                          let cH=0, cS=0, cI=0, cA=0;
-                          return (
-                            <tr key={s.id} className="hover:bg-blue-50/30 group cursor-pointer" onClick={() => setSelectedStudent(s)}>
-                              <td className="py-2 px-4 text-gray-500 sticky left-0 bg-white group-hover:bg-blue-50/30 z-10">{idx + 1}</td>
-                              <td className="py-2 px-4 font-semibold text-gray-800 sticky left-[40px] bg-white group-hover:bg-blue-50/30 z-10 border-r border-gray-200">{s.nama}</td>
-                              <td className="py-2 px-2 text-gray-500 sticky left-[240px] bg-white group-hover:bg-blue-50/30 z-10">{s.jenis_kelamin}</td>
-                              {Array.from({length: 31}, (_, i) => i+1).map(d => {
-                                const dayStr = d < 10 ? `0${d}` : `${d}`
-                                const dateStr = `${monthStr}-${dayStr}`
-                                const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
-                                
-                                let bgColor = 'bg-gray-50 text-gray-300'; let statusChar = '-'
-                                
-                                // Cek Hari Libur / Weekend
-                                if (isHoliday(dateStr)) {
-                                  bgColor = 'bg-red-300 text-red-800'; statusChar = '' // Blok merah pekat tanpa inisial
-                                } else {
-                                  if (dateStr <= today) { bgColor = 'bg-red-100 text-red-700 font-bold'; statusChar = 'A'; cA++ }
-                                  if (att) {
-                                    if (att.status === 'Hadir') { bgColor = 'bg-emerald-100 text-emerald-700 font-bold'; statusChar = 'H'; cH++; if(dateStr <= today) cA-- }
-                                    else if (att.status === 'Sakit') { bgColor = 'bg-amber-100 text-amber-700 font-bold'; statusChar = 'S'; cS++; if(dateStr <= today) cA-- }
-                                    else if (att.status === 'Izin') { bgColor = 'bg-blue-100 text-blue-700 font-bold'; statusChar = 'I'; cI++; if(dateStr <= today) cA-- }
-                                    else if (att.status === 'Alpha') { bgColor = 'bg-red-100 text-red-700 font-bold'; statusChar = 'A' }
+                  <>
+                    <div className="overflow-auto max-h-[70vh]">
+                      <table className="w-full text-sm text-left border-collapse">
+                        <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
+                          <tr>
+                            <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-0 md:bg-gray-50 md:z-30 w-[40px]">No</th>
+                            <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-[40px] md:bg-gray-50 md:z-30 min-w-[200px] md:border-r md:border-gray-200">Nama Siswa</th>
+                            <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-[240px] md:bg-gray-50 md:z-30 w-10">L/P</th>
+                            {Array.from({length: 31}, (_, i) => i+1).map(d => (<th key={d} className="py-3 px-2 font-bold text-xs text-gray-600 text-center w-10">{d}</th>))}
+                            <th className="py-3 px-2 font-bold text-xs text-gray-800 text-center w-10 bg-gray-100">E</th>
+                            <th className="py-3 px-2 font-bold text-xs text-emerald-600 text-center w-10">H</th>
+                            <th className="py-3 px-2 font-bold text-xs text-amber-600 text-center w-10">S</th>
+                            <th className="py-3 px-2 font-bold text-xs text-blue-600 text-center w-10">I</th>
+                            <th className="py-3 px-2 font-bold text-xs text-red-600 text-center w-10">A</th>
+                            <th className="py-3 px-2 font-bold text-xs text-indigo-600 text-center w-16">%H</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {filteredStudents.map((s, idx) => {
+                            const monthStr = dateFilter.substring(0, 7)
+                            const effDays = getEffectiveDaysInMonth(monthStr)
+                            let cH=0, cS=0, cI=0, cA=0;
+                            return (
+                              <tr key={s.id} className="hover:bg-blue-50/30 group cursor-pointer" onClick={() => setSelectedStudent(s)}>
+                                <td className="py-2 px-4 text-gray-500 md:sticky md:left-0 md:bg-white md:group-hover:bg-blue-50 md:z-10">{idx + 1}</td>
+                                <td className="py-2 px-4 font-semibold text-gray-800 md:sticky md:left-[40px] md:bg-white md:group-hover:bg-blue-50 md:z-10 md:border-r md:border-gray-200">{s.nama}</td>
+                                <td className="py-2 px-2 text-gray-500 md:sticky md:left-[240px] md:bg-white md:group-hover:bg-blue-50 md:z-10">{s.jenis_kelamin}</td>
+                                {Array.from({length: 31}, (_, i) => i+1).map(d => {
+                                  const dayStr = d < 10 ? `0${d}` : `${d}`
+                                  const dateStr = `${monthStr}-${dayStr}`
+                                  const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
+                                  
+                                  let bgColor = 'bg-gray-50 text-gray-300'; let statusChar = '-'
+                                  
+                                  if (isHoliday(dateStr)) {
+                                    bgColor = 'bg-red-300 text-red-800'; statusChar = ''
+                                  } else {
+                                    if (dateStr <= today) { bgColor = 'bg-red-100 text-red-700 font-bold'; statusChar = 'A'; cA++ }
+                                    if (att) {
+                                      if (att.status === 'Hadir') { bgColor = 'bg-emerald-100 text-emerald-700 font-bold'; statusChar = 'H'; cH++; if(dateStr <= today) cA-- }
+                                      else if (att.status === 'Sakit') { bgColor = 'bg-amber-100 text-amber-700 font-bold'; statusChar = 'S'; cS++; if(dateStr <= today) cA-- }
+                                      else if (att.status === 'Izin') { bgColor = 'bg-blue-100 text-blue-700 font-bold'; statusChar = 'I'; cI++; if(dateStr <= today) cA-- }
+                                      else if (att.status === 'Alpha') { bgColor = 'bg-red-100 text-red-700 font-bold'; statusChar = 'A' }
+                                    }
                                   }
-                                }
-                                return <td key={d} className={`py-2 px-2 text-center text-xs ${bgColor} transition-colors`}>{statusChar}</td>
-                              })}
-                              <td className="py-2 px-2 text-center font-bold text-gray-800 bg-gray-50/50">{effDays}</td>
-                              <td className="py-2 px-2 text-center font-bold text-emerald-600 bg-emerald-50/50">{cH}</td>
-                              <td className="py-2 px-2 text-center font-bold text-amber-600 bg-amber-50/50">{cS}</td>
-                              <td className="py-2 px-2 text-center font-bold text-blue-600 bg-blue-50/50">{cI}</td>
-                              <td className="py-2 px-2 text-center font-bold text-red-600 bg-red-50/50">{cA}</td>
-                              <td className="py-2 px-2 text-center font-bold text-indigo-600 bg-indigo-50/50">{effDays > 0 ? Math.round((cH / effDays) * 100) : 0}%</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                  return <td key={d} className={`py-2 px-2 text-center text-xs ${bgColor} transition-colors`}>{statusChar}</td>
+                                })}
+                                <td className="py-2 px-2 text-center font-bold text-gray-800 bg-gray-50/50">{effDays}</td>
+                                <td className="py-2 px-2 text-center font-bold text-emerald-600 bg-emerald-50/50">{cH}</td>
+                                <td className="py-2 px-2 text-center font-bold text-amber-600 bg-amber-50/50">{cS}</td>
+                                <td className="py-2 px-2 text-center font-bold text-blue-600 bg-blue-50/50">{cI}</td>
+                                <td className="py-2 px-2 text-center font-bold text-red-600 bg-red-50/50">{cA}</td>
+                                <td className="py-2 px-2 text-center font-bold text-indigo-600 bg-indigo-50/50">{effDays > 0 ? Math.round((cH / effDays) * 100) : 0}%</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="px-4 pb-4">
+                      <AlphaWarningSection />
+                    </div>
+                  </>
                 )}
 
                 {activeTab === 'semester' && <LongTermView monthsToShow={semMonths} />}
@@ -613,6 +811,8 @@ export default function RekapKehadiran() {
       <style jsx>{`
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
       `}</style>
     </div>
   )

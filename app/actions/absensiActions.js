@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getWaliKelasUserId, createNotification } from '@/app/actions/notificationActions';
 
 export async function getAllKelas() {
   const { data, error } = await supabaseAdmin.from('siswa').select('kelas').not('kelas', 'is', null)
@@ -123,10 +124,78 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
   const siswaIds = siswaList.map(s => s.id)
   const { error: unlockError } = await supabaseAdmin.from('absensi').update({ locked: false, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)
-  if (unlockError) return { error: unlockError.message }; return { success: true }
+  if (unlockError) return { error: unlockError.message }
+
+  // ── Kirim notifikasi ke Sekretaris ──
+  try {
+    const { data: reqData } = await supabaseAdmin.from('absensi_edit_requests').select('user_id, kelas, jurusan, tanggal').eq('id', requestId).single();
+    if (reqData) {
+      const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
+      if (sekId) {
+        await createNotification({
+          userId: sekId,
+          title: '✅ Revisi Absensi Disetujui',
+          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal}. Sekarang sekarang bisa mengedit data absensi.`,
+          type: 'attendance_revision',
+          priority: 'SUCCESS',
+          referenceType: 'attendance_revision',
+          referenceId: requestId,
+          actionUrl: '/absensi',
+        });
+      }
+      const { data: reqUser } = await supabaseAdmin.from('users').select('role, kelas').eq('id', reqData.user_id).single();
+      if (reqUser && reqUser.role === 'Wali Kelas' && reqUser.id !== adminId) {
+        await createNotification({
+          userId: reqUser.id,
+          title: '✅ Revisi Absensi Disetujui',
+          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}.`,
+          type: 'attendance_revision',
+          priority: 'SUCCESS',
+          referenceType: 'attendance_revision',
+          referenceId: requestId,
+          actionUrl: '/rekap-kehadiran',
+        });
+      }
+    }
+  } catch (notifErr) { console.error('Gagal kirim notifikasi:', notifErr); }
+
+  return { success: true }
 }
 
 export async function rejectEditRequest(requestId, adminId) {
+  // ── Kirim notifikasi ke Sekretaris ──
+  try {
+    const { data: reqData } = await supabaseAdmin.from('absensi_edit_requests').select('user_id, kelas, jurusan, tanggal, reason').eq('id', requestId).single();
+    if (reqData) {
+      const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
+      if (sekId) {
+        await createNotification({
+          userId: sekId,
+          title: '❌ Revisi Absensi Ditolak',
+          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal}. Alasan: ${reqData.reason || '-'}`,
+          type: 'attendance_revision',
+          priority: 'DANGER',
+          referenceType: 'attendance_revision',
+          referenceId: requestId,
+          actionUrl: '/absensi',
+        });
+      }
+      const { data: reqUser } = await supabaseAdmin.from('users').select('role, kelas').eq('id', reqData.user_id).single();
+      if (reqUser && reqUser.role === 'Wali Kelas' && reqUser.id !== adminId) {
+        await createNotification({
+          userId: reqUser.id,
+          title: '❌ Revisi Absensi Ditolak',
+          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}. Alasan: ${reqData.reason || '-'}`,
+          type: 'attendance_revision',
+          priority: 'DANGER',
+          referenceType: 'attendance_revision',
+          referenceId: requestId,
+          actionUrl: '/rekap-kehadiran',
+        });
+      }
+    }
+  } catch (notifErr) { console.error('Gagal kirim notif:', notifErr); }
+
   const { error } = await supabaseAdmin.from('absensi_edit_requests').update({ status: 'rejected', approved_by: adminId, updated_at: new Date().toISOString() }).eq('id', requestId)
   if (error) return { error: error.message }; return { success: true }
 }
@@ -170,6 +239,24 @@ export async function submitSakitIzin(formData) {
 
   const { error: absensiError } = await supabaseAdmin.from('absensi').upsert({ siswa_id: siswaData.id, tanggal: formData.tanggal, status: formData.jenis_absensi, input_by: 'Sakit/Izin Online', locked: true, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' })
   if (absensiError) return { error: "Gagal sinkronisasi ke tabel absensi utama: " + absensiError.message }
+
+  // ── Kirim notifikasi ke Wali Kelas ──
+  try {
+    const waliId = await getWaliKelasUserId(formData.kelas, formData.jurusan);
+    if (waliId) {
+      await createNotification({
+        userId: waliId,
+        title: `🤒 Pengajuan ${formData.jenis_absensi} Baru`,
+        message: `${formData.nama_siswa} (${formData.kelas} ${formData.jurusan}) mengajukan ${formData.jenis_absensi.toLowerCase()}.`,
+        type: 'sick_permission',
+        priority: formData.jenis_absensi === 'Sakit' ? 'WARNING' : 'INFO',
+        referenceType: 'sick_permission',
+        referenceId: siswaData.id,
+        actionUrl: '/wali-kelas/rekap-sakit-izin',
+      });
+    }
+  } catch (notifErr) { console.error('Gagal kirim notifikasi WK:', notifErr); }
+
   return { success: true }
 }
 
@@ -200,6 +287,20 @@ export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {
 }
 
 export async function getSiswaByNISN(nisn) {
-  const { data, error } = await supabaseAdmin.from('siswa').select('*').eq('nisn', nisn).single()
-  if (error || !data) return { error: 'NISN tidak ditemukan dalam database!' }; return { data }
+  const trimmed = (nisn || '').trim()
+  if (!trimmed) return { error: 'NISN tidak boleh kosong!' }
+
+  let { data, error } = await supabaseAdmin.from('siswa').select('*').eq('nisn', trimmed).maybeSingle()
+
+  if (!data) {
+    const { data: data2 } = await supabaseAdmin.from('siswa').select('*').eq('nis', trimmed).maybeSingle()
+    if (data2) { data = data2; error = null }
+  }
+
+  if (error) return { error: error.message }
+  if (!data) return { error: 'NISN tidak ditemukan dalam database!' }
+
+  if (!data.nisn && data.nis) data.nisn = data.nis
+
+  return { data }
 }

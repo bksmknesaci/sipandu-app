@@ -31,12 +31,44 @@ export default function Login() {
     try {
       // Cek login hardcoded admin
       if (username === 'admin' && password === 'admin123') {
+        // ── Ambil data lengkap admin dari database (termasuk id) ──
+        let adminData = {
+          id: null,
+          nama: 'Administrator',
+          username: 'admin',
+          role: 'Administrator',
+          kelas: null,
+          jurusan: null,
+          foto_url: null,
+          whatsapp: null,
+        };
+
+        try {
+          const { data: dbAdmin } = await supabase
+            .from('users')
+            .select('id, nama, username, role, kelas, jurusan, foto_url, whatsapp')
+            .eq('username', 'admin')
+            .eq('role', 'Administrator')
+            .maybeSingle();
+
+          if (dbAdmin) {
+            adminData = {
+              id: dbAdmin.id,
+              nama: dbAdmin.nama || adminData.nama,
+              username: dbAdmin.username || adminData.username,
+              role: dbAdmin.role || adminData.role,
+              kelas: dbAdmin.kelas,
+              jurusan: dbAdmin.jurusan,
+              foto_url: dbAdmin.foto_url,
+              whatsapp: dbAdmin.whatsapp,
+            };
+          }
+        } catch (dbErr) {
+          console.warn('Gagal ambil data admin dari database:', dbErr);
+        }
+
         localStorage.setItem('isLoggedIn', 'true');
-        localStorage.setItem('userData', JSON.stringify({
-          id: null, nama: 'Administrator', username: 'admin',
-          role: 'Administrator', kelas: null, jurusan: null,
-          foto_url: null, whatsapp: null,
-        }));
+        localStorage.setItem('userData', JSON.stringify(adminData));
         window.dispatchEvent(new Event('loginSuccess'));
         await new Promise(resolve => setTimeout(resolve, 600));
         router.push('/');

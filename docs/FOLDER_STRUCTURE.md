@@ -22,10 +22,12 @@
  │   │   ├── formulirActions.js
  │   │   ├── majorLogoActions.js
  │   │   ├── newsActions.js
+ │   │   ├── notificationActions.js
  │   │   ├── parentPortalActions.js
  │   │   ├── pelanggaranActions.js
  │   │   ├── penangananActions.js
  │   │   ├── penanggungJawabActions.js
+ │   │   ├── qrAbsensiActions.js
  │   │   ├── rekapActions.js
  │   │   ├── rewardActions.js
  │   │   ├── siswaActions.js
@@ -62,9 +64,11 @@
  │   │   ├── AppShell.js
  │   │   ├── CariDataSiswaWidget.js
  │   │   ├── DaftarTidakHadir.js
+ │   │   ├── DashboardNotifications.js
  │   │   ├── EntriPelanggaran.js
  │   │   ├── EntriReward.js
  │   │   ├── MajorLogoManager.js
+ │   │   ├── NotificationCenter.js
  │   │   ├── PJInfoCard.js
  │   │   ├── RekapPelanggaran.js
  │   │   ├── RekapReward.js
@@ -89,6 +93,21 @@
  │   │   └── page.js
  │   │
  │   ├── login/
+ │   │   └── page.js
+ │   │
+ │   ├── mobile/
+ │   │   ├── admin/
+ │   │   │   └── page.js
+ │   │   ├── osis/
+ │   │   │   └── page.js
+ │   │   ├── sekretaris/
+ │   │   │   └── page.js
+ │   │   ├── siswa/
+ │   │   │   └── page.js
+ │   │   └── wali-kelas/
+ │   │       └── page.js
+ │   │
+ │   ├── notifikasi/
  │   │   └── page.js
  │   │
  │   ├── osis/

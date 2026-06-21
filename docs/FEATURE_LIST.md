@@ -655,3 +655,126 @@ Status: ACTIVE
 - Tambah empty state untuk setiap section yang bisa kosong (chart, tabel, list)
 
 Status: ACTIVE
+
+---
+
+## Notifikasi
+- Komponen NotificationCenter (Dropdown di Header, Bell icon + badge unread)
+- Komponen DashboardNotifications (Widget 5 notifikasi terbaru di Dashboard)
+- Halaman Pusat Notifikasi (/notifikasi) dengan filter lengkap
+- Tab Status: Semua, Belum Dibaca, Sudah Dibaca, Penting, Sistem
+- Tab Waktu: Semua Waktu, Hari Ini, 7 Hari, 30 Hari
+- Pencarian notifikasi real-time
+- Tandai Dibaca (satu / semua), Hapus (satu / semua)
+- Pagination halaman notifikasi
+- Supabase Realtime subscription (auto-update tanpa reload)
+- Animasi bell shake saat notifikasi baru masuk
+- Push Notification permission (Browser Web Notification API)
+- Icon & label per tipe: Sakit/Izin, Pesan Orang Tua, Revisi Absensi, Reward, Pelanggaran, Penanganan, Sistem
+- Priority styling: INFO (biru), SUCCESS (hijau), WARNING (kuning), DANGER (merah)
+- Action button per notifikasi (navigasi ke halaman terkait)
+- Trigger: Pengajuan Sakit/Izin → Wali Kelas
+- Trigger: Revisi Absensi Disetujui → Sekretaris + Wali Kelas
+- Trigger: Revisi Absensi Ditolak → Sekretaris + Wali Kelas
+- Trigger: Pelanggaran Berat → Administrator
+- Bell icon tampil untuk semua role termasuk Admin hardcoded
+- Halaman Pusat Notifikasi aksesibel untuk semua role yang login
+- Login hardcoded Admin mengambil ID user dari database (notifikasi berfungsi penuh)
+
+Status: ACTIVE
+
+--- 
+
+## Sidebar & Navigasi (Update)
+- Sidebar icon rata tengah sejajar logo saat collapsed (px-[26px] centering)
+- Sidebar overlay di atas konten (tidak menggeser halaman saat expand)
+- Lebar sidebar 224px (w-56), cukup untuk teks submenu terpanjang
+- Tap sidebar untuk expand di HP desktop mode (tanpa kursor hover)
+- Tap di luar sidebar otomatis collapse
+- Sidebar tersembunyi di portrait HP (<640px), buka via hamburger overlay
+- Tombol header dengan animasi tap (scale-90 + warna biru menyala)
+- Profil dropdown panah dengan glow effect saat aktif
+- Navigasi NavLink & SubLink menggunakan button (bukan Link) untuk kontrol state
+
+Status: ACTIVE
+
+---
+
+## Navigasi Bawah Mobile (Halaman Khusus)
+- 5 tombol navigasi bawah: Siswa, Sekretaris, OSIS, Wali Kelas, Admin
+- Setiap tombol mengarah ke halaman khusus (/mobile/*)
+- Halaman Mobile Siswa: 6 menu (Portal Orang Tua, Absen Sakit/Izin, Cari Data Siswa, Absen Mandiri, Siswa Berprestasi, Seputar Sekolah)
+- Halaman Mobile Sekretaris: 1 menu (Absensi Kehadiran)
+- Halaman Mobile OSIS: 2 menu (Entri Reward, Entri Pelanggaran)
+- Halaman Mobile Wali Kelas: 5 menu (Entri Reward, Entri Pelanggaran, Rekap Pelanggaran, - Rekap Sakit/Izin, Rekap Kehadiran)
+- Halaman Mobile Admin: 10 menu (Daftar Siswa, Penanganan, Rekap Reward, Rekap Formulir, - Rekap Pindah/Keluar, Manajemen User, Profil SIPANDU, Penanggung Jawab, Hari Efektif, Pos Berita)
+- Desain kartu grid 2 kolom dengan border warna kiri unik per menu
+- Animasi staggered slide-up (80ms delay per kartu)
+- Header gradient dengan ikon unik per kategori
+- Akses control: halaman menampilkan "Akses Ditolak" jika role tidak sesuai
+- Tap feedback: active:scale-95 pada setiap kartu
+- Tombol navigasi bawah hanya muncul sesuai role (Sekretaris/OSIS/Wali/Admin)
+
+Status: ACTIVE
+
+---
+
+## Rekap Kehadiran (Update)
+- Fix teks "Semester $2 Tahun Ajaran $2025/$2026" (template literal salah di JSX, sekarang menggunakan backtick + curly braces)
+- Tab Bulanan, Semester, Tahunan: Kolom No/Nama/L/P tidak dibekukan (sticky) di tampilan HP agar scroll horizontal tidak terblokir
+- Tab Bulanan, Semester, Tahunan: Kolom sticky hanya aktif di desktop (md:sticky) dengan background solid saat hover (menghilangkan efek transparan /30 yang menyebabkan teks tembus)
+- Tab Bulanan: Tambah section "Siswa Kritis — Alpha > 5 Kali" di bawah tabel
+- Section Siswa Kritis: Banner merah gradient dengan ikon pulse
+- Section Siswa Kritis: 5 kartu statistik (Siswa Kritis, Alpha Tertinggi, Rata-rata, Sangat Kritis ≥15, Donut Rasio Kritis)
+- Section Siswa Kritis: Legend severity 3 tingkat (Sangat Kritis/Kritis/Perlu Perhatian)
+- Section Siswa Kritis: Horizontal bar chart Top 10 siswa alpha tertinggi dengan gradient warna berbeda per level
+- Section Siswa Kritis: Tabel detail lengkap dengan badge severity, baris berwarna merah untuk sangat kritis
+
+Status: ACTIVE
+
+---
+
+## Absen Sakit & Izin (Update)
+- Fix layout tombol Cari di HP (flex-col di mobile, flex-row di SM ke atas) agar tidak tertutup tabel
+- Fix referensi kolom .nis menjadi .nisn saat cek duplikasi pengajuan dan kirim data (sinkron dengan perbaikan getSiswaByNISN)
+
+Status: ACTIVE
+
+--- 
+
+## Absen Hadir Mandiri (Update)
+- Tambah batasan waktu absensi 06:00 WIB s.d. 09:04 WIB (sama seperti halaman Absen Sakit & Izin)
+- Tampilan terkunci di luar jam: "⏳ Absensi Belum Dibuka" atau "❌ Waktu Absensi Telah Berakhir"
+- Countdown timer mundur jika belum dibuka (format: Xj Ym Zd)
+- Admin bebas akses kapan saja (tampil "Mode Admin (Bebas Waktu)")
+- Fix layout tombol Cari di HP (flex-col di mobile, flex-row di SM ke atas)
+- Fix referensi kolom .nis menjadi .nisn saat tampilkan data siswa
+
+Status: ACTIVE
+
+--- 
+
+## QR Absensi (Update — Integrasi ke Tab Manajemen Siswa)
+- Hapus halaman terpisah /qr-absensi/page.js (fungsi dipindah ke tab QR Absensi di Manajemen Siswa)
+- Validasi GPS Sekolah: Tombol "Ambil Lokasi" (deteksi koordinat otomatis via Geolocation API)
+- Validasi GPS Sekolah: Tombol "Validasi GPS" (hitung jarak Haversine dari posisi saat ini ke titik tengah)
+- Hasil validasi GPS: Tampilan hijau/merah dengan jarak meter, radius, dan akurasi GPS
+- Badge status GPS: "Terkunci" (hijau) atau "Belum Diatur" (kuning) di header pengaturan
+- Tombol "SIMPAN PENGATURAN GPS & WAKTU" (simpan ke tabel qr_settings di database)
+- Pengaturan GPS & Waktu otomatis dimuat dari database saat halaman dibuka
+- Koordinat GPS yang tersimpan ditampilkan di bawah header Daftar QR Code Kelas
+- Tambah server action qrAbsensiActions.js (getQRSettings, saveQRSettings)
+- Buat tabel baru qr_settings di Supabase (gps_latitude, gps_longitude, gps_radius, jam_masuk, jam_terlambat, jam_tutup)
+
+Status: ACTIVE
+
+---
+
+## Fix NISN Tidak Ditemukan (Update)
+- Perbaikan fungsi getSiswaByNISN di absensiActions.js
+- Coba kolom nisn terlebih dahulu, jika tidak ditemukan fallback ke kolom nis (format lama)
+- Input NISN di-trim sebelum query
+- Standardisasi output: jika data hanya memiliki kolom nis, otomatis isi juga ke field nisn
+- Dampak: Absen Sakit/Izin, Absen Hadir Mandiri, Portal Orang Tua, Cari Data Siswa — semuanya bisa membaca NISN dengan benar
+
+Status: ACTIVE

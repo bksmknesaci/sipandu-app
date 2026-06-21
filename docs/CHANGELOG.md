@@ -1,5 +1,27 @@
 # Changelog SIPANDU
 
+## 2026-06-26
+
+- Fix teks "Semester $2 Tahun Ajaran $2025/$2026" di Rekap Kehadiran (template literal salah di JSX)
+- Fix kolom No/Nama/L/P dibekukan di HP pada tab Bulanan, Semester, Tahunan Rekap Kehadiran (sticky hanya aktif di desktop md:sticky)
+- Fix background transparan /30 pada hover kolom sticky menyebabkan teks tembus saat scroll horizontal (ganti ke warna solid)
+- Tambah section Siswa Kritis (Alpha > 5x) di tab Bulanan Rekap Kehadiran (banner, 5 kartu statistik, bar chart top 10, tabel detail dengan severity badge)
+- Fix tombol Cari tertutup di layar HP pada halaman Absen Sakit & Izin (flex-col sm:flex-row)
+- Fix referensi .nis menjadi .nisn di halaman Absen Sakit & Izin
+- Tambah batasan waktu 06:00-09:04 WIB di halaman Absen Hadir Mandiri (sama seperti Absen Sakit & Izin)
+- Tampilan terkunci di luar jam absensi pada halaman Absen Hadir Mandiri (countdown timer, blokir form & kamera)
+- Admin bebas akses Absen Hadir Mandiri kapan saja (Mode Admin / Bebas Waktu)
+- Fix tombol Cari tertutup di layar HP pada halaman Absen Hadir Mandiri (flex-col sm:flex-row)
+- Fix referensi .nis menjadi .nisn di halaman Absen Hadir Mandiri
+- Fix fungsi getSiswaByNISN: coba kolom nisn dulu, fallback ke kolom nis, trim input, standardisasi output
+- Revamp tab QR Absensi di Manajemen Siswa: Validasi GPS fungsional (Ambil Lokasi + Validasi Haversine)
+- Tambah tombol Simpan Pengaturan GPS & Waktu ke database (tabel qr_settings)
+- Pengaturan GPS otomatis dimuat dari database saat halaman dibuka
+- Badge GPS Terkunci/Belum Diatur di header pengaturan QR
+- Tambah server action qrAbsensiActions.js (getQRSettings, saveQRSettings)
+- Buat tabel baru qr_settings di Supabase (gps_latitude, gps_longitude, gps_radius, jam_masuk, jam_terlambat, jam_tutup)
+- Hapus halaman terpisah /qr-absensi/page.js (fungsi sudah terintegrasi di tab Manajemen Siswa)
+
 ## 2026-06-01
 
 - Migrasi ke Supabase
@@ -324,3 +346,37 @@
 - Fix error Tooltip is not defined di Wali Kelas Dashboard (Tambah Tooltip ke import recharts)
 - Tambah jam dan tanggal realtime di header Dashboard Wali Kelas, Sekretaris, dan OSIS
 - Lengkapi kode OsisDashboard.js yang sebelumnya terpotong (Bar Chart 30 Hari, Timeline Reward/Pelanggaran, Tab Berita/Prestasi)
+
+## 2026-06-23
+
+- Tambah relative ke header agar dropdown lonceng muncul di posisi yang benar	AppShell.js
+- Trigger notifikasi ke Sekretaris saat revisi disetujui	absensiActions.js (approveEditRequest)
+- Trigger notifikasi ke Sekretaris saat revisi ditolak	absensiActions.js (rejectEditRequest)
+- Aktifkan browser push notification	AppShell.js (checkLogin)
+- Hapus duplikat import createNotification	absensiActions.js
+-	Tambah relative ke header agar dropdown posisi benar	AppShell.js
+-	Aktifkan Push Notification permission	AppShell.js
+-	Trigger: Revisi Disetujui → Sekretaris	absensiActions.js (approveEditRequest)
+-	Trigger: Revisi Ditolak → Sekretaris	absensiActions.js (rejectEditRequest)
+
+## 2026-06-24
+
+- Perbaikan fitur Notifikasi (revisi lanjutan)
+- Fix build error: Hapus import { Notification } dari framer-motion (bukan export yang valid)
+- Fix hydration mismatch: Ganti
+
+## 2026-06-25
+
+- Revamp tampilan sidebar & navigasi bawah mobile
+- Fix icon sidebar tidak rata tengah dengan logo saat collapsed (tambah padding centering px-[26px])
+- Ubah sidebar dari push konten menjadi overlay (konten tidak bergeser saat sidebar expand)
+- Perkecil lebar sidebar dari 272px (w-72) menjadi 224px (w-56)
+- Ganti bottom nav dropdown menjadi navigasi halaman khusus (/mobile/*)
+- Buat 5 halaman mobile: Siswa, Sekretaris, OSIS, Wali Kelas, Admin
+- Desain halaman mobile: header gradient + grid kartu 2 kolom + border warna + deskripsi
+- Animasi staggered slide-up pada kartu menu mobile (80ms delay)
+- Akses control pada halaman mobile (tampilkan "Akses Ditolak" jika role tidak sesuai)
+- Tambah animasi tap pada tombol header (scale-90 + warna biru menyala)
+- Ubah NavLink & SubLink dari Link menjadi button untuk kontrol state sidebar
+- Hapus state bottomNavOpen, ganti dengan navigasi langsung via router
+- Bottom nav tombol hanya muncul sesuai role pengguna

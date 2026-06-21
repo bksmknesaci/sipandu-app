@@ -31,7 +31,6 @@ export default function AbsenSakitIzinPage() {
   const cameraRef = useRef(null)
   const isAdmin = user?.role === 'Administrator'
 
-  // FIX: Fungsi helper untuk mendapatkan tanggal WIB yang konsisten
   const getWIBDate = () => new Date().toLocaleDateString('sv-SE')
 
   useEffect(() => {
@@ -66,9 +65,9 @@ export default function AbsenSakitIzinPage() {
     const res = await getSiswaByNISN(nisnInput)
     if (res.data) {
       setSiswa(res.data)
-      // FIX: Gunakan getWIBDate() agar konsisten
       const todayWIB = getWIBDate()
-      const checkRes = await checkSakitIzinToday(res.data.nis, todayWIB)
+      // FIX: gunakan res.data.nisn (bukan .nis)
+      const checkRes = await checkSakitIzinToday(res.data.nisn, todayWIB)
       if (checkRes.data) setAlreadySubmitted(true); else setAlreadySubmitted(false)
     } else { setToast({ type: 'error', message: res.error || 'NISN tidak ditemukan!' }); setSiswa(null) }
     setVerifyLoading(false)
@@ -105,10 +104,10 @@ export default function AbsenSakitIzinPage() {
     if (fotoFile) { const arrayBuffer = await fotoFile.arrayBuffer(); fileData = new Uint8Array(arrayBuffer) }
 
     const formData = {
-      // FIX: Gunakan getWIBDate() agar sinkron dengan halaman sekretaris
       tanggal: getWIBDate(), 
       jam: timeParts, 
-      nisn: siswa.nis, 
+      // FIX: gunakan siswa.nisn (bukan .nis)
+      nisn: siswa.nisn, 
       nama_siswa: siswa.nama,
       kelas: siswa.kelas, 
       jurusan: siswa.jurusan, 
@@ -174,9 +173,10 @@ export default function AbsenSakitIzinPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Search size={18}/> Langkah 1: Cari Data Siswa</h3>
-            <div className="flex gap-3">
-              <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN..." className="flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-              <button type="button" onClick={handleVerifyNISN} disabled={!nisnInput || verifyLoading} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
+            {/* FIX: flex-col di HP, flex-row di SM ke atas */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN..." className="w-full sm:flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+              <button type="button" onClick={handleVerifyNISN} disabled={!nisnInput || verifyLoading} className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
                 {verifyLoading ? <Loader2 className="animate-spin" size={16}/> : <Search size={16}/>} Cari
               </button>
             </div>
@@ -188,7 +188,7 @@ export default function AbsenSakitIzinPage() {
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0">{siswa?.nama?.charAt(0) || 'S'}</div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-bold text-gray-800 truncate">{siswa.nama}</h3>
-                  <p className="text-sm text-gray-500">NISN: {siswa.nis}</p>
+                  <p className="text-sm text-gray-500">NISN: {siswa.nisn}</p>
                   <p className="text-sm text-blue-600 font-semibold">{siswa.kelas} • {siswa.jurusan}</p>
                 </div>
               </div>
