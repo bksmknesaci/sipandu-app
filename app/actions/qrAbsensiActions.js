@@ -20,3 +20,19 @@ export async function saveQRSettings(settingsObj) {
   if (error) return { error: error.message }
   return { success: true }
 }
+
+export async function getQRStats() {
+  const today = new Date().toLocaleDateString('sv-SE')
+  const { count: hadirHadir } = await supabaseAdmin
+    .from('absensi')
+    .select('*', { count: 'exact', head: true })
+    .eq('tanggal', today)
+    .eq('input_by', 'QR Mandiri')
+    .eq('status', 'Hadir')
+  const { count: totalScan } = await supabaseAdmin
+    .from('absensi')
+    .select('*', { count: 'exact', head: true })
+    .eq('tanggal', today)
+    .eq('input_by', 'QR Mandiri')
+  return { hadirHadir: hadirHadir || 0, totalScan: totalScan || 0 }
+}

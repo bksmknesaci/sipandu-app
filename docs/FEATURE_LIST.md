@@ -778,3 +778,43 @@ Status: ACTIVE
 - Dampak: Absen Sakit/Izin, Absen Hadir Mandiri, Portal Orang Tua, Cari Data Siswa — semuanya bisa membaca NISN dengan benar
 
 Status: ACTIVE
+
+---
+
+## Absen Hadir Mandiri (Update)
+Validasi GPS radius dari pengaturan QR Absensi (ambil dari tabel qr_settings)
+Hitung jarak menggunakan rumus Haversine, bandingkan dengan radius yang ditentukan Admin
+Tolak absensi jika jarak melebihi radius dengan pesan: "Jarak Anda X meter dari titik sekolah (batas radius Y meter)"
+Batasan scan QR hanya 1x per hari per siswa (ce tabel absensi input_by='QR Mandiri' hari ini)
+Jika siswa sudah scan QR hari ini, tampilkan pesan "Scan QR hanya bisa dilakukan 1x per hari"
+Admin bebas dari validasi GPS (langsung simpan tanpa cek jarak)
+Jika GPS tidak tersedia, validasi GPS dilewati (fallback, absensi tetap bisa dilakukan)
+
+Status: ACTIVE
+
+---
+
+## QR Absensi — Tab Manajemen Siswa (Update)
+Kartu statistik QR Absensi sekarang menampilkan data real dari database (bukan statik lokal)
+Kartu "Hadir Hari Ini" menampilkan jumlah siswa yang scan QR dan status Hadir hari ini
+Kartu "Belum Hadir" menampilkan total siswa aktif dikurangi hadir QR hari ini
+Kartu "Terlambat" placeholder (belum ada logika terlambat di tabel absensi)
+Kartu "QR Aktif" menampilkan jumlah QR yang statusnya aktif
+Kartu "Total Scan" menampilkan total scan QR dari awal hingga hari ini
+Tambah fungsi getQRStats di qrAbsensiActions.js (hitung hadirHadir & totalScan dari tabel absensi)
+Grid QR Code Kelas: 2 kolom di tampilan HP (grid-cols-2), 3 kolom tablet, 4 kolom desktop
+
+Status: ACTIVE
+
+---
+
+## Absensi Kehadiran — Sekretaris (Update)
+Tombol H/S/I/A hanya mengubah tampilan lokal, TIDAK langsung menyimpan ke database
+Tombol "Kirim & Kunci" baru menyimpan semua status ke database sekaligus, baru kemudian mengunci
+Tombol "Simpan Perubahan" menyimpan dari tampilan lokal (untuk setelah Admin approve edit request)
+Siswa yang sudah absen via Sakit/Izin Online atau QR Mandiri otomatis terkunci (tombol dikunci + ikon gembok)
+Sekretaris hanya bisa klik H dan A (Sakit/Izin dikunci karena harus via halaman terpisah)
+Admin bebas klik semua tombol tanpa batasan
+Fix: tidak ada lagi duplikasi data saat sekretaris klik tombol berkali-kali sebelum simpan
+
+Status: ACTIVE

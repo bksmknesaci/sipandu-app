@@ -86,7 +86,13 @@ export async function getAbsentStudentsForDashboard(tanggal) {
   return { data: Object.values(grouped) }
 }
 
-export async function submitAbsensi(tanggal, kelas, jurusan) {
+export async function submitAbsensi(tanggal, kelas, jurusan, records = null) {
+  // Jika ada records dari lokal, simpan dulu sebelum mengunci
+  if (records && records.length > 0) {
+    const { error } = await supabaseAdmin.from('absensi').upsert(records, { onConflict: 'siswa_id,tanggal' })
+    if (error) return { error: error.message }
+  }
+  // Kunci semua record kelas tersebut
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
@@ -268,6 +274,20 @@ export async function verifySakitIzin(id, status, catatan, waliKelasId, nisn, ta
     if (siswaData) { await supabaseAdmin.from('absensi').upsert({ siswa_id: siswaData.id, tanggal: tanggal, status: 'Alpha', input_by: 'Sistem Otomatis', locked: true, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' }) }
   }
   return { success: true }
+}
+
+export async function checkQRScanToday(nisn) {
+  const today = new Date().toLocaleDateString('sv-SE')
+  const { data: siswa } = await supabaseAdmin.from('siswa').select('id').eq('nisn', nisn).maybeSingle()
+  if (!siswa) return { alreadyScanned: false }
+  const { data } = await supabaseAdmin
+    .from('absensi')
+    .select('id')
+    .eq('siswa_id', siswa.id)
+    .eq('tanggal', today)
+    .eq('input_by', 'QR Mandiri')
+    .maybeSingle()
+  return { alreadyScanned: !!data }
 }
 
 export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {

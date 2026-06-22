@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import AppShell from '@/app/components/AppShell'; // ← Tambahan
+import AppShell from '@/app/components/AppShell';
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "SIPANDU",
   description: "Sistem Informasi dan Penanganan Siswa Terpadu",
+  icons: {
+    icon: "/logo-sipandu.png",
+  },
 };
 
 export default function RootLayout({
@@ -18,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className={inter.className}>
-        <AppShell> {/* ← Bungkus children dengan AppShell */}
+        <AppShell>
           {children}
         </AppShell>
       </body>

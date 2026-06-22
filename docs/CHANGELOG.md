@@ -1,5 +1,27 @@
 # Changelog SIPANDU
 
+## 2026-06-27
+
+- Perbaikan tombol H/S/I/A di halaman Absensi Kehadiran Sekretaris (hanya update tampilan lokal, tidak langsung simpan ke DB)
+- Tombol "Kirim & Kunci" sekarang menyimpan semua status ke DB baru kemudian mengunci (sebelumnya langsung simpan per klik)
+- Tombol "Simpan Perubahan" menyimpan dari tampilan lokal tanpa mengunci (untuk setelah Admin approve edit request)
+- Siswa yang absen via Sakit/Izin Online atau QR Mandiri otomatis terkunci di tabel (tombol dikunci + ikon gembok)
+- Sekretaris hanya bisa klik H dan A, Sakit/Izin dikunci (harus via halaman terpisah)
+- Admin bebas klik semua tombol tanpa batasan waktu
+- Batasan scan QR Hanya 1x per hari per siswa (cek tabel absensi input_by='QR Mandiri' hari ini)
+- Validasi GPS radius pada Absen Hadir Mandiri (ambil pengaturan dari tabel qr_settings, hitung jarak Haversine)
+- Tolak absen jika jarak melebihi radius dengan pesan jarak dan batas radius
+- Admin bebas dari validasi GPS (langsung simpan tanpa cek jarak)
+- Fallback: jika GPS tidak tersedia, validasi GPS dilewati (absensi tetap bisa dilakukan)
+- Kartu statistik QR Absensi di tab Manajemen Siswa sekarang menampilkan data real dari database
+- Kartu "Hadir Hari Ini" menampilkan jumlah siswa yang scan QR hari ini
+- Kartu "Belum Hadir" menampilkan total siswa aktif dikurangi hadir QR hari ini
+- Grid QR Code Kelas: 2 kolom di tampilan HP (grid-cols-2), 3 kolom tablet, 4 kolom desktop
+- Tambah fungsi checkQRScanToday di absensiActions.js
+- Tambah fungsi getQRStats di qrAbsensiActions.js
+- Ubah submitAbsensi di absensiActions.js (simpan records dulu baru kunci, terima parameter records opsional)
+- Hapus file /qr-absensi/page.js yang sudah tidak terpakai
+
 ## 2026-06-26
 
 - Fix teks "Semester $2 Tahun Ajaran $2025/$2026" di Rekap Kehadiran (template literal salah di JSX)

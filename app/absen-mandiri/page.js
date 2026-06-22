@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle } from 'lucide-react'
-import { getSiswaByNISN, submitAbsenMandiri } from '@/app/actions/absensiActions'
+import { getSiswaByNISN, submitAbsenMandiri, checkQRScanToday } from '@/app/actions/absensiActions'
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 export default function AbsenHadirMandiri() {
   const [user, setUser] = useState(null)
@@ -103,6 +110,13 @@ export default function AbsenHadirMandiri() {
   const validateAndSubmit = async (qrText) => {
     if (!siswa) return
     
+    // CEK DUPLIKAT: Siswa hanya boleh scan QR 1x per hari
+    const scanCheck = await checkQRScanToday(nisnInput)
+    if (scanCheck.alreadyScanned) {
+      setToast({ type: 'error', message: '❌ Anda sudah scan QR hari ini. Scan QR hanya bisa dilakukan 1x per hari.' })
+      return
+    }
+    
     const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
     let kelasFromQR = ""
     
@@ -118,6 +132,32 @@ export default function AbsenHadirMandiri() {
     if (kelasFromQR !== fullKelasSiswa) {
       setToast({ type: 'error', message: `Gagal! QR ini untuk kelas ${kelasFromQR}, sedangkan Anda siswa kelas ${fullKelasSiswa}.` })
       return
+    }
+
+    // VALIDASI GPS RADIUS (skip untuk Admin)
+    if (!isAdmin) {
+      setLoading(true)
+      try {
+        const { getQRSettings } = await import('@/app/actions/qrAbsensiActions')
+        const { settings: qrSet } = await getQRSettings()
+        const lat = parseFloat(qrSet?.gps_latitude)
+        const lng = parseFloat(qrSet?.gps_longitude)
+        const radius = parseFloat(qrSet?.gps_radius)
+        
+        if (!isNaN(lat) && !isNaN(lng) && !isNaN(radius) && radius > 0) {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+          })
+          const dist = haversineDistance(lat, lng, position.coords.latitude, position.coords.longitude)
+          if (dist > radius) {
+            setToast({ type: 'error', message: `❌ Absensi ditolak! Jarak Anda ${Math.round(dist)} meter dari titik sekolah (batas radius ${Math.round(radius)} meter). Dekatkan ke area sekolah.` })
+            setLoading(false)
+            return
+          }
+        }
+      } catch (gpsErr) {
+        console.warn('GPS validation skipped:', gpsErr)
+      }
     }
 
     setLoading(true)
@@ -144,7 +184,7 @@ export default function AbsenHadirMandiri() {
           <div>
             <h1 className="text-2xl font-extrabold flex items-center gap-2"><UserCheck size={28}/> ABSEN HADIR MANDIRI</h1>
             <p className="text-emerald-100 mt-1 text-sm">{today}</p>
-            <p className="text-emerald-100 mt-2 text-sm">Masukkan NISN, lalu scan QR Code yang tertempel di meja kelas Anda.</p>
+            <p className="text-emerald-100 mt-2 text-sm">Masukkan NISN, lalu scan QR Code yang tertempel di ruang kelas Anda.</p>
           </div>
           <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold"><Clock size={14}/> {currentTime.toLocaleTimeString('id-ID')}</div>
         </div>
@@ -210,7 +250,7 @@ export default function AbsenHadirMandiri() {
                         <X size={16}/>
                       </button>
                     </div>
-                    <p className="text-center text-sm text-gray-500 animate-pulse">Arahkan kamera ke QR Code di meja/dinding kelas Anda...</p>
+                    <p className="text-center text-sm text-gray-500 animate-pulse">Arahkan kamera ke QR Code di ruang kelas Anda...</p>
                   </div>
                 ) : null}
 

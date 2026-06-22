@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { fetchSiswaAction, saveSiswaAction, deleteSiswaAction, deleteAllSiswaAction, importSiswaAction, promoteStudentsAction, graduateAndDeleteAction } from '@/app/actions/siswaActions';
-import { getQRSettings, saveQRSettings } from '@/app/actions/qrAbsensiActions';
+import { getQRSettings, saveQRSettings, getQRStats } from '@/app/actions/qrAbsensiActions'
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Users, School, Award, UserCheck, UserX, Plus, Download, Upload, Printer,
@@ -61,6 +61,7 @@ export default function ManajemenSiswa() {
   const [qrSettings, setQrSettings] = useState({ gps_latitude: '', gps_longitude: '', gps_radius: '100', jam_masuk: '06:00', jam_terlambat: '07:15', jam_tutup: '09:04' });
   const [activeQR, setActiveQR] = useState({});
   const [absensiStats, setAbsensiStats] = useState({ hadir: 0, terlambat: 0, belumHadir: 0, totalScan: 0 });
+  const [qrStats, setQrStats] = useState({ hadirHadir: 0, totalScan: 0 });
   const [gpsLocked, setGpsLocked] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
@@ -102,6 +103,18 @@ export default function ManajemenSiswa() {
     }
     loadSettings()
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'qr-absensi' && gpsLocked) {
+      const loadStats = async () => {
+        try {
+          const res = await getQRStats()
+          if (res) setQrStats(res)
+        } catch (err) { console.error('QR stats error:', err) }
+      }
+      loadStats()
+    }
+  }, [activeTab, gpsLocked])
 
   // Toast auto-dismiss
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t) } }, [toast])
@@ -439,7 +452,13 @@ export default function ManajemenSiswa() {
           
           {/* Stats Absensi */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[{ label: 'Hadir Hari Ini', value: absensiStats.hadir, icon: UserCheck, color: 'text-green-600', bg: 'bg-green-50' },{ label: 'Terlambat', value: absensiStats.terlambat, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50' },{ label: 'Belum Hadir', value: absensiStats.belumHadir, icon: UserX, color: 'text-red-600', bg: 'bg-red-50' },{ label: 'QR Aktif', value: absensiStats.qrAktif || 0, icon: QrCode, color: 'text-blue-600', bg: 'bg-blue-50' },{ label: 'Total Scan', value: absensiStats.totalScan, icon: Shield, color: 'text-indigo-600', bg: 'bg-indigo-50' }].map((stat, idx) => (
+            {[
+              { label: 'Hadir Hari Ini', value: qrStats.hadirHadir, icon: UserCheck, color: 'text-green-600', bg: 'bg-green-50' },
+              { label: 'Terlambat', value: 0, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+              { label: 'Belum Hadir', value: siswa.filter(s => s.status === 'Aktif').length - qrStats.hadirHadir, icon: UserX, color: 'text-red-600', bg: 'bg-red-50' },
+              { label: 'QR Aktif', value: absensiStats.qrAktif || 0, icon: QrCode, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Total Scan', value: qrStats.totalScan, icon: Shield, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+            ].map((stat, idx) => (
               <div key={idx} className={`${stat.bg} p-5 rounded-xl border border-gray-100 shadow-sm`}>
                 <stat.icon className={`${stat.color} mb-2`} size={24}/><p className="text-3xl font-bold text-gray-800">{stat.value}</p><p className="text-xs text-gray-500 font-medium mt-1">{stat.label}</p>
               </div>
@@ -516,7 +535,7 @@ export default function ManajemenSiswa() {
                 <button onClick={() => dynamicKelasList.forEach(k => handleGenerateQR(k))} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all"><RefreshCw size={16}/> Generate Semua</button>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {dynamicKelasList.length > 0 ? dynamicKelasList.map(kelas => (
                 <div key={kelas} className="border rounded-xl p-4 bg-gray-50 hover:shadow-md transition-shadow flex flex-col items-center">
                   <h4 className="font-bold text-gray-800 mb-3">{kelas}</h4>

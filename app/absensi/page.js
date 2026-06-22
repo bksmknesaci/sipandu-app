@@ -6,7 +6,7 @@ import {
   Clock, CheckCircle, Save, Lock, GraduationCap, Filter
 } from 'lucide-react'
 import {
-  getAllKelas, getAbsensiByDate, upsertAbsensi, batchUpsertAbsensi, getAbsensiStats,
+  getAllKelas, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
   submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest
 } from '@/app/actions/absensiActions'
 
@@ -172,16 +172,15 @@ export default function AbsensiKehadiran() {
       if (newStatus === 'Hadir') { newStats.hadir++; newStats.belum-- } else if (newStatus === 'Sakit') { newStats.sakit++; newStats.belum-- } else if (newStatus === 'Izin') { newStats.izin++; newStats.belum-- } else if (newStatus === 'Alpha') { newStats.alpha++; newStats.belum-- }
       return newStats
     })
-    const inputBy = isSekretaris ? 'Sekretaris Kelas' : 'Administrator'
-    const result = await upsertAbsensi(siswa.id, today, newStatus, inputBy, false)
-    if (result.error) { showToast(result.error, 'error'); fetchData() }
   }
 
-  const handleSaveAll = async () => {
-    const unsaved = siswaList.filter(s => s.status && s.status !== null)
-    if (unsaved.length === 0) { showToast('Belum ada data absensi untuk disimpan', 'error'); return }
+   const handleSaveAll = async () => {
+    const records = siswaList.filter(s => s.status && s.status !== null).map(s => ({
+      siswa_id: s.id, tanggal: today, status: s.status,
+      input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false
+    }))
+    if (records.length === 0) { showToast('Belum ada data absensi untuk disimpan', 'error'); return }
     setSaving(true)
-    const records = unsaved.map(s => ({ siswa_id: s.id, tanggal: today, status: s.status, input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false }))
     const result = await batchUpsertAbsensi(records)
     if (result.error) { showToast(result.error, 'error') } else { showToast(`${result.count} data absensi berhasil disimpan!`) }
     setSaving(false)
@@ -201,8 +200,17 @@ export default function AbsensiKehadiran() {
     if (!canEdit) return; const belum = siswaList.filter(s => !s.status)
     if (belum.length > 0) { showToast(`${belum.length} siswa belum diabsen. Lengkapi semua terlebih dahulu!`, 'error'); return }
     setIsSubmitting(true)
-    const result = await submitAbsensi(today, selectedTingkat, selectedJurusan)
-    if (result.error) showToast(result.error, 'error'); else { setIsSubmitted(true); showToast('Absensi berhasil dikirim dan terkunci!', 'success') }
+    // Simpan semua status ke DB terlebih dahulu
+    const records = siswaList.filter(s => s.status).map(s => ({
+      siswa_id: s.id, tanggal: today, status: s.status,
+      input_by: 'Sekretaris Kelas', locked: false
+    }))
+    const saveResult = await batchUpsertAbsensi(records)
+    if (saveResult.error) { showToast(saveResult.error, 'error'); setIsSubmitting(false); return }
+    // Lalu kunci semua record
+    const lockResult = await submitAbsensi(today, selectedTingkat, selectedJurusan)
+    if (lockResult.error) showToast(lockResult.error, 'error')
+    else { setIsSubmitted(true); showToast('Absensi berhasil dikirim dan terkunci!') }
     setIsSubmitting(false)
   }
 
