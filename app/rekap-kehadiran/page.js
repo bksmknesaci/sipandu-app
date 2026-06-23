@@ -6,15 +6,9 @@ import {
   Activity, Search, Download, FileText, FileSpreadsheet, ChevronDown, X, Camera, GraduationCap, Trash2
 } from 'lucide-react'
 import { getRekapKehadiran, resetSemesterAbsensi, resetAllAbsensi } from '@/app/actions/rekapActions'
+import { getKelasFilters } from '@/app/actions/absensiActions'
 import PJInfoCard from '@/app/components/PJInfoCard'
 import { getHolidays } from '@/app/actions/effectiveDaysActions'
-
-const TINGKAT_OPTIONS = ['X', 'XI', 'XII']
-const JURUSAN_OPTIONS = [
-  'TKRO 1', 'TKRO 2', 'TKRO 3', 'TKRO 4', 'DKV 1', 'DKV 2', 'DKV 3', 'DKV 4',
-  'RPL 1', 'RPL 2', 'RPL 3', 'RPL 4', 'PH 1', 'PH 2', 'PH 3', 'PH 4',
-  'KL 1', 'KL 2', 'KL 3', 'KL 4', 'LPKKK 1', 'LPKKK 2', 'LPKKK 3', 'LPKKK 4',
-]
 
 const ALL_MONTHS = [
   { name: 'Juli', m: 7 }, { name: 'Agustus', m: 8 }, { name: 'September', m: 9 },
@@ -82,8 +76,13 @@ export default function RekapKehadiran() {
   const [resettingAll, setResettingAll] = useState(false)
   const [toast, setToast] = useState(null)
   const [holidays, setHolidays] = useState([])
+  const [kelasJurusanList, setKelasJurusanList] = useState([])
 
   const blackText = { color: '#1f2937' }
+  const tingkatOptions = [...new Set(kelasJurusanList.map(c => c.kelas))].sort()
+const jurusanOptions = tingkatFilter
+  ? [...new Set(kelasJurusanList.filter(c => c.kelas === tingkatFilter).map(c => c.jurusan))].sort()
+  : [...new Set(kelasJurusanList.map(c => c.jurusan))].sort()
   const currentYear = parseInt(dateFilter.substring(0, 4))
   const currentMonth = parseInt(dateFilter.substring(5, 7))
   const academicStartYear = currentMonth >= 7 ? currentYear : currentYear - 1
@@ -106,6 +105,14 @@ export default function RekapKehadiran() {
       if (h) setHolidays(h)
     }
     fetchHolidays()
+  }, [])
+
+  useEffect(() => {
+    const fetchFilters = async () => {
+      const res = await getKelasFilters()
+      if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList)
+    }
+    fetchFilters()
   }, [])
 
   const fetchData = useCallback(async () => {
@@ -639,8 +646,8 @@ export default function RekapKehadiran() {
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">Tanggal</label><input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" style={blackText} /></div>
-          <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">Tingkat</label><select value={tingkatFilter} onChange={e => handleTingkatChange(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" style={blackText} disabled={user?.role === 'Wali Kelas'}><option value="">Pilih Tingkat</option>{TINGKAT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">Jurusan & Kelas</label><select value={jurusanFilter} onChange={e => setJurusanFilter(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" style={blackText} disabled={user?.role === 'Wali Kelas'}><option value="">Pilih Jurusan</option>{JURUSAN_OPTIONS.map(j => <option key={j} value={j}>{j}</option>)}</select></div>
+          <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">Tingkat</label><select value={tingkatFilter} onChange={e => handleTingkatChange(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" style={blackText} disabled={user?.role === 'Wali Kelas'}><option value="">Pilih Tingkat</option>{tingkatOptions.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">Jurusan & Kelas</label><select value={jurusanFilter} onChange={e => setJurusanFilter(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" style={blackText} disabled={user?.role === 'Wali Kelas'}><option value="">Pilih Jurusan</option>{jurusanOptions.map(j => <option key={j} value={j}>{j}</option>)}</select></div>
           <button onClick={fetchData} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 transition text-sm font-semibold shadow-sm"><Search size={16}/> Tampilkan</button>
           <button onClick={() => { setTingkatFilter(''); setJurusanFilter(''); setDateFilter(today) }} className="flex items-center justify-center gap-2 border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition text-sm font-semibold"><RefreshCw size={16}/> Reset Filter</button>
         </div>

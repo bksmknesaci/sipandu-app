@@ -4,13 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, User, GraduationCap, BookOpen, Award, AlertTriangle, Calendar, Clock,
   MapPin, CheckCircle, XCircle, MessageCircle, Send, Bell, ChevronRight, ChevronLeft,
-  Download, Phone, School, Shield, Star, TrendingUp, TrendingDown, LogOut, Eye
+  Download, Phone, School, Shield, Star, TrendingUp, TrendingDown, LogOut, Eye, Trash2
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { searchStudentByNIS, getDashboardData, sendParentMessage, markNotificationRead } from '@/app/actions/parentPortalActions';
+import { searchStudentByNIS, getDashboardData, sendParentMessage, deleteParentMessage, markNotificationRead } from '@/app/actions/parentPortalActions';
 
 const PIE_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444'];
 const STATUS_MAP = {
@@ -108,7 +108,15 @@ export default function PortalOrtu() {
   const [showNotif, setShowNotif] = useState(false);
   const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
   const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [deletingMsgId, setDeletingMsgId] = useState(null);
   const msgEndRef = useRef(null);
+
+  const refreshData = async () => {
+    if (!student) return;
+    const nisn = student.nisn || student.nis || ''
+    const d = await getDashboardData(student.id, nisn, student.kelas || '', student.jurusan || '');
+    setData(d);
+  };
 
   const handleSearch = async () => {
     if (!nisInput.trim()) return;
@@ -129,19 +137,25 @@ export default function PortalOrtu() {
     setSendingMsg(true);
     await sendParentMessage(student.id, msgText.trim());
     setMsgText('');
-    const nisn = student.nisn || student.nis || ''
-    const d = await getDashboardData(student.id, nisn, student.kelas || '', student.jurusan || '');
-    setData(d);
+    await refreshData();
     setSendingMsg(false);
+  };
+
+  const handleDeleteMsg = async (messageId) => {
+    if (!confirm('Hapus pesan ini?')) return;
+    setDeletingMsgId(messageId);
+    const result = await deleteParentMessage(messageId);
+    if (result.error) {
+      alert(result.error);
+    } else {
+      await refreshData();
+    }
+    setDeletingMsgId(null);
   };
 
   const handleMarkRead = async (id) => {
     await markNotificationRead(id);
-    if (student) {
-      const nisn = student.nisn || student.nis || ''
-    const d = await getDashboardData(student.id, nisn, student.kelas || '', student.jurusan || '');
-      setData(d);
-    }
+    await refreshData();
   };
 
   const handleExport = () => {
@@ -719,12 +733,28 @@ export default function PortalOrtu() {
                 ) : data.messages.map((m) => {
                   const isParent = m.sender_type === 'Orang Tua'
                   return (
-                    <div key={m.id} className={`flex ${isParent ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isParent ? 'bg-blue-600 text-white rounded-br-md' : 'bg-gray-100 text-gray-800 rounded-bl-md'}`}>
+                    <div key={m.id} className={`group flex ${isParent ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`relative max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isParent ? 'bg-blue-600 text-white rounded-br-md' : 'bg-gray-100 text-gray-800 rounded-bl-md'}`}>
                         <p>{m.message}</p>
-                        <p className={`mt-1 text-[9px] ${isParent ? 'text-blue-200' : 'text-gray-400'}`}>
-                          {new Date(m.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className={`flex items-center justify-between mt-1 ${isParent ? 'text-blue-200' : 'text-gray-400'}`}>
+                          <p className="text-[9px]">
+                            {new Date(m.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {isParent && (
+                            <button
+                              onClick={() => handleDeleteMsg(m.id)}
+                              disabled={deletingMsgId === m.id}
+                              className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-300 disabled:opacity-50"
+                              title="Hapus pesan"
+                            >
+                              {deletingMsgId === m.id ? (
+                                <span className="text-[9px]">Menghapus...</span>
+                              ) : (
+                                <Trash2 size={12} />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )

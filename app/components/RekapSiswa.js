@@ -203,11 +203,11 @@ export default function RekapSiswa({ settings }) {
           <div className="h-8 bg-gray-200 rounded w-72"></div>
           <div className="flex-grow h-1 bg-gray-200 rounded-full"></div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-10">
           {[1, 2, 3].map(i => <div key={i} className="bg-white rounded-xl p-6 h-52"></div>)}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {[1, 2, 3].map(i => <div key={i} className="h-48 bg-gray-200 rounded-full mx-auto w-48"></div>)}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-10">
+          {[1, 2, 3].map(i => <div key={i} className="h-40 bg-gray-200 rounded-full mx-auto w-40 md:w-48"></div>)}
         </div>
       </div>
     );
@@ -217,7 +217,7 @@ export default function RekapSiswa({ settings }) {
     return (
       <div className="bg-gray-50 p-6 md:p-10 rounded-2xl border border-gray-200 shadow-sm font-poppins">
         <div className="flex items-center gap-4 mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 whitespace-nowrap">Rekapitulasi Jumlah Siswa</h2>
+          <h2 className="text-lg md:text-2xl font-bold text-gray-800 whitespace-nowrap">Rekapitulasi Jumlah Siswa</h2>
           <div className="flex-grow h-1 bg-orange-500 rounded-full"></div>
         </div>
         <div className="text-center py-16">
@@ -234,44 +234,42 @@ export default function RekapSiswa({ settings }) {
 
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <h2 className="text-2xl font-bold text-gray-800 whitespace-nowrap">Rekapitulasi Jumlah Siswa</h2>
+        <h2 className="text-lg md:text-2xl font-bold text-gray-800 whitespace-nowrap">Rekapitulasi Jumlah Siswa</h2>
         <div className="flex-grow h-1 bg-orange-500 rounded-full"></div>
       </div>
 
       {/* ============================================
-          CLASS CARDS
-          AnimatedNumber sebagai komponen di dalam .map()
-          sehingga hook dipanggil di top-level AnimatedNumber,
-          BUKAN di dalam .map() di komponen utama
+          CLASS CARDS — 2 kolom HP, 3 kolom desktop
       ============================================ */}
       {classData.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {classData.map((cls) => (
-            <div key={cls.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md">
-              <div className="p-6 text-center">
-                <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: cls.color.bg }}>
-                  <Users size={24} style={{ color: cls.color.icon }}/>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-10">
+          {classData.map((cls, idx) => (
+            <div key={cls.id} className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md ${idx === 2 ? 'col-span-2 md:col-span-1 max-w-[300px] mx-auto md:max-w-none w-full' : ''}`}>
+              <div className="p-4 md:p-6 text-center">
+                <div className="mx-auto w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center mb-2 md:mb-3" style={{ backgroundColor: cls.color.bg }}>
+                  <Users size={20} className="md:hidden" style={{ color: cls.color.icon }}/>
+                  <Users size={24} className="hidden md:block" style={{ color: cls.color.icon }}/>
                 </div>
-                <h3 className="text-lg font-bold mb-1" style={{ color: cls.color.icon }}>{cls.name}</h3>
-                <p className="text-5xl font-bold text-gray-800 mb-1">
+                <h3 className="text-sm md:text-lg font-bold mb-1" style={{ color: cls.color.icon }}>{cls.name}</h3>
+                <p className="text-3xl md:text-5xl font-bold text-gray-800 mb-1">
                   <AnimatedNumber target={cls.count} shouldStart={animateStart} duration={1800} />
                 </p>
-                <p className="text-gray-500 text-sm mb-4">SISWA</p>
+                <p className="text-gray-500 text-xs md:text-sm mb-3 md:mb-4">SISWA</p>
                 <button
                   onClick={() => setOpenClass(openClass === cls.id ? null : cls.id)}
-                  className="hover:opacity-90 active:scale-95 transition-all text-white px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2"
+                  className="hover:opacity-90 active:scale-95 transition-all text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-semibold inline-flex items-center gap-2"
                   style={{ backgroundColor: cls.color.icon }}
                 >
-                  {openClass === cls.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} Lihat Jurusan
+                  {openClass === cls.id ? <ChevronUp size={14} className="md:w-4 md:h-4"/> : <ChevronDown size={14} className="md:w-4 md:h-4"/>} <span className="hidden sm:inline">Lihat</span> Jurusan
                 </button>
               </div>
 
               {openClass === cls.id && (
-                <div className="bg-gray-50 border-t p-4 text-left text-sm">
+                <div className="bg-gray-50 border-t p-3 md:p-4 text-left text-xs md:text-sm">
                   {cls.majors.map((major, midx) => (
-                    <div key={midx} className="mb-3 bg-white p-3 rounded-lg border border-gray-100">
-                      <p className="font-semibold text-gray-800">{major.name}</p>
-                      <div className="flex justify-between text-gray-600 mt-1">
+                    <div key={midx} className="mb-2 md:mb-3 bg-white p-2.5 md:p-3 rounded-lg border border-gray-100">
+                      <p className="font-semibold text-gray-800 text-xs md:text-sm">{major.name}</p>
+                      <div className="flex justify-between text-gray-600 mt-1 text-[11px] md:text-sm">
                         <span>Total: {major.total}</span>
                         <span>L: {major.male} | P: {major.female}</span>
                       </div>
@@ -285,21 +283,21 @@ export default function RekapSiswa({ settings }) {
       )}
 
       {/* ============================================
-          DONUT CHARTS
+          DONUT CHARTS — 2 kolom HP, 3 kolom desktop
       ============================================ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-10">
         {chartConfigs.map((chart, idx) => (
-          <div key={idx} className="flex flex-col items-center py-4">
-            <h4 className="font-bold text-gray-700 mb-6 text-center">{chart.title}</h4>
-            <div className="relative w-48 h-48 rounded-full" style={{
+          <div key={idx} className={`flex flex-col items-center py-4 ${idx === 2 ? 'col-span-2 md:col-span-1 max-w-[260px] mx-auto md:max-w-none w-full' : ''}`}>
+            <h4 className="font-bold text-gray-700 mb-4 md:mb-6 text-center text-xs md:text-sm">{chart.title}</h4>
+            <div className="relative w-36 h-36 md:w-48 md:h-48 rounded-full" style={{
               background: animateStart ? `conic-gradient(${chart.color} ${chart.percentage}%, ${chart.bgColor} ${chart.percentage}% 100%)` : `conic-gradient(${chart.bgColor} 0% 100%)`,
               transition: 'background 1.5s ease-out'
             }}>
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-gray-50 rounded-full flex flex-col items-center justify-center">
-                <p className="text-3xl font-bold text-gray-800">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 md:w-32 md:h-32 bg-gray-50 rounded-full flex flex-col items-center justify-center">
+                <p className="text-2xl md:text-3xl font-bold text-gray-800">
                   <AnimatedNumber target={chart.value} shouldStart={animateStart} duration={1800} />
                 </p>
-                <p className="text-xs text-gray-500 mt-1 font-semibold">SISWA</p>
+                <p className="text-[10px] md:text-xs text-gray-500 mt-1 font-semibold">SISWA</p>
               </div>
             </div>
           </div>

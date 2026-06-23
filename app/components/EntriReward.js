@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Trophy, Search, Award, Upload, X, CheckCircle, 
+  Trophy, Search, Award, X, CheckCircle, 
   AlertTriangle, FileText, Loader2, User, BookOpen
 } from 'lucide-react'
 import {
@@ -28,7 +28,6 @@ export default function EntriReward({ userData }) {
   
   const [selectedReward, setSelectedReward] = useState(null)
   const [catatan, setCatatan] = useState('')
-  const [buktiFile, setBuktiFile] = useState(null)
   
   const [showConfirm, setShowConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -36,7 +35,6 @@ export default function EntriReward({ userData }) {
   
   const searchRef = useRef(null)
   const dropdownRef = useRef(null)
-  const fileRef = useRef(null)
 
   useEffect(() => { getRewardCategories().then(setCategories) }, [])
 
@@ -99,7 +97,7 @@ export default function EntriReward({ userData }) {
       current_total: selectedStudent.total_reward || 0
     }
 
-    const res = await saveRewardAction(dataToSave, buktiFile)
+    const res = await saveRewardAction(dataToSave)
     if (res.error) {
       setToast({ type: 'error', message: res.error })
     } else {
@@ -107,7 +105,7 @@ export default function EntriReward({ userData }) {
       setSelectedStudent(prev => ({ ...prev, total_reward: res.newTotal }))
       const histRes = await getStudentRewardHistory(selectedStudent.nisn)
       if (histRes.data) setHistory(histRes.data)
-      setSelectedReward(null); setCatatan(''); setBuktiFile(null); setShowConfirm(false)
+      setSelectedReward(null); setCatatan(''); setShowConfirm(false)
     }
     setSaving(false)
   }
@@ -217,7 +215,7 @@ export default function EntriReward({ userData }) {
               </div>
 
               {selectedReward && (
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between animate-scaleIn">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between">
                   <div>
                     <p className="font-extrabold text-amber-700 text-lg">{selectedReward.kode} - {selectedReward.nama}</p>
                     <p className="text-amber-600 font-bold text-2xl mt-1">{selectedReward.poin} Poin</p>
@@ -229,16 +227,6 @@ export default function EntriReward({ userData }) {
               <div>
                 <label className="block text-sm font-semibold text-gray-600 mb-1">Catatan Reward</label>
                 <textarea className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none text-gray-800 h-24 resize-none" placeholder="Jelaskan prestasi atau alasan pemberian reward..." value={catatan} onChange={(e) => setCatatan(e.target.value)}></textarea>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-600 mb-1">Upload Bukti (Opsional)</label>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => fileRef.current?.click()} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-semibold text-gray-600 transition flex items-center gap-2"><Upload size={14}/> Pilih File</button>
-                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setBuktiFile(e.target.files[0])} className="hidden" />
-                  {buktiFile && <span className="text-xs text-gray-500 truncate">{buktiFile.name}</span>}
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Format: JPG, PNG, PDF (Maks 2MB)</p>
               </div>
 
               {selectedStudent && selectedReward && (
@@ -291,7 +279,7 @@ export default function EntriReward({ userData }) {
 
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowConfirm(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
             <div className="p-6 text-center">
               <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4"><Trophy size={32} className="text-amber-500"/></div>
               <h3 className="text-xl font-bold text-gray-800">Konfirmasi Reward</h3>
@@ -312,7 +300,7 @@ export default function EntriReward({ userData }) {
         </div>
       )}
 
-      <style jsx>{`
+      <style>{`
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
         .animate-scaleIn { animation: scaleIn 0.2s ease-out; }

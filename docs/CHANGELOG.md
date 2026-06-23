@@ -1,5 +1,36 @@
 # Changelog SIPANDU
 
+## 2026-06-29
+
+- Fix Portal Orang Tua: Matching Wali Kelas & Sekretaris tidak sinkron dengan kelas siswa (WK XII muncul di siswa kelas X) diganti menggunakan getPJByClass dari penanggungJawabActions.js — sumber data sama persis dengan halaman Penanggung Jawab
+- Tambah tombol hapus pesan di chat Pesan Wali Kelas Portal Orang Tua (hanya pesan dari Orang Tua, validasi sender_type, ikon muncul saat hover)
+- Tambah server action deleteParentMessage di parentPortalActions.js
+- Ubah grid Tiga Besar Peraih Poin Reward: 2 kolom di HP, 3 kolom desktop, kartu ke-3 centered di HP
+- Ubah grid Rekapitulasi Jumlah Siswa: 2 kolom di HP untuk class cards dan donut charts, item ke-3 centered di HP
+- Responsif ukuran elemen TopReward & RekapSiswa (icon, donut, font, padding menyesuaikan HP/desktop)
+- Revamp tampilan gagal GPS di Absen Hadir Mandiri: Dari toast kecil menjadi layar penuh merah dengan ikon XCircle, detail jarak vs radius, selisih meter, badge "Di Luar Jangkauan Radius", tombol "Scan Ulang QR Code"
+- Tambah spinner biru "Sedang Memvalidasi GPS..." saat proses cek lokasi setelah QR terbaca
+- Tombol "Scan Ulang" mereset state gpsFailed dan scannedResult tanpa perlu input NISN ulang
+- Fix import XCircle dari lucide-react di halaman Manajemen Siswa (sebelumnya Runtime ReferenceError saat validasi GPS di tab QR Absensi)
+
+## 2026-06-28
+
+- Fix filter Jurusan & Kelas di Rekap Kehadiran: Dropdown hardcoded 24 opsi (KL 1-4, FKK dll yang tidak ada) diganti dropdown dinamis dari database
+- Fix filter Jurusan di Rekap Sakit & Izin: Dropdown hardcoded 12 opsi (hanya sampai 2 per jurusan, KL dan FKK hilang) diganti dropdown dinamis dari database
+- Tambah kelasJurusanList di getKelasFilters() (absensiActions.js): Kombinasi unik kelas + jurusan dari tabel siswa untuk keperluan filter dropdown
+- Tambah filter Tingkat & Jurusan di halaman Rekap Pelanggaran (Wali Kelas)
+- Tambah kolom pencarian (nama, NISN, kelas) di halaman Rekap Pelanggaran
+- Tambah tombol Print PDF Per Tingkat Semua Jurusan di Rekap Pelanggaran (group by jurusan, status disiplin)
+- Tambah tombol Hapus Semua Rekap di Rekap Pelanggaran (2x konfirmasi ketik "HAPUS SEMUA")
+- Tambah server action deleteAllPelanggaran di pelanggaranActions.js
+- Stats kartu Rekap Pelanggaran dihitung ulang saat filter aktif
+- Hapus foto otomatis di Rekap Sakit & Izin dalam waktu lebih dari 1 hari
+- Menghapus fitur "Upload Bukti (Opsional)" di halaman Entri Reward
+- Menghapus fitur "Bukti Pelanggaran (Wajib Foto)" di halaman Entri Pelanggaran
+- Fix filter Jurusan di Absensi Kehadiran: Dropdown dinamis dari database (bukan hardcode 12 opsi manual)
+- Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
+- Menggunakan getKelasFilters() sama seperti Rekap Kehadiran
+
 ## 2026-06-27
 
 - Perbaikan tombol H/S/I/A di halaman Absensi Kehadiran Sekretaris (hanya update tampilan lokal, tidak langsung simpan ke DB)

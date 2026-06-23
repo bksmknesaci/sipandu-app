@@ -818,3 +818,80 @@ Admin bebas klik semua tombol tanpa batasan
 Fix: tidak ada lagi duplikasi data saat sekretaris klik tombol berkali-kali sebelum simpan
 
 Status: ACTIVE
+
+---
+
+## Rekap Kehadiran (Update)
+- Fix filter Jurusan & Kelas: Dropdown dinamis dari database (bukan hardcode manual)
+- Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
+- Hanya menampilkan jurusan yang benar-benar ada di database
+- Menggunakan getKelasFilters() dengan kelasJurusanList (kombinasi kelas + jurusan dari tabel siswa)
+
+Status: ACTIVE
+
+---
+
+## Rekap Sakit & Izin (Update)
+- Fix filter Jurusan: Dropdown dinamis dari database (bukan hardcode 12 opsi manual)
+- Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
+- Menggunakan getKelasFilters() sama seperti Rekap Kehadiran
+- Hapus foto otomatis di Rekap Sakit & Izin dalam waktu lebih dari 1 hari
+
+Status: ACTIVE
+
+---
+
+## Rekap Pelanggaran (Update)
+- Tambah filter Tingkat (dropdown dinamis dari database)
+- Tambah filter Jurusan (otomatis sesuai tingkat yang dipilih)
+- Tambah kolom pencarian (cari nama, NISN, atau kelas)
+- Kartu statistik dihitung ulang dari data terfilter (bukan data mentah)
+- Badge counter saat filter aktif ("12 dari 45 siswa")
+- Pesan empty state berbeda antara "belum ada data" vs "tidak cocok dengan filter"
+- Tombol Print PDF Per Tingkat Semua Jurusan (dikelompokkan per jurusan, dengan status disiplin)
+- Tombol Hapus Semua Rekap (2x konfirmasi: confirm + ketik "HAPUS SEMUA")
+- Tombol Reset Filter (muncul hanya saat filter aktif)
+- Tombol Refresh Data di header tabel
+
+Status: ACTIVE
+
+## Entri Reward (Update)
+- Menghapus fitur "Upload Bukti (Opsional)" di halaman Entri Reward
+
+Status: ACTIVE
+
+## Entri Pelanggaran (Update)
+- Menghapus fitur "Bukti Pelanggaran (Wajib Foto)" di halaman Entri Pelanggaran
+
+Status: ACTIVE
+
+## Absensi Kehadiran (Update)
+- Fix filter Jurusan: Dropdown dinamis dari database (bukan hardcode 12 opsi manual)
+- Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
+- Menggunakan getKelasFilters() sama seperti Rekap Kehadiran
+
+Status: ACTIVE
+
+## Portal Orang Tua (Update)
+- Fix matching Wali Kelas & Sekretaris: Gunakan getPJByClass dari penanggungJawabActions.js (sumber data sama dengan halaman Penanggung Jawab) agar 100% konsisten dan sinkron dengan database
+- Hapus pesan di chat Pesan Wali Kelas (hanya pesan dari Orang Tua, dengan validasi sender_type, tombol muncul saat hover)
+
+Status: ACTIVE
+
+## Beranda (Update)
+- Tiga Besar Peraih Poin Reward Tertinggi: Grid 2 kolom di tampilan HP, 3 kolom desktop, kartu ke-3 centered di HP
+- Rekapitulasi Jumlah Siswa: Grid 2 kolom di tampilan HP untuk class cards dan donut charts, item ke-3 centered di HP
+
+Status: ACTIVE
+
+## Absen Hadir Mandiri (Update)
+- Validasi GPS gagal: Tampilan layar penuh merah (bukan toast kecil) dengan ikon XCircle, info jarak siswa vs batas radius, selisih melebihi berapa meter, badge "Di Luar Jangkauan Radius", dan tombol "Scan Ulang QR Code"
+- Validasi GPS proses: Tampilan spinner biru "QR Terbaca! Sedang Memvalidasi GPS..." saat menunggu hasil cek lokasi
+- Tombol "Scan Ulang" mereset state tanpa perlu input NISN ulang
+
+Status: ACTIVE
+
+## Manajemen Data Siswa (Update)
+- Fix import XCircle dari lucide-react (sebelumnya menyebabkan Runtime ReferenceError di halaman QR Absensi saat validasi GPS)
+
+Status: ACTIVE

@@ -6,16 +6,9 @@ import {
   Clock, CheckCircle, Save, Lock, GraduationCap, Filter
 } from 'lucide-react'
 import {
-  getAllKelas, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
+  getAllKelas, getKelasFilters, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
   submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest
 } from '@/app/actions/absensiActions'
-
-const TINGKAT_OPTIONS = ['X', 'XI', 'XII']
-const JURUSAN_OPTIONS = [
-  'TKRO 1', 'TKRO 2', 'TKRO 3', 'TKRO 4', 'DKV 1', 'DKV 2', 'DKV 3', 'DKV 4',
-  'RPL 1', 'RPL 2', 'RPL 3', 'RPL 4', 'PH 1', 'PH 2', 'PH 3', 'PH 4',
-  'KL 1', 'KL 2', 'KL 3', 'KL 4', 'LPKKK 1', 'LPKKK 2', 'LPKKK 3', 'LPKKK 4',
-]
 
 function CountUp({ end, duration = 1000 }) {
   const [count, setCount] = useState(0)
@@ -60,6 +53,7 @@ const badgeConfig = {
 export default function AbsensiKehadiran() {
   const [userData, setUserData] = useState(null)
   const [kelasList, setKelasList] = useState([])
+  const [kelasJurusanList, setKelasJurusanList] = useState([])
   const [selectedTingkat, setSelectedTingkat] = useState('')
   const [selectedJurusan, setSelectedJurusan] = useState('')
   const [selectedKelas, setSelectedKelas] = useState('')
@@ -102,6 +96,13 @@ export default function AbsensiKehadiran() {
   useEffect(() => { try { const stored = localStorage.getItem('userData'); if (stored) setUserData(JSON.parse(stored)) } catch {} }, [])
   useEffect(() => { const init = async () => { setLoading(true); const kelasRes = await getAllKelas(); if (kelasRes.kelas) setKelasList(kelasRes.kelas); setLoading(false) }; init() }, [])
   useEffect(() => {
+    const fetchFilters = async () => {
+      const res = await getKelasFilters()
+      if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList)
+    }
+    fetchFilters()
+  }, [])
+  useEffect(() => {
     if (userData && userData.role === 'Sekretaris Kelas' && userData.kelas) {
       const parsed = parseKelasJurusan(userData.kelas); setSelectedTingkat(parsed.tingkat); setSelectedJurusan(parsed.jurusan); setSelectedKelas(userData.kelas); setKelasNotFound(false)
     }
@@ -115,6 +116,10 @@ export default function AbsensiKehadiran() {
 
   const handleTingkatChange = (val) => { setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
   const handleJurusanChange = (val) => { setSelectedJurusan(val) }
+  const tingkatOptions = [...new Set(kelasJurusanList.map(c => c.kelas))].sort()
+const jurusanOptions = selectedTingkat
+  ? [...new Set(kelasJurusanList.filter(c => c.kelas === selectedTingkat).map(c => c.jurusan))].sort()
+  : [...new Set(kelasJurusanList.map(c => c.jurusan))].sort()
 
   useEffect(() => {
     const checkTime = () => {
@@ -261,8 +266,8 @@ export default function AbsensiKehadiran() {
           <div className="flex items-center gap-2"><Filter size={18} className="text-gray-500"/><span className="text-sm font-semibold text-gray-700">Filter:</span></div>
           {isAdmin ? (
             <>
-              <select value={selectedTingkat} onChange={e => handleTingkatChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px]"><option value="">Tingkat</option>{TINGKAT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
-              <select value={selectedJurusan} onChange={e => handleJurusanChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[150px]"><option value="">Jurusan</option>{JURUSAN_OPTIONS.map(j => <option key={j} value={j}>{j}</option>)}</select>
+              <select value={selectedTingkat} onChange={e => handleTingkatChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px]"><option value="">Tingkat</option>{tingkatOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+              <select value={selectedJurusan} onChange={e => handleJurusanChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[150px]"><option value="">Jurusan</option>{jurusanOptions.map(j => <option key={j} value={j}>{j}</option>)}</select>
               {selectedKelas && <span className="text-xs text-blue-600 font-bold bg-blue-50 px-3 py-1.5 rounded-lg">✅ {selectedKelas}</span>}
               {kelasNotFound && selectedKelas && <span className="text-xs text-red-500 font-bold bg-red-50 px-3 py-1.5 rounded-lg">❌ Tidak ada siswa di kelas ini</span>}
             </>

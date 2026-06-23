@@ -6,7 +6,7 @@ import { getQRSettings, saveQRSettings, getQRStats } from '@/app/actions/qrAbsen
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Users, School, Award, UserCheck, UserX, Plus, Download, Upload, Printer,
-  QrCode, Search, Filter, Edit3, Trash2, X, CheckCircle, AlertTriangle,
+  QrCode, Search, Filter, Edit3, Trash2, X, CheckCircle, XCircle, AlertTriangle,
   MapPin, Clock, Shield, RefreshCw, Eye, EyeOff, Settings, Save, ChevronLeft, ChevronRight,
   GraduationCap, ArrowUpCircle, Crosshair, Lock, Unlock, Loader2
 } from 'lucide-react';

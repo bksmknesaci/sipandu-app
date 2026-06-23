@@ -60,7 +60,7 @@ export default function TopReward() {
           <div className="h-8 bg-gray-200 rounded w-1/2"></div>
           <div className="flex-grow h-1 bg-gray-200 rounded-full"></div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
           {Array.from({length: 3}).map((_, i) => <div key={i} className="h-64 bg-gray-100 rounded-xl"></div>)}
         </div>
       </div>
@@ -82,46 +82,48 @@ export default function TopReward() {
       
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <h2 className="text-2xl font-bold text-gray-800 whitespace-nowrap">Tiga Besar Peraih Poin Reward Tertinggi</h2>
+        <h2 className="text-lg md:text-2xl font-bold text-gray-800 whitespace-nowrap">Tiga Besar Peraih Poin Reward</h2>
         <div className="flex-grow h-1 bg-orange-500 rounded-full"></div>
       </div>
 
       {/* Kartu Peringkat */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {topSiswa.map((siswa) => {
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+        {topSiswa.map((siswa, idx) => {
           const percentage = Math.min((siswa.poin / siswa.maxPoin) * 100, 100); // Cap di 100%
           const deg = mounted ? (percentage / 100) * 360 : 0;
+          const isLastInRow = idx === 2;
 
           return (
             <div 
               key={siswa.rank} 
-              className="group bg-white border-2 rounded-xl p-6 flex flex-col items-center relative hover:-translate-y-2 hover:shadow-xl transition-all duration-300"
+              className={`group bg-white border-2 rounded-xl p-4 md:p-6 flex flex-col items-center relative hover:-translate-y-2 hover:shadow-xl transition-all duration-300 ${isLastInRow ? 'col-span-2 md:col-span-1 max-w-[260px] mx-auto md:max-w-none w-full' : ''}`}
               style={{ borderColor: siswa.theme.color }}
             >
               {/* Nomor Peringkat */}
               <div 
-                className="absolute -top-3 -left-3 w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md z-10"
+                className="absolute -top-3 -left-3 w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-md z-10"
                 style={{ backgroundColor: siswa.theme.color }}
               >
                 {siswa.rank}
               </div>
 
               {/* Icon Siswa (Animasi Melayang) */}
-              <div className="animate-float mb-4 mt-2">
+              <div className="animate-float mb-3 md:mb-4 mt-2">
                 <div 
-                  className="w-16 h-16 rounded-full flex items-center justify-center border-2"
+                  className="w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center border-2"
                   style={{ borderColor: siswa.theme.ring, backgroundColor: siswa.theme.bg }}
                 >
-                  <GraduationCap size={32} style={{ color: siswa.theme.color }} />
+                  <GraduationCap size={24} className="md:hidden" style={{ color: siswa.theme.color }} />
+                  <GraduationCap size={32} className="hidden md:block" style={{ color: siswa.theme.color }} />
                 </div>
               </div>
 
               {/* Nama & Kelas */}
-              <h4 className="font-bold text-gray-800 text-center text-sm leading-tight">{siswa.nama}</h4>
-              <p className="text-xs text-gray-500 mb-5">{siswa.kelas}</p>
+              <h4 className="font-bold text-gray-800 text-center text-xs md:text-sm leading-tight">{siswa.nama}</h4>
+              <p className="text-[10px] md:text-xs text-gray-500 mb-3 md:mb-5">{siswa.kelas}</p>
 
               {/* Diagram Lingkaran Poin (Donut Chart) */}
-              <div className="relative w-28 h-28 mb-5 group-hover:scale-105 transition-transform duration-300">
+              <div className="relative w-24 h-24 md:w-28 md:h-28 mb-3 md:mb-5 group-hover:scale-105 transition-transform duration-300">
                 
                 {/* Wrapper yang berputar */}
                 <div className="absolute inset-0 rounded-full animate-spin-slow">
@@ -132,14 +134,14 @@ export default function TopReward() {
                 </div>
 
                 {/* Tengah Donut (Diam/Tidak Berputar) */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-white rounded-full flex flex-col items-center justify-center z-10 shadow-inner">
-                  <p className="text-xl font-bold text-gray-800">{siswa.poin}</p>
-                  <p className="text-[10px] text-gray-500 font-bold tracking-wider">POIN</p>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 md:w-20 md:h-20 bg-white rounded-full flex flex-col items-center justify-center z-10 shadow-inner">
+                  <p className="text-lg md:text-xl font-bold text-gray-800">{siswa.poin}</p>
+                  <p className="text-[8px] md:text-[10px] text-gray-500 font-bold tracking-wider">POIN</p>
                 </div>
               </div>
 
               {/* Badge Penghargaan */}
-              <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-4 py-1.5 rounded-full text-center">
+              <span className="bg-gray-100 text-gray-600 text-[10px] md:text-xs font-semibold px-3 md:px-4 py-1 md:py-1.5 rounded-full text-center">
                 {siswa.penghargaan}
               </span>
 

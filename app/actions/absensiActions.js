@@ -1,7 +1,13 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getWaliKelasUserId, createNotification } from '@/app/actions/notificationActions';
+import {
+  getWaliKelasUserId,
+  getSekretarisUserId,
+  getAdminUserIds,
+  createNotificationWithAdminCC,
+  notifyWaliKelasSakitIzin,
+} from '@/app/actions/notificationActions';
 
 export async function getAllKelas() {
   const { data, error } = await supabaseAdmin.from('siswa').select('kelas').not('kelas', 'is', null)
@@ -14,10 +20,23 @@ export async function getKelasFilters() {
   const tingkat = ['X', 'XI', 'XII']
   const jurusan = ['TKRO', 'DKV', 'RPL', 'PH', 'KL', 'LPKKK']
   const nomor = ['1', '2', '3', '4']
-  const { data, error } = await supabaseAdmin.from('siswa').select('kelas').not('kelas', 'is', null)
+  const { data, error } = await supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null)
   const kelasSet = new Set()
-  if (!error && data) { data.forEach(s => { if (s.kelas) kelasSet.add(s.kelas.trim()) }) }
-  return { kelas: [...kelasSet].sort(), tingkat, jurusan, nomor }
+  const kelasJurusanList = []
+  const kelasJurusanSet = new Set()
+  if (!error && data) {
+    data.forEach(s => {
+      if (s.kelas) kelasSet.add(s.kelas.trim())
+      if (s.jurusan) {
+        const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
+        if (!kelasJurusanSet.has(combo)) {
+          kelasJurusanSet.add(combo)
+          kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim(), full: combo })
+        }
+      }
+    })
+  }
+  return { kelas: [...kelasSet].sort(), tingkat, jurusan, nomor, kelasJurusanList }
 }
 
 export async function getSiswaByKelas(kelas, jurusan) {
@@ -87,12 +106,10 @@ export async function getAbsentStudentsForDashboard(tanggal) {
 }
 
 export async function submitAbsensi(tanggal, kelas, jurusan, records = null) {
-  // Jika ada records dari lokal, simpan dulu sebelum mengunci
   if (records && records.length > 0) {
     const { error } = await supabaseAdmin.from('absensi').upsert(records, { onConflict: 'siswa_id,tanggal' })
     if (error) return { error: error.message }
   }
-  // Kunci semua record kelas tersebut
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
@@ -123,8 +140,11 @@ export async function getEditRequests(status = 'pending') {
 }
 
 export async function approveEditRequest(requestId, adminId, kelas, jurusan, tanggal) {
+  // 1. Update status request
   const { error: reqError } = await supabaseAdmin.from('absensi_edit_requests').update({ status: 'approved', approved_by: adminId, updated_at: new Date().toISOString() }).eq('id', requestId)
   if (reqError) return { error: reqError.message }
+
+  // 2. Unlock absensi kelas tersebut
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
@@ -132,78 +152,125 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
   const { error: unlockError } = await supabaseAdmin.from('absensi').update({ locked: false, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)
   if (unlockError) return { error: unlockError.message }
 
-  // ── Kirim notifikasi ke Sekretaris ──
+  // 3. Kirim notifikasi ke Sekretaris + Admin CC
   try {
-    const { data: reqData } = await supabaseAdmin.from('absensi_edit_requests').select('user_id, kelas, jurusan, tanggal').eq('id', requestId).single();
+    const { data: reqData } = await supabaseAdmin
+      .from('absensi_edit_requests')
+      .select('user_id, kelas, jurusan, tanggal')
+      .eq('id', requestId)
+      .maybeSingle();
+
     if (reqData) {
+      // Notifikasi ke Sekretaris (pakai Admin CC otomatis)
       const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
       if (sekId) {
-        await createNotification({
+        console.log(`[approveEdit] Kirim notifikasi ke Sekretaris id=${sekId}`);
+        await createNotificationWithAdminCC({
           userId: sekId,
           title: '✅ Revisi Absensi Disetujui',
-          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal}. Sekarang sekarang bisa mengedit data absensi.`,
+          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal}. Anda sekarang bisa mengedit data absensi.`,
           type: 'attendance_revision',
           priority: 'SUCCESS',
           referenceType: 'attendance_revision',
-          referenceId: requestId,
+          referenceId: String(requestId),
           actionUrl: '/absensi',
+          skipAdmin: true, // sudah dikirim terpisah di bawah
         });
+      } else {
+        console.log(`[approveEdit] Sekretaris TIDAK DITEMUKAN untuk kelas="${reqData.kelas}" jurusan="${reqData.jurusan}"`);
       }
-      const { data: reqUser } = await supabaseAdmin.from('users').select('role, kelas').eq('id', reqData.user_id).single();
-      if (reqUser && reqUser.role === 'Wali Kelas' && reqUser.id !== adminId) {
-        await createNotification({
+
+      // Notifikasi ke pemohon (jika Wali Kelas dan bukan admin sendiri)
+      const { data: reqUser } = await supabaseAdmin
+        .from('users')
+        .select('id, role, kelas')  // FIX: tambah 'id' di select
+        .eq('id', reqData.user_id)
+        .maybeSingle();
+
+      if (reqUser && reqUser.role === 'Wali Kelas' && String(reqUser.id) !== String(adminId)) {
+        console.log(`[approveEdit] Kirim notifikasi ke WK pemohon id=${reqUser.id}`);
+        await createNotificationWithAdminCC({
           userId: reqUser.id,
           title: '✅ Revisi Absensi Disetujui',
           message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}.`,
           type: 'attendance_revision',
           priority: 'SUCCESS',
           referenceType: 'attendance_revision',
-          referenceId: requestId,
+          referenceId: String(requestId),
           actionUrl: '/rekap-kehadiran',
+          skipAdmin: true, // sudah dikirim terpisah di bawah
         });
       }
     }
-  } catch (notifErr) { console.error('Gagal kirim notifikasi:', notifErr); }
+  } catch (notifErr) {
+    console.error('[approveEdit] Gagal kirim notifikasi:', notifErr);
+  }
 
   return { success: true }
 }
 
 export async function rejectEditRequest(requestId, adminId) {
-  // ── Kirim notifikasi ke Sekretaris ──
+  // 1. Kirim notifikasi SEBELUM update status (agar data request masih lengkap)
   try {
-    const { data: reqData } = await supabaseAdmin.from('absensi_edit_requests').select('user_id, kelas, jurusan, tanggal, reason').eq('id', requestId).single();
+    const { data: reqData } = await supabaseAdmin
+      .from('absensi_edit_requests')
+      .select('user_id, kelas, jurusan, tanggal, reason')
+      .eq('id', requestId)
+      .maybeSingle();
+
     if (reqData) {
+      // Notifikasi ke Sekretaris
       const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
       if (sekId) {
-        await createNotification({
+        console.log(`[rejectEdit] Kirim notifikasi ke Sekretaris id=${sekId}`);
+        await createNotificationWithAdminCC({
           userId: sekId,
           title: '❌ Revisi Absensi Ditolak',
           message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal}. Alasan: ${reqData.reason || '-'}`,
           type: 'attendance_revision',
           priority: 'DANGER',
           referenceType: 'attendance_revision',
-          referenceId: requestId,
+          referenceId: String(requestId),
           actionUrl: '/absensi',
+          skipAdmin: true,
         });
+      } else {
+        console.log(`[rejectEdit] Sekretaris TIDAK DITEMUKAN untuk kelas="${reqData.kelas}" jurusan="${reqData.jurusan}"`);
       }
-      const { data: reqUser } = await supabaseAdmin.from('users').select('role, kelas').eq('id', reqData.user_id).single();
-      if (reqUser && reqUser.role === 'Wali Kelas' && reqUser.id !== adminId) {
-        await createNotification({
+
+      // Notifikasi ke pemohon (jika Wali Kelas dan bukan admin sendiri)
+      const { data: reqUser } = await supabaseAdmin
+        .from('users')
+        .select('id, role, kelas')  // FIX: tambah 'id' di select
+        .eq('id', reqData.user_id)
+        .maybeSingle();
+
+      if (reqUser && reqUser.role === 'Wali Kelas' && String(reqUser.id) !== String(adminId)) {
+        console.log(`[rejectEdit] Kirim notifikasi ke WK pemohon id=${reqUser.id}`);
+        await createNotificationWithAdminCC({
           userId: reqUser.id,
           title: '❌ Revisi Absensi Ditolak',
           message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}. Alasan: ${reqData.reason || '-'}`,
           type: 'attendance_revision',
           priority: 'DANGER',
           referenceType: 'attendance_revision',
-          referenceId: requestId,
+          referenceId: String(requestId),
           actionUrl: '/rekap-kehadiran',
+          skipAdmin: true,
         });
       }
     }
-  } catch (notifErr) { console.error('Gagal kirim notif:', notifErr); }
+  } catch (notifErr) {
+    console.error('[rejectEdit] Gagal kirim notifikasi:', notifErr);
+  }
 
-  const { error } = await supabaseAdmin.from('absensi_edit_requests').update({ status: 'rejected', approved_by: adminId, updated_at: new Date().toISOString() }).eq('id', requestId)
-  if (error) return { error: error.message }; return { success: true }
+  // 2. Update status request
+  const { error } = await supabaseAdmin
+    .from('absensi_edit_requests')
+    .update({ status: 'rejected', approved_by: adminId, updated_at: new Date().toISOString() })
+    .eq('id', requestId);
+  if (error) return { error: error.message };
+  return { success: true }
 }
 
 export async function checkPendingRequest(userId, tanggal) {
@@ -246,22 +313,20 @@ export async function submitSakitIzin(formData) {
   const { error: absensiError } = await supabaseAdmin.from('absensi').upsert({ siswa_id: siswaData.id, tanggal: formData.tanggal, status: formData.jenis_absensi, input_by: 'Sakit/Izin Online', locked: true, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' })
   if (absensiError) return { error: "Gagal sinkronisasi ke tabel absensi utama: " + absensiError.message }
 
-  // ── Kirim notifikasi ke Wali Kelas ──
+  // ── Kirim notifikasi ke Wali Kelas + Admin CC ──
   try {
-    const waliId = await getWaliKelasUserId(formData.kelas, formData.jurusan);
-    if (waliId) {
-      await createNotification({
-        userId: waliId,
-        title: `🤒 Pengajuan ${formData.jenis_absensi} Baru`,
-        message: `${formData.nama_siswa} (${formData.kelas} ${formData.jurusan}) mengajukan ${formData.jenis_absensi.toLowerCase()}.`,
-        type: 'sick_permission',
-        priority: formData.jenis_absensi === 'Sakit' ? 'WARNING' : 'INFO',
-        referenceType: 'sick_permission',
-        referenceId: siswaData.id,
-        actionUrl: '/wali-kelas/rekap-sakit-izin',
-      });
-    }
-  } catch (notifErr) { console.error('Gagal kirim notifikasi WK:', notifErr); }
+    console.log(`[submitSakitIzin] Cari WK untuk kelas="${formData.kelas}" jurusan="${formData.jurusan}"`);
+    await notifyWaliKelasSakitIzin({
+      siswaNama: formData.nama_siswa,
+      kelas: formData.kelas,
+      jurusan: formData.jurusan,
+      jenisAbsensi: formData.jenis_absensi,
+      siswaId: siswaData.id,
+    });
+    console.log('[submitSakitIzin] Notifikasi WK terkirim');
+  } catch (notifErr) {
+    console.error('[submitSakitIzin] Gagal kirim notifikasi WK:', notifErr);
+  }
 
   return { success: true }
 }
@@ -323,4 +388,71 @@ export async function getSiswaByNISN(nisn) {
   if (!data.nisn && data.nis) data.nisn = data.nis
 
   return { data }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CLEANUP: Hapus foto bukti sakit/izin yang lebih dari 1 hari
+// ═══════════════════════════════════════════════════════════════
+function extractStoragePath(url) {
+  if (!url) return null
+  try {
+    const match = url.match(/\/storage\/v1\/object\/public\/bukti-sakit-izin\/(.+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+export async function cleanupOldBuktiSakitIzin() {
+  try {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const cutoff = yesterday.toISOString()
+
+    // Cari record yang sudah lebih dari 1 hari dan punya foto
+    const { data: oldRecords, error: queryError } = await supabaseAdmin
+      .from('tb_absensi_sakit_izin')
+      .select('id, foto_bukti')
+      .not('foto_bukti', 'is', null)
+      .lt('created_at', cutoff)
+      .limit(100)
+
+    if (queryError || !oldRecords || oldRecords.length === 0) {
+      return { deleted: 0 }
+    }
+
+    let deletedCount = 0
+    const idsToUpdate = []
+
+    for (const record of oldRecords) {
+      const path = extractStoragePath(record.foto_bukti)
+      if (path) {
+        const { error: deleteError } = await supabaseAdmin.storage
+          .from('bukti-sakit-izin')
+          .remove([path])
+
+        if (!deleteError) {
+          idsToUpdate.push(record.id)
+          deletedCount++
+        }
+      }
+    }
+
+    // Kosongkan kolom foto_bukti di database untuk file yang berhasil dihapus
+    if (idsToUpdate.length > 0) {
+      await supabaseAdmin
+        .from('tb_absensi_sakit_izin')
+        .update({ foto_bukti: null })
+        .in('id', idsToUpdate)
+    }
+
+    if (deletedCount > 0) {
+      console.log(`[cleanupBukti] ${deletedCount} file foto lama dihapus dari storage`)
+    }
+
+    return { deleted: deletedCount }
+  } catch (err) {
+    console.error('[cleanupBukti] Error:', err)
+    return { deleted: 0 }
+  }
 }

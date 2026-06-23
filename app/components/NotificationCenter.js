@@ -65,10 +65,15 @@ export default function NotificationCenter({ userId }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [markingAll, setMarkingAll] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState(null);
   const panelRef = useRef(null);
   const bellRef = useRef(null);
   const channelRef = useRef(null);
   const [shaking, setShaking] = useState(false);
+  const isOpenRef = useRef(false);
+
+  // ── Sinkron ref ──
+  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
 
   // ── Fetch awal ──
   const fetchData = useCallback(async () => {
@@ -121,15 +126,103 @@ export default function NotificationCenter({ userId }) {
     return () => clearInterval(iv);
   }, [unreadCount]);
 
-  // ── Click outside ──
+  // ── Toggle: hitung posisi dropdown ──
+  const handleToggle = useCallback(() => {
+    if (!isOpenRef.current) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      if (vw < 768) {
+        // ══ MOBILE: posisi hardcoded di atas layar ══
+        // Tidak pakai getBoundingClientRect() karena bisa salah
+        // pada header dengan transform/stacking context
+        setDropdownStyle({
+          position: 'fixed',
+          top: '8px',
+          left: '8px',
+          right: '8px',
+          bottom: 'auto',
+          width: 'auto',
+          maxHeight: `${vh - 16}px`,
+        });
+      } else {
+        // ══ DESKTOP: posisi di bawah tombol lonceng ══
+        if (bellRef.current) {
+          const rect = bellRef.current.getBoundingClientRect();
+          const availableHeight = vh - rect.bottom - 16;
+          setDropdownStyle({
+            position: 'fixed',
+            top: `${rect.bottom + 8}px`,
+            left: 'auto',
+            right: `${Math.max(8, vw - rect.right)}px`,
+            bottom: 'auto',
+            width: `${Math.min(400, vw - 16)}px`,
+            maxHeight: `${Math.max(220, Math.min(availableHeight, 520))}px`,
+          });
+        } else {
+          // Fallback jika bellRef belum ready
+          setDropdownStyle({
+            position: 'fixed',
+            top: '56px',
+            right: '8px',
+            bottom: 'auto',
+            width: '400px',
+            maxHeight: '520px',
+          });
+        }
+      }
+    }
+    setIsOpen(prev => !prev);
+  }, []);
+
+  // ── Click outside (mouse + touch) ──
   useEffect(() => {
     function handleClickOutside(e) {
-      if (panelRef.current && !panelRef.current.contains(e.target) && bellRef.current && !bellRef.current.contains(e.target)) {
+      if (
+        panelRef.current && !panelRef.current.contains(e.target) &&
+        bellRef.current && !bellRef.current.contains(e.target)
+      ) {
         setIsOpen(false);
       }
     }
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (isOpen) {
+      // Delay sedikit agar click toggle tidak langsung tertutup
+      const timer = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside, { passive: true });
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('touchstart', handleClickOutside);
+      };
+    }
+  }, [isOpen]);
+
+  // ── Tutup saat scroll (mobile) ──
+  useEffect(() => {
+    if (!isOpen) return;
+    let scrollTimeout;
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => setIsOpen(false), 150);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      clearTimeout(scrollTimeout);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isOpen]);
+
+  // ── Tutup saat resize ──
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleResize = () => {
+      setIsOpen(false);
+      setDropdownStyle(null);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [isOpen]);
 
   // ── Actions ──
@@ -175,7 +268,7 @@ export default function NotificationCenter({ userId }) {
       {/* ── BELL BUTTON ── */}
       <button
         ref={bellRef}
-        onClick={() => setIsOpen(prev => !prev)}
+        onClick={handleToggle}
         className="relative p-2 rounded-lg hover:bg-slate-800 transition-colors text-gray-300 hover:text-white"
         title="Notifikasi"
       >
@@ -187,11 +280,20 @@ export default function NotificationCenter({ userId }) {
         )}
       </button>
 
-      {/* ── DESKTOP DROPDOWN ── */}
+      {/* ── BACKDROP (mobile only) ── */}
       {isOpen && (
         <div
+          className="fixed inset-0 bg-black/40 z-[9997]"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      {/* ── DROPDOWN PANEL ── */}
+      {isOpen && dropdownStyle && (
+        <div
           ref={panelRef}
-          className="hidden md:block absolute right-4 top-full mt-2 w-[400px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden notif-scaleIn"
+          className="bg-white rounded-2xl shadow-2xl border border-gray-100 z-[9998] overflow-hidden notif-scaleIn flex flex-col"
+          style={dropdownStyle}
         >
           <NotificationPanelContent
             notifications={filtered}
@@ -208,31 +310,6 @@ export default function NotificationCenter({ userId }) {
           />
         </div>
       )}
-
-      {/* ── MOBILE BOTTOM SHEET ── */}
-      <div className={`md:hidden fixed inset-0 z-50 transition-all duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-        <div className="absolute inset-0 bg-black/50" onClick={() => setIsOpen(false)} />
-        <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[85vh] flex flex-col transition-transform duration-300 ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}>
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 bg-gray-300 rounded-full" />
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <NotificationPanelContent
-              notifications={filtered}
-              unreadCount={unreadCount}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onMarkAllRead={handleMarkAllRead}
-              onMarkOneRead={handleMarkOneRead}
-              onAction={handleAction}
-              onDeleteAll={handleDeleteAll}
-              markingAll={markingAll}
-              loading={loading}
-              userId={userId}
-            />
-          </div>
-        </div>
-      </div>
 
       <style>{`
         @keyframes notifBellShake {
@@ -254,7 +331,7 @@ export default function NotificationCenter({ userId }) {
   );
 }
 
-// ─── Panel Content (dipakai ulang desktop & mobile) ─────────────
+// ─── Panel Content ─────────────────────────────────────────────
 function NotificationPanelContent({
   notifications,
   unreadCount,
@@ -286,9 +363,9 @@ function NotificationPanelContent({
   }
 
   return (
-    <div className="flex flex-col max-h-[70vh]">
+    <div className="flex flex-col overflow-hidden" style={{ maxHeight: 'inherit' }}>
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Bell size={18} className="text-gray-700" />
@@ -311,7 +388,7 @@ function NotificationPanelContent({
           </div>
         </div>
         {/* Tabs */}
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {TABS.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${activeTab === tab.key ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}>
@@ -369,7 +446,7 @@ function NotificationPanelContent({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-gray-100 px-4 py-2.5">
+      <div className="border-t border-gray-100 px-4 py-2.5 shrink-0">
         <button onClick={() => { window.location.href = '/notifikasi'; }}
           className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-800 py-1.5 rounded-lg hover:bg-blue-50 transition">
           Lihat Semua Notifikasi →

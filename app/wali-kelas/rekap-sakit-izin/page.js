@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HeartPulse, CheckCircle, XCircle, Eye, ImageOff, AlertTriangle, X, RefreshCw, Loader2, MapPin, ExternalLink, Filter, Users, Clock, Frown } from 'lucide-react'
-import { getSakitIzinWaliKelas, verifySakitIzin, getAllKelas } from '@/app/actions/absensiActions'
+import { getSakitIzinWaliKelas, verifySakitIzin, getKelasFilters, cleanupOldBuktiSakitIzin } from '@/app/actions/absensiActions'
 
 function CountUp({ end, duration = 800 }) {
   const [count, setCount] = useState(0)
@@ -34,7 +34,7 @@ export default function RekapSakitIzinWali() {
   // Filter States
   const [tingkatFilter, setTingkatFilter] = useState('')
   const [jurusanFilter, setJurusanFilter] = useState('')
-  const [kelasList, setKelasList] = useState([])
+  const [kelasJurusanList, setKelasJurusanList] = useState([])
 
   useEffect(() => {
     const stored = localStorage.getItem('userData')
@@ -50,11 +50,24 @@ export default function RekapSakitIzinWali() {
   }, [])
 
   useEffect(() => {
-    const fetchKelas = async () => {
-      const res = await getAllKelas()
-      if (res.kelas) setKelasList(res.kelas)
+    const fetchFilters = async () => {
+      const res = await getKelasFilters()
+      if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList)
     }
-    fetchKelas()
+    fetchFilters()
+  }, [])
+
+  useEffect(() => {
+    const fetchFilters = async () => {
+      const res = await getKelasFilters()
+      if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList)
+    }
+    fetchFilters()
+  }, [])
+
+  // Cleanup foto bukti lama (>1 hari) — berjalan silent di background
+  useEffect(() => {
+    cleanupOldBuktiSakitIzin()
   }, [])
 
   const fetchData = async () => {
@@ -152,7 +165,12 @@ export default function RekapSakitIzinWali() {
             </select>
             <select value={jurusanFilter} onChange={e => setJurusanFilter(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[150px]">
               <option value="">Semua Jurusan</option>
-              {['TKRO 1', 'TKRO 2', 'DKV 1', 'DKV 2', 'RPL 1', 'RPL 2', 'PH 1', 'PH 2', 'KL 1', 'KL 2', 'LPKKK 1', 'LPKKK 2'].map(j => <option key={j} value={j}>{j}</option>)}
+              {(() => {
+  const opts = tingkatFilter
+    ? [...new Set(kelasJurusanList.filter(c => c.kelas === tingkatFilter).map(c => c.jurusan))].sort()
+    : [...new Set(kelasJurusanList.map(c => c.jurusan))].sort()
+  return opts.map(j => <option key={j} value={j}>{j}</option>)
+})()}
             </select>
             
             {/* Tombol Reset Filter */}

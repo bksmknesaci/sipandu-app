@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle } from 'lucide-react'
+import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle, MapPin } from 'lucide-react'
 import { getSiswaByNISN, submitAbsenMandiri, checkQRScanToday } from '@/app/actions/absensiActions'
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000
@@ -18,6 +18,8 @@ export default function AbsenHadirMandiri() {
   const [loading, setLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [toast, setToast] = useState(null)
+  const [isValidating, setIsValidating] = useState(false)
+  const [gpsFailed, setGpsFailed] = useState(null)
 
   // Waktu
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -64,6 +66,8 @@ export default function AbsenHadirMandiri() {
     setLoading(true)
     setSiswa(null)
     setIsSubmitted(false)
+    setGpsFailed(null)
+    setScannedResult('')
     
     const res = await getSiswaByNISN(nisnInput)
     if (res.data) {
@@ -76,6 +80,7 @@ export default function AbsenHadirMandiri() {
 
   const startCamera = async () => {
     setScannedResult('')
+    setGpsFailed(null)
     setIsCameraOpen(true)
     
     const { Html5Qrcode } = await import('html5-qrcode')
@@ -107,6 +112,11 @@ export default function AbsenHadirMandiri() {
     setIsCameraOpen(false)
   }
 
+  const handleCobaLagi = () => {
+    setGpsFailed(null)
+    setScannedResult('')
+  }
+
   const validateAndSubmit = async (qrText) => {
     if (!siswa) return
     
@@ -136,7 +146,7 @@ export default function AbsenHadirMandiri() {
 
     // VALIDASI GPS RADIUS (skip untuk Admin)
     if (!isAdmin) {
-      setLoading(true)
+      setIsValidating(true)
       try {
         const { getQRSettings } = await import('@/app/actions/qrAbsensiActions')
         const { settings: qrSet } = await getQRSettings()
@@ -150,14 +160,15 @@ export default function AbsenHadirMandiri() {
           })
           const dist = haversineDistance(lat, lng, position.coords.latitude, position.coords.longitude)
           if (dist > radius) {
-            setToast({ type: 'error', message: `❌ Absensi ditolak! Jarak Anda ${Math.round(dist)} meter dari titik sekolah (batas radius ${Math.round(radius)} meter). Dekatkan ke area sekolah.` })
-            setLoading(false)
+            setIsValidating(false)
+            setGpsFailed({ distance: Math.round(dist), radius: Math.round(radius) })
             return
           }
         }
       } catch (gpsErr) {
         console.warn('GPS validation skipped:', gpsErr)
       }
+      setIsValidating(false)
     }
 
     setLoading(true)
@@ -202,12 +213,54 @@ export default function AbsenHadirMandiri() {
           <p className="text-gray-500 mt-2">Absen Hadir Mandiri hanya dapat dilakukan pukul 06:00 WIB s.d. 09:04 WIB.</p>
         </div>
       ) : isSubmitted ? (
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-          <ShieldCheck size={64} className="mx-auto text-emerald-500 mb-4"/>
-          <h2 className="text-2xl font-bold text-gray-800">Absensi Berhasil!</h2>
-          <p className="text-gray-500 mt-2">Anda telah dicatat <span className="font-bold text-emerald-600">HADIR</span> hari ini.</p>
+        /* ===== LAYAR SUKSES ===== */
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
+            <ShieldCheck size={64} className="text-emerald-500"/>
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-800">Absensi Berhasil!</h2>
+          <p className="text-gray-500 mt-2">{siswa?.nama} telah dicatat <span className="font-bold text-emerald-600">HADIR</span> hari ini.</p>
           <div className="mt-4 inline-flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
             <CheckCircle size={16} className="text-emerald-600"/> <span className="text-sm font-bold text-emerald-700">QR Mandiri Terverifikasi</span>
+          </div>
+        </div>
+      ) : gpsFailed ? (
+        /* ===== LAYAR GAGAL GPS ===== */
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+            <XCircle size={64} className="text-red-500"/>
+          </div>
+          <h2 className="text-2xl font-extrabold text-red-600">Gagal Absen!</h2>
+          <p className="text-gray-500 mt-2">Posisi Anda berada di luar jangkauan radius sekolah.</p>
+
+          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
+            <div className="flex items-center justify-center gap-3">
+              <MapPin size={20} className="text-red-500 flex-shrink-0"/>
+              <p className="text-sm text-gray-700">Jarak Anda: <span className="font-extrabold text-red-600 text-lg">{gpsFailed.distance} meter</span></p>
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-5 h-5 rounded-full border-2 border-red-400 border-dashed flex items-center justify-center flex-shrink-0">
+                <div className="w-2 h-2 rounded-full bg-red-400"></div>
+              </div>
+              <p className="text-sm text-gray-700">Batas Radius: <span className="font-extrabold text-red-600 text-lg">{gpsFailed.radius} meter</span></p>
+            </div>
+            <div className="pt-2 border-t border-red-200">
+              <p className="text-xs text-red-500 font-semibold">⚠️ Anda melampaui {(gpsFailed.distance - gpsFailed.radius)} meter dari batas radius</p>
+            </div>
+          </div>
+
+          <div className="mt-5 inline-flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-200">
+            <XCircle size={16} className="text-red-600"/> <span className="text-sm font-bold text-red-700">Di Luar Jangkauan Radius</span>
+          </div>
+
+          <div className="mt-6">
+            <button
+              onClick={handleCobaLagi}
+              className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 mx-auto"
+            >
+              <Camera size={18}/> Scan Ulang QR Code
+            </button>
+            <p className="text-xs text-gray-400 mt-3">Dekatkan diri ke area sekolah, lalu coba scan kembali.</p>
           </div>
         </div>
       ) : (
@@ -254,7 +307,15 @@ export default function AbsenHadirMandiri() {
                   </div>
                 ) : null}
 
-                {scannedResult && !isSubmitted && (
+                {scannedResult && isValidating && !gpsFailed && !isSubmitted && (
+                  <div className="p-5 bg-blue-50 border border-blue-200 rounded-xl text-center mt-4">
+                    <Loader2 className="text-blue-600 mx-auto mb-2 animate-spin" size={32}/>
+                    <p className="font-bold text-blue-800">QR Terbaca! Sedang Memvalidasi GPS...</p>
+                    <p className="text-xs text-blue-500 mt-1">Mohon tunggu, sedang memeriksa lokasi Anda</p>
+                  </div>
+                )}
+
+                {scannedResult && !isValidating && !gpsFailed && !isSubmitted && (
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center mt-4">
                     <CheckCircle className="text-emerald-600 mx-auto mb-2" size={32}/>
                     <p className="font-bold text-emerald-800">QR Terbaca & Sedang Divalidasi!</p>

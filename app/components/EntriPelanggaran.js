@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { AlertTriangle, Search, Upload, X, CheckCircle, Loader2, User, Camera } from 'lucide-react'
+import { AlertTriangle, Search, X, CheckCircle, Loader2, User } from 'lucide-react'
 import { searchStudentsForPelanggaran, getKategoriPelanggaran, savePelanggaranAction } from '@/app/actions/pelanggaranActions'
 
 const getStatusDisiplin = (poin) => {
@@ -21,8 +21,6 @@ export default function EntriPelanggaran({ userData }) {
   const [kategoriList, setKategoriList] = useState({})
   const [formData, setFormData] = useState({ kategori: '', jenis_pelanggaran: '', poin: 0, tanggal: new Date().toLocaleDateString('sv-SE'), waktu: new Date().toTimeString().slice(0,5), lokasi: '', kronologi: '' })
   const [filteredJenis, setFilteredJenis] = useState([])
-  const [buktiFile, setBuktiFile] = useState(null)
-  const [buktiPreview, setBuktiPreview] = useState(null)
   
   const [showConfirm, setShowConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -30,7 +28,6 @@ export default function EntriPelanggaran({ userData }) {
   
   const searchRef = useRef(null)
   const dropdownRef = useRef(null)
-  const fileRef = useRef(null)
 
   useEffect(() => { getKategoriPelanggaran().then(setKategoriList) }, [])
   useEffect(() => {
@@ -62,11 +59,6 @@ export default function EntriPelanggaran({ userData }) {
     })
   }
 
-  const handleBuktiChange = (e) => {
-    const file = e.target.files[0]; if (!file) return
-    setBuktiFile(file); setBuktiPreview(URL.createObjectURL(file))
-  }
-
   const handleSave = async () => {
     if (!selectedStudent || !formData.kategori || !formData.jenis_pelanggaran) { setToast({ type: 'error', message: 'Data tidak lengkap!' }); return }
     setSaving(true)
@@ -77,12 +69,12 @@ export default function EntriPelanggaran({ userData }) {
       dicatat_oleh: userData?.nama || 'System', role_pencatat: userData?.role || 'Unknown',
       current_total_pelanggaran: selectedStudent.total_pelanggaran || 0, current_total_reward: selectedStudent.total_reward || 0
     }
-    const res = await savePelanggaranAction(dataToSave, buktiFile)
+    const res = await savePelanggaranAction(dataToSave)
     if (res.error) { setToast({ type: 'error', message: res.error }) } 
     else {
       setToast({ type: 'success', message: `Pelanggaran berhasil dicatat! Poin reward dikurangi ${formData.kategori === 'Berat' ? 5 : formData.kategori === 'Sedang' ? 2 : 1}.` })
       setSelectedStudent(prev => ({ ...prev, total_pelanggaran: res.newTotalPelanggaran, total_reward: res.newTotalReward }))
-      setFormData({ kategori: '', jenis_pelanggaran: '', poin: 0, tanggal: new Date().toLocaleDateString('sv-SE'), waktu: new Date().toTimeString().slice(0,5), lokasi: '', kronologi: '' }); setBuktiFile(null); setBuktiPreview(null); setShowConfirm(false)
+      setFormData({ kategori: '', jenis_pelanggaran: '', poin: 0, tanggal: new Date().toLocaleDateString('sv-SE'), waktu: new Date().toTimeString().slice(0,5), lokasi: '', kronologi: '' }); setShowConfirm(false)
     }
     setSaving(false)
   }
@@ -182,14 +174,6 @@ export default function EntriPelanggaran({ userData }) {
                 <label className="block text-sm font-semibold text-gray-600 mb-1">Kronologi <span className="text-red-500">*</span></label>
                 <textarea name="kronologi" value={formData.kronologi} onChange={handleInputChange} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:outline-none text-gray-800 h-24 resize-none" placeholder="Jelaskan kronologi kejadian..."></textarea>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-600 mb-1">Bukti Pelanggaran (Wajib Foto)</label>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => fileRef.current?.click()} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-semibold text-gray-600 transition flex items-center gap-2"><Camera size={14}/> Ambil Foto</button>
-                  <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleBuktiChange} className="hidden" />
-                  {buktiPreview && <img src={buktiPreview} alt="Bukti" className="h-16 w-16 object-cover rounded-lg border"/>}
-                </div>
-              </div>
               <button onClick={() => setShowConfirm(true)} disabled={!selectedStudent || !formData.kategori || !formData.jenis_pelanggaran || saving} className="w-full py-3.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl font-bold text-sm hover:from-red-600 hover:to-rose-700 transition disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                 <AlertTriangle size={18}/> ⚠️ Simpan Pelanggaran
               </button>
@@ -200,7 +184,7 @@ export default function EntriPelanggaran({ userData }) {
 
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowConfirm(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn p-6 text-center" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
             <AlertTriangle className="mx-auto text-red-500 mb-4" size={40}/>
             <h3 className="font-bold text-lg text-gray-800">Konfirmasi Pelanggaran</h3>
             <p className="text-sm text-gray-500 mt-2">Catat pelanggaran <span className="font-bold text-red-500">{formData.jenis_pelanggaran}</span> kepada <span className="font-bold">{selectedStudent?.nama}</span>?</p>
@@ -211,7 +195,9 @@ export default function EntriPelanggaran({ userData }) {
           </div>
         </div>
       )}
-      <style jsx>{`@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-scaleIn { animation: scaleIn 0.2s ease-out; }`}</style>
+      <style>{`
+        @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+      `}</style>
     </div>
   )
 }

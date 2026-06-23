@@ -142,3 +142,12 @@ export async function getStudentDetailPelanggaran(nisn) {
   const { data: pelanggaran } = await supabaseAdmin.from('tb_pelanggaran_siswa').select('*').eq('nisn', nisn).order('tanggal', { ascending: false })
   return { siswa, pelanggaran }
 }
+
+export async function deleteAllPelanggaran() {
+  const { error } = await supabaseAdmin
+    .from('tb_pelanggaran_siswa')
+    .delete()
+    .gte('id', 1)
+  if (error) return { error: error.message }
+  return { success: true }
+}
