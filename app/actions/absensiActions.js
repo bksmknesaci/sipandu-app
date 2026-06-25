@@ -129,15 +129,7 @@ export async function isAbsensiSubmitted(tanggal, kelas, jurusan) {
   return { submitted: allHaveStatus && allLocked }
 }
 
-export async function createEditRequest(userId, kelas, jurusan, tanggal, reason) {
-  const { data, error } = await supabaseAdmin.from('absensi_edit_requests').insert([{ user_id: userId, kelas, jurusan, tanggal, reason, status: 'pending' }]).select().single()
-  if (error) return { error: error.message }; return { success: true, data }
-}
 
-export async function getEditRequests(status = 'pending') {
-  const { data, error } = await supabaseAdmin.from('absensi_edit_requests').select('*').eq('status', status).order('created_at', { ascending: false })
-  if (error) return { data: [], error: error.message }; return { data: data || [] }
-}
 
 export async function approveEditRequest(requestId, adminId, kelas, jurusan, tanggal) {
   // 1. Update status request
@@ -152,7 +144,7 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
   const { error: unlockError } = await supabaseAdmin.from('absensi').update({ locked: false, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)
   if (unlockError) return { error: unlockError.message }
 
-  // 3. Kirim notifikasi ke Sekretaris + Admin CC
+  // 3. Kirim notifikasi ke pemohon (Sekretaris/WK)
   try {
     const { data: reqData } = await supabaseAdmin
       .from('absensi_edit_requests')
@@ -161,45 +153,28 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
       .maybeSingle();
 
     if (reqData) {
-      // Notifikasi ke Sekretaris (pakai Admin CC otomatis)
-      const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
-      if (sekId) {
-        console.log(`[approveEdit] Kirim notifikasi ke Sekretaris id=${sekId}`);
-        await createNotificationWithAdminCC({
-          userId: sekId,
+      const requestorRole = await getRoleByUserId(reqData.user_id);
+      let targetId = reqData.user_id;
+      
+      // Jika pemohon adalah Sekretaris, cari ID Sekretaris kelas yang sama
+      if (requestorRole === 'Sekretaris Kelas') {
+        const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
+        if (sekId) targetId = sekId;
+      }
+      
+      if (targetId && String(targetId) !== String(adminId)) {
+        const { createNotification } = await import('@/app/actions/notificationActions');
+        await createNotification({
+          userId: targetId,
           title: '✅ Revisi Absensi Disetujui',
-          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal}. Anda sekarang bisa mengedit data absensi.`,
+          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''}. Anda sekarang bisa mengedit data absensi.`,
           type: 'attendance_revision',
           priority: 'SUCCESS',
           referenceType: 'attendance_revision',
           referenceId: String(requestId),
           actionUrl: '/absensi',
-          skipAdmin: true, // sudah dikirim terpisah di bawah
         });
-      } else {
-        console.log(`[approveEdit] Sekretaris TIDAK DITEMUKAN untuk kelas="${reqData.kelas}" jurusan="${reqData.jurusan}"`);
-      }
-
-      // Notifikasi ke pemohon (jika Wali Kelas dan bukan admin sendiri)
-      const { data: reqUser } = await supabaseAdmin
-        .from('users')
-        .select('id, role, kelas')  // FIX: tambah 'id' di select
-        .eq('id', reqData.user_id)
-        .maybeSingle();
-
-      if (reqUser && reqUser.role === 'Wali Kelas' && String(reqUser.id) !== String(adminId)) {
-        console.log(`[approveEdit] Kirim notifikasi ke WK pemohon id=${reqUser.id}`);
-        await createNotificationWithAdminCC({
-          userId: reqUser.id,
-          title: '✅ Revisi Absensi Disetujui',
-          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}.`,
-          type: 'attendance_revision',
-          priority: 'SUCCESS',
-          referenceType: 'attendance_revision',
-          referenceId: String(requestId),
-          actionUrl: '/rekap-kehadiran',
-          skipAdmin: true, // sudah dikirim terpisah di bawah
-        });
+        console.log(`[approveEdit] Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
       }
     }
   } catch (notifErr) {
@@ -210,7 +185,7 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
 }
 
 export async function rejectEditRequest(requestId, adminId) {
-  // 1. Kirim notifikasi SEBELUM update status (agar data request masih lengkap)
+  // 1. Kirim notifikasi SEBELUM update status
   try {
     const { data: reqData } = await supabaseAdmin
       .from('absensi_edit_requests')
@@ -219,45 +194,27 @@ export async function rejectEditRequest(requestId, adminId) {
       .maybeSingle();
 
     if (reqData) {
-      // Notifikasi ke Sekretaris
-      const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
-      if (sekId) {
-        console.log(`[rejectEdit] Kirim notifikasi ke Sekretaris id=${sekId}`);
-        await createNotificationWithAdminCC({
-          userId: sekId,
+      const requestorRole = await getRoleByUserId(reqData.user_id);
+      let targetId = reqData.user_id;
+      
+      if (requestorRole === 'Sekretaris Kelas') {
+        const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
+        if (sekId) targetId = sekId;
+      }
+      
+      if (targetId && String(targetId) !== String(adminId)) {
+        const { createNotification } = await import('@/app/actions/notificationActions');
+        await createNotification({
+          userId: targetId,
           title: '❌ Revisi Absensi Ditolak',
-          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal}. Alasan: ${reqData.reason || '-'}`,
+          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''}. Alasan: ${reqData.reason || '-'}`,
           type: 'attendance_revision',
           priority: 'DANGER',
           referenceType: 'attendance_revision',
           referenceId: String(requestId),
           actionUrl: '/absensi',
-          skipAdmin: true,
         });
-      } else {
-        console.log(`[rejectEdit] Sekretaris TIDAK DITEMUKAN untuk kelas="${reqData.kelas}" jurusan="${reqData.jurusan}"`);
-      }
-
-      // Notifikasi ke pemohon (jika Wali Kelas dan bukan admin sendiri)
-      const { data: reqUser } = await supabaseAdmin
-        .from('users')
-        .select('id, role, kelas')  // FIX: tambah 'id' di select
-        .eq('id', reqData.user_id)
-        .maybeSingle();
-
-      if (reqUser && reqUser.role === 'Wali Kelas' && String(reqUser.id) !== String(adminId)) {
-        console.log(`[rejectEdit] Kirim notifikasi ke WK pemohon id=${reqUser.id}`);
-        await createNotificationWithAdminCC({
-          userId: reqUser.id,
-          title: '❌ Revisi Absensi Ditolak',
-          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan}. Alasan: ${reqData.reason || '-'}`,
-          type: 'attendance_revision',
-          priority: 'DANGER',
-          referenceType: 'attendance_revision',
-          referenceId: String(requestId),
-          actionUrl: '/rekap-kehadiran',
-          skipAdmin: true,
-        });
+        console.log(`[rejectEdit] Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
       }
     }
   } catch (notifErr) {
@@ -455,4 +412,10 @@ export async function cleanupOldBuktiSakitIzin() {
     console.error('[cleanupBukti] Error:', err)
     return { deleted: 0 }
   }
+}
+
+async function getRoleByUserId(userId) {
+  if (!userId) return null
+  const { data } = await supabaseAdmin.from('users').select('role').eq('id', userId).maybeSingle()
+  return data?.role || null
 }

@@ -7,6 +7,8 @@ import {
 import {
   getPindahKeluarData, getPindahKeluarStats, getSiswaPenangananDetail, getPenangananFilters
 } from '@/app/actions/penangananActions';
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 
 function CountUp({ end, duration = 1200 }) {
   const [count, setCount] = useState(0);
@@ -79,8 +81,10 @@ export default function RekapPindahKeluar() {
     link.click();
   };
 
-  const handlePrint = () => {
-    const w = window.open('', '_blank');
+  const handlePrint = async () => {
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
+
     const rowsHtml = data.map((d, idx) => `
       <tr>
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${idx + 1}</td>
@@ -94,9 +98,11 @@ export default function RekapPindahKeluar() {
       </tr>
     `).join('');
 
+    const w = window.open('', '_blank');
     w.document.write(`<html><head><title>Rekap Pindah & Keluar</title>
       <style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#e5e7eb;border:1px solid #ccc;padding:8px;font-weight:bold;text-align:center}</style>
     </head><body>
+      ${kopHTML}
       <h2 style="text-align:center;margin-bottom:5px">REKAP PINDAH & KELUAR SISWA</h2>
       <p style="text-align:center;color:#666;margin-bottom:20px;font-size:12px">SIPANDU - Dicetak pada ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       <table><thead><tr><th>No</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>L/P</th><th>Status</th><th>Tgl Keputusan</th><th>Alasan</th></tr></thead><tbody>${rowsHtml}</tbody></table>

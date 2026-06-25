@@ -1,8 +1,9 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle, MapPin } from 'lucide-react'
+import { UserCheck, Search, Camera, CheckCircle, XCircle, Loader2, ShieldCheck, QrCode, X, Clock, AlertTriangle, MapPin, RefreshCw } from 'lucide-react'
 import { getSiswaByNISN, submitAbsenMandiri, checkQRScanToday } from '@/app/actions/absensiActions'
+
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -41,7 +42,6 @@ export default function AbsenHadirMandiri() {
     if (stored) setUser(JSON.parse(stored))
   }, [])
 
-  // FIX: Batasan waktu 06:00 - 09:04 WIB (sama seperti Absen Sakit & Izin)
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date()
@@ -68,7 +68,7 @@ export default function AbsenHadirMandiri() {
     setIsSubmitted(false)
     setGpsFailed(null)
     setScannedResult('')
-    
+
     const res = await getSiswaByNISN(nisnInput)
     if (res.data) {
       setSiswa(res.data)
@@ -82,7 +82,7 @@ export default function AbsenHadirMandiri() {
     setScannedResult('')
     setGpsFailed(null)
     setIsCameraOpen(true)
-    
+
     const { Html5Qrcode } = await import('html5-qrcode')
     const html5QrCode = new Html5Qrcode("qr-reader")
     html5QrCodeRef.current = html5QrCode
@@ -119,58 +119,92 @@ export default function AbsenHadirMandiri() {
 
   const validateAndSubmit = async (qrText) => {
     if (!siswa) return
-    
-    // CEK DUPLIKAT: Siswa hanya boleh scan QR 1x per hari
+
+    // ── CEK 1: Duplikat scan QR hari ini ──
     const scanCheck = await checkQRScanToday(nisnInput)
     if (scanCheck.alreadyScanned) {
       setToast({ type: 'error', message: '❌ Anda sudah scan QR hari ini. Scan QR hanya bisa dilakukan 1x per hari.' })
       return
     }
-    
+
+    // ── CEK 2: QR harus sesuai kelas siswa ──
     const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
     let kelasFromQR = ""
-    
     try {
       const qrData = JSON.parse(qrText)
-      if (qrData.kelas_id) {
-        kelasFromQR = qrData.kelas_id.replace(/-/g, ' ')
-      }
+      if (qrData.kelas_id) kelasFromQR = qrData.kelas_id.replace(/-/g, ' ')
     } catch (e) {
       kelasFromQR = qrText
     }
-    
+
     if (kelasFromQR !== fullKelasSiswa) {
       setToast({ type: 'error', message: `Gagal! QR ini untuk kelas ${kelasFromQR}, sedangkan Anda siswa kelas ${fullKelasSiswa}.` })
       return
     }
 
-    // VALIDASI GPS RADIUS (skip untuk Admin)
+    // ── CEK 3: Validasi GPS Radius — WAJIB jika sudah diatur, TIDAK ADA silent skip ──
     if (!isAdmin) {
       setIsValidating(true)
+
+      // 3a. Ambil pengaturan GPS dari database
+      let gpsLat, gpsLng, gpsRadius, gpsConfigured = false
       try {
         const { getQRSettings } = await import('@/app/actions/qrAbsensiActions')
-        const { settings: qrSet } = await getQRSettings()
-        const lat = parseFloat(qrSet?.gps_latitude)
-        const lng = parseFloat(qrSet?.gps_longitude)
-        const radius = parseFloat(qrSet?.gps_radius)
-        
-        if (!isNaN(lat) && !isNaN(lng) && !isNaN(radius) && radius > 0) {
+        const settingsResult = await getQRSettings()
+        // Handle berbagai kemungkinan format return
+        const qrSet = settingsResult?.settings || settingsResult?.data || settingsResult
+        gpsLat = parseFloat(qrSet?.gps_latitude)
+        gpsLng = parseFloat(qrSet?.gps_longitude)
+        gpsRadius = parseFloat(qrSet?.gps_radius)
+        gpsConfigured = !isNaN(gpsLat) && !isNaN(gpsLng) && !isNaN(gpsRadius) && gpsRadius > 0
+        console.log('[GPS] Settings loaded:', { gpsLat, gpsLng, gpsRadius, gpsConfigured })
+      } catch (err) {
+        console.error('[GPS] Gagal memuat pengaturan GPS:', err)
+      }
+
+      // 3b. Jika GPS sudah diatur → validasi WAJIB, tidak bisa dilewati
+      if (gpsConfigured) {
+        try {
           const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 0
+            })
           })
-          const dist = haversineDistance(lat, lng, position.coords.latitude, position.coords.longitude)
-          if (dist > radius) {
+
+          const dist = haversineDistance(gpsLat, gpsLng, position.coords.latitude, position.coords.longitude)
+          console.log('[GPS] Jarak:', dist, 'meter | Radius:', gpsRadius, 'meter')
+
+          if (dist > gpsRadius) {
+            // ❌ DI LUAR RADIUS → TOLAK ABSENSI
             setIsValidating(false)
-            setGpsFailed({ distance: Math.round(dist), radius: Math.round(radius) })
+            setGpsFailed({
+              distance: dist,
+              radius: Math.round(gpsRadius),
+              gpsError: false
+            })
             return
           }
+          // ✅ Dalam radius → lanjut ke submit
+
+        } catch (gpsErr) {
+          // ❌ GPS TIDAK BISA DIAKSES → TOLAK (karena pengaturan GPS sudah diatur)
+          console.error('[GPS] Gagal mendapatkan posisi:', gpsErr.message)
+          setIsValidating(false)
+          setGpsFailed({
+            distance: null,
+            radius: Math.round(gpsRadius),
+            gpsError: true
+          })
+          return
         }
-      } catch (gpsErr) {
-        console.warn('GPS validation skipped:', gpsErr)
       }
+
       setIsValidating(false)
     }
 
+    // ── SUBMIT: Lolos semua validasi ──
     setLoading(true)
     const res = await submitAbsenMandiri(nisnInput, todayStr, fullKelasSiswa)
     if (res.success) {
@@ -190,6 +224,7 @@ export default function AbsenHadirMandiri() {
         </div>
       )}
 
+      {/* ===== HEADER ===== */}
       <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-2xl text-white shadow-xl">
         <div className="flex justify-between items-start">
           <div>
@@ -205,69 +240,96 @@ export default function AbsenHadirMandiri() {
         </div>
       </div>
 
-      {/* FIX: Tampilan waktu ditutup / belum dibuka */}
+      {/* ===== WAKTU DITUTUP / BELUM DIBUKA ===== */}
       {!isWithinTime && !isAdmin ? (
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
           <AlertTriangle size={48} className="mx-auto text-amber-500 mb-3"/>
           <h2 className="text-xl font-bold text-gray-800">{timeMessage === 'Belum Dibuka' ? '⏳ Absensi Belum Dibuka' : '❌ Waktu Absensi Telah Berakhir'}</h2>
           <p className="text-gray-500 mt-2">Absen Hadir Mandiri hanya dapat dilakukan pukul 06:00 WIB s.d. 09:04 WIB.</p>
         </div>
+
+      /* ===== BERHASIL ===== */
       ) : isSubmitted ? (
-        /* ===== LAYAR SUKSES ===== */
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center">
-          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
-            <ShieldCheck size={64} className="text-emerald-500"/>
+          <div className="w-28 h-28 mx-auto mb-5 rounded-full bg-emerald-100 flex items-center justify-center border-4 border-emerald-200">
+            <ShieldCheck size={72} className="text-emerald-500"/>
           </div>
           <h2 className="text-2xl font-extrabold text-gray-800">Absensi Berhasil!</h2>
           <p className="text-gray-500 mt-2">{siswa?.nama} telah dicatat <span className="font-bold text-emerald-600">HADIR</span> hari ini.</p>
-          <div className="mt-4 inline-flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
+          <div className="mt-5 inline-flex items-center gap-2 bg-emerald-50 px-5 py-2.5 rounded-full border border-emerald-200">
             <CheckCircle size={16} className="text-emerald-600"/> <span className="text-sm font-bold text-emerald-700">QR Mandiri Terverifikasi</span>
           </div>
         </div>
-      ) : gpsFailed ? (
-        /* ===== LAYAR GAGAL GPS ===== */
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-red-200 text-center">
-          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
-            <XCircle size={64} className="text-red-500"/>
-          </div>
-          <h2 className="text-2xl font-extrabold text-red-600">Gagal Absen!</h2>
-          <p className="text-gray-500 mt-2">Posisi Anda berada di luar jangkauan radius sekolah.</p>
 
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-center gap-3">
-              <MapPin size={20} className="text-red-500 flex-shrink-0"/>
-              <p className="text-sm text-gray-700">Jarak Anda: <span className="font-extrabold text-red-600 text-lg">{gpsFailed.distance} meter</span></p>
-            </div>
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-5 h-5 rounded-full border-2 border-red-400 border-dashed flex items-center justify-center flex-shrink-0">
-                <div className="w-2 h-2 rounded-full bg-red-400"></div>
-              </div>
-              <p className="text-sm text-gray-700">Batas Radius: <span className="font-extrabold text-red-600 text-lg">{gpsFailed.radius} meter</span></p>
-            </div>
-            <div className="pt-2 border-t border-red-200">
-              <p className="text-xs text-red-500 font-semibold">⚠️ Anda melampaui {(gpsFailed.distance - gpsFailed.radius)} meter dari batas radius</p>
-            </div>
+      /* ===== GAGAL GPS: DI LUAR RADIUS ===== */
+      ) : gpsFailed && !gpsFailed.gpsError ? (
+        <div className="bg-white p-8 rounded-2xl shadow-sm border-2 border-red-200 text-center">
+          {/* Ikon X merah besar */}
+          <div className="w-28 h-28 mx-auto mb-5 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-200">
+            <XCircle size={72} className="text-white"/>
           </div>
 
-          <div className="mt-5 inline-flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-200">
-            <XCircle size={16} className="text-red-600"/> <span className="text-sm font-bold text-red-700">Di Luar Jangkauan Radius</span>
+          {/* Judul */}
+          <h2 className="text-2xl font-extrabold text-gray-800">Absensi Ditolak!</h2>
+
+          {/* Pesan lokasi */}
+          <p className="text-red-600 font-bold text-lg mt-3">Lokasi Anda DI LUAR radius</p>
+
+          {/* Detail jarak */}
+          <div className="mt-5 bg-red-50 border border-red-200 rounded-xl p-5">
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <MapPin size={18} className="text-red-500 flex-shrink-0"/>
+              <p className="text-sm">Jarak: <span className="font-extrabold text-red-600 text-lg">{gpsFailed.distance?.toFixed(1)} meter</span> dari titik tengah Radius.</p>
+            </div>
+            <div className="mt-3 pt-3 border-t border-red-100 text-xs text-red-500 text-center">
+              Batas radius yang ditentukan: <span className="font-bold">{gpsFailed.radius} meter</span> — Anda melebihi <span className="font-bold">{Math.round(gpsFailed.distance - gpsFailed.radius)} meter</span>
+            </div>
           </div>
 
-          <div className="mt-6">
+          {/* Badge */}
+          <div className="mt-5 inline-flex items-center gap-2 bg-red-50 px-5 py-2.5 rounded-full border border-red-200">
+            <AlertTriangle size={16} className="text-red-500"/> <span className="text-sm font-bold text-red-600">QR Tidak Terverifikasi</span>
+          </div>
+
+          {/* Tombol coba lagi */}
+          <div className="mt-7">
             <button
               onClick={handleCobaLagi}
               className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 mx-auto"
             >
-              <Camera size={18}/> Scan Ulang QR Code
+              <RefreshCw size={18}/> Coba Lagi
             </button>
-            <p className="text-xs text-gray-400 mt-3">Dekatkan diri ke area sekolah, lalu coba scan kembali.</p>
+            <p className="text-xs text-gray-400 mt-3">Dekatkan diri ke lingkungan sekolah, lalu scan ulang QR Code.</p>
           </div>
         </div>
+
+      /* ===== GAGAL GPS: TIDAK BISA DIAKSES ===== */
+      ) : gpsFailed && gpsFailed.gpsError ? (
+        <div className="bg-white p-8 rounded-2xl shadow-sm border-2 border-amber-200 text-center">
+          <div className="w-28 h-28 mx-auto mb-5 rounded-full bg-amber-100 flex items-center justify-center border-4 border-amber-200">
+            <AlertTriangle size={72} className="text-amber-500"/>
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-800">Gagal Mendapatkan Lokasi!</h2>
+          <p className="text-gray-500 mt-3">Sistem tidak dapat mengakses GPS perangkat Anda. Pastikan izin lokasi sudah diaktifkan di browser.</p>
+          <div className="mt-5 inline-flex items-center gap-2 bg-amber-50 px-5 py-2.5 rounded-full border border-amber-200">
+            <AlertTriangle size={16} className="text-amber-500"/> <span className="text-sm font-bold text-amber-600">GPS Tidak Tersedia</span>
+          </div>
+          <div className="mt-7">
+            <button
+              onClick={handleCobaLagi}
+              className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2 mx-auto"
+            >
+              <RefreshCw size={18}/> Coba Lagi
+            </button>
+            <p className="text-xs text-gray-400 mt-3">Aktifkan izin lokasi di pengaturan browser, lalu coba lagi.</p>
+          </div>
+        </div>
+
+      /* ===== FORM UTAMA ===== */
       ) : (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
           <div>
             <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Search size={18}/> Langkah 1: Cari Data Siswa</h3>
-            {/* FIX: flex-col di HP, flex-row di SM ke atas */}
             <form onSubmit={handleVerifyNISN} className="flex flex-col sm:flex-row gap-3">
               <input type="text" value={nisnInput} onChange={(e) => setNisnInput(e.target.value)} placeholder="Masukkan NISN Anda..." className="w-full sm:flex-1 p-3 border border-gray-200 rounded-xl text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
               <button type="submit" disabled={!nisnInput || loading} className="w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
@@ -290,7 +352,7 @@ export default function AbsenHadirMandiri() {
 
               <div className="border-t pt-6">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><QrCode size={18}/> Langkah 2: Scan QR Code Kelas</h3>
-                
+
                 {!isCameraOpen && !scannedResult ? (
                   <button onClick={startCamera} disabled={loading} className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-500/30 hover:shadow-xl transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
                     <Camera size={20}/> BUKA KAMERA & SCAN QR
@@ -307,18 +369,12 @@ export default function AbsenHadirMandiri() {
                   </div>
                 ) : null}
 
+                {/* Sedang validasi GPS */}
                 {scannedResult && isValidating && !gpsFailed && !isSubmitted && (
                   <div className="p-5 bg-blue-50 border border-blue-200 rounded-xl text-center mt-4">
                     <Loader2 className="text-blue-600 mx-auto mb-2 animate-spin" size={32}/>
-                    <p className="font-bold text-blue-800">QR Terbaca! Sedang Memvalidasi GPS...</p>
-                    <p className="text-xs text-blue-500 mt-1">Mohon tunggu, sedang memeriksa lokasi Anda</p>
-                  </div>
-                )}
-
-                {scannedResult && !isValidating && !gpsFailed && !isSubmitted && (
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center mt-4">
-                    <CheckCircle className="text-emerald-600 mx-auto mb-2" size={32}/>
-                    <p className="font-bold text-emerald-800">QR Terbaca & Sedang Divalidasi!</p>
+                    <p className="font-bold text-blue-800">QR Terbaca! Sedang Memvalidasi Lokasi GPS...</p>
+                    <p className="text-xs text-blue-500 mt-1">Mohon tunggu, sedang memeriksa posisi Anda terhadap radius sekolah</p>
                   </div>
                 )}
               </div>

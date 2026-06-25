@@ -41,7 +41,22 @@ export default function EntriPelanggaran({ userData }) {
     else { setSearchResults([]); setShowDropdown(false) }
   }, [userData])
 
-  const selectStudent = (student) => { setSelectedStudent(student); setSearchTerm(student.nama); setShowDropdown(false) }
+  const selectStudent = async (student) => {
+    setSelectedStudent(student)
+    setSearchTerm(student.nama)
+    setShowDropdown(false)
+
+    // Ambil nama Wali Kelas dari sumber data yang sama dengan halaman Penanggung Jawab
+    try {
+      const { getPJByClass } = await import('@/app/actions/penanggungJawabActions')
+      const pj = await getPJByClass(student.kelas, student.jurusan)
+      if (pj?.wali?.nama) {
+        setSelectedStudent(prev => ({ ...prev, wali_kelas: pj.wali.nama }))
+      }
+    } catch (e) {
+      console.warn('[EntriPelanggaran] Gagal ambil Wali Kelas:', e)
+    }
+  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -124,7 +139,7 @@ export default function EntriPelanggaran({ userData }) {
                 <h3 className="text-lg font-extrabold text-gray-800">{selectedStudent.nama}</h3>
                 <p className="text-xs text-gray-500 mt-1">NISN: {selectedStudent.nisn} • {selectedStudent.kelas} {selectedStudent.jurusan}</p>
                 <div className="grid grid-cols-2 gap-4 w-full mt-5 text-xs font-semibold text-gray-600 bg-gray-50 p-3 rounded-xl">
-                  <div><span className="block text-gray-400 font-normal">Wali Kelas</span>{selectedStudent.wali_kelas}</div>
+                  <div><span className="block text-gray-400 font-normal">Wali Kelas</span>{selectedStudent.wali_kelas || '-'}</div>
                   <div><span className="block text-gray-400 font-normal">Total Reward</span>{selectedStudent.total_reward || 0}</div>
                 </div>
                 <div className="mt-4 w-full p-4 bg-red-50 rounded-xl border border-red-100">
@@ -175,7 +190,7 @@ export default function EntriPelanggaran({ userData }) {
                 <textarea name="kronologi" value={formData.kronologi} onChange={handleInputChange} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:outline-none text-gray-800 h-24 resize-none" placeholder="Jelaskan kronologi kejadian..."></textarea>
               </div>
               <button onClick={() => setShowConfirm(true)} disabled={!selectedStudent || !formData.kategori || !formData.jenis_pelanggaran || saving} className="w-full py-3.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl font-bold text-sm hover:from-red-600 hover:to-rose-700 transition disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                <AlertTriangle size={18}/> ⚠️ Simpan Pelanggaran
+                <AlertTriangle size={18}/> Simpan Pelanggaran
               </button>
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { 
-  Trophy, Star, TrendingUp, Users, Filter, X, Download, Trash2, Eye, GraduationCap, AlertTriangle 
+  Trophy, Star, TrendingUp, Users, Filter, X, Download, Trash2, Eye, GraduationCap, AlertTriangle, Printer
 } from 'lucide-react'
 
 import { 
@@ -12,8 +12,10 @@ import {
 
 import { 
   getRekapRewardStats, getChartData, getRekapRewardTable, 
-  getStudentDetailReward, deleteRewardAction, getTopRewardStudents 
+  getStudentDetailReward, deleteRewardAction, getTopRewardStudents, deleteAllRewardAction
 } from '@/app/actions/rewardActions'
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 const rankThemes = [
@@ -98,6 +100,12 @@ export default function RekapRewardAdmin() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [mounted, setMounted] = useState(false)
 
+  // Hapus Semua
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false)
+  const [deleteAllStep, setDeleteAllStep] = useState(1)
+  const [deleteAllText, setDeleteAllText] = useState('')
+  const [deletingAll, setDeletingAll] = useState(false)
+
   useEffect(() => {
     setMounted(true)
     fetchData()
@@ -138,6 +146,105 @@ export default function RekapRewardAdmin() {
     if (res.error) alert(res.error)
     setShowDeleteConfirm(null)
     fetchData()
+  }
+
+  // ── Hapus Semua Data ──
+  const handleDeleteAllStep1 = () => {
+    setDeleteAllStep(1)
+    setDeleteAllText('')
+    setShowDeleteAllModal(true)
+  }
+
+  const handleDeleteAllStep2 = () => {
+    setDeleteAllStep(2)
+    setDeleteAllText('')
+  }
+
+  const handleConfirmDeleteAll = async () => {
+    if (deleteAllStep === 2 && deleteAllText !== 'HAPUS SEMUA') return
+    setDeletingAll(true)
+    const res = await deleteAllRewardAction()
+    if (res.error) {
+      alert(res.error)
+    } else {
+      setShowDeleteAllModal(false)
+      fetchData()
+    }
+    setDeletingAll(false)
+  }
+
+  // ── Print PDF ──
+  const handlePrintPDF = async () => {
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
+    const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    const filterInfo = filters.kelas || filters.jurusan ? `Kelas: ${filters.kelas}${filters.kelas && filters.jurusan ? ' / ' : ''}${filters.jurusan}` : 'Semua Data'
+
+    const rowsHtml = tableData.map((s, idx) => {
+      const st = getStatusBadge(s.total_reward)
+      return `<tr>
+        <td style="border:1px solid #000;padding:6px;text-align:center">${idx + 1}</td>
+        <td style="border:1px solid #000;padding:6px;font-size:10px">${s.nisn || '—'}</td>
+        <td style="border:1px solid #000;padding:6px;font-size:10px;font-weight:bold">${s.nama}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center">${s.kelas} ${s.jurusan}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:right;font-weight:bold;color:#1e3a5f;font-size:14px">${s.total_reward}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center"><span style="background:${st.cls};padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;">${st.label}</span></td>
+        <td style="border:1px solid #000;padding:6px;font-size:10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.last_reward_nama || '-'}</td>
+      </tr>`
+    }).join('')
+
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>Rekapitulasi Poin Reward</title>
+    <style>
+      @page { size: A4 landscape; margin: 15mm; }
+      body { font-family: Arial, sans-serif; padding: 0; margin: 20px; font-size: 11px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+      th { background: #e5e7eb; border: 1px solid #000; padding: 6px; font-weight: bold; text-align: center; font-size: 10px; }
+      @media print { body { margin: 0; } }
+    </style></head><body>
+      ${kopHTML}
+      <div style="text-align:center;">
+        <h3 style="margin:0;font-size:14px;text-transform:uppercase;">REKAPITULASI POIN REWARD SISWA</h3>
+        <p style="margin:2px 0 0 0;font-size:11px;color:#555;">${today}</p>
+        <p style="margin:2px 0 0 0;font-size:11px;">${filterInfo}</p>
+      </div>
+
+      <div style="display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap;">
+        <div style="border:1px solid #ddd;border-radius:8px;padding:10px 18px;min-width:120px;">
+          <div style="font-size:20px;font-weight:bold;color:#1e3a5f;">${stats.totalSiswaDapatReward || 0}</div>
+          <div style="font-size:9px;color:#888;text-transform:uppercase;">Siswa Berpoint</div>
+        </div>
+        <div style="border:1px solid #ddd;border-radius:8px;padding:10px 18px;min-width:120px;">
+          <div style="font-size:20px;font-weight:bold;color:#b45309;">${stats.totalPoinSekolah || 0}</div>
+          <div style="font-size:9px;color:#888;text-transform:uppercase;">Total Poin Sekolah</div>
+        </div>
+        <div style="border:1px solid #ddd;border-radius:8px;padding:10px 18px;min-width:120px;">
+          <div style="font-size:20px;font-weight:bold;color:#047857;">${stats.siswaBerprestasi || 0}</div>
+          <div style="font-size:9px;color:#888;text-transform:uppercase;">Siswa Berprestasi (≥100 poin)</div>
+        </div>
+        <div style="border:1px solid #ddd;border-radius:8px;padding:10px 18px;min-width:120px;">
+          <div style="font-size:20px;font-weight:bold;color:#7c3aed;">${stats.entriBulanIni || 0}</div>
+          <div style="font-size:9px;color:#888;text-transform:uppercase;">Entri Bulan Ini</div>
+        </div>
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:30px;">No</th>
+          <th>NISN</th>
+          <th>Nama Siswa</th>
+          <th>Kelas</th>
+          <th style="width:60px;">Total Poin</th>
+          <th>Kategori</th>
+          <th>Reward Terakhir</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+
+      <p style="text-align:right;font-size:9px;color:#aaa;margin-top:15px;">Dicetak: ${new Date().toLocaleString('id-ID')}</p>
+      <script>window.onload = () => window.print()</script>
+    </body></html>`)
+    w.document.close()
   }
 
   return (
@@ -339,11 +446,11 @@ export default function RekapRewardAdmin() {
 
       {/* TABEL UTAMA */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-5 border-b flex justify-between items-center">
-          <h3 className="font-bold text-gray-700">Rekap Data Siswa Berpoint</h3>
-          <div className="flex gap-2 text-xs">
-            <button className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-semibold hover:bg-red-100 flex items-center gap-1"><Download size={12}/> PDF</button>
-            <button className="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg font-semibold hover:bg-green-100 flex items-center gap-1"><Download size={12}/> Excel</button>
+        <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h3 className="font-bold text-gray-700">Rekap Data Siswa Berpoint <span className="text-xs font-normal text-gray-400 ml-2">({tableData.length} siswa)</span></h3>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <button onClick={handlePrintPDF} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-semibold hover:bg-red-100 flex items-center gap-1"><Printer size={12}/> Print PDF</button>
+            <button onClick={handleDeleteAllStep1} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-semibold hover:bg-red-100 flex items-center gap-1"><Trash2 size={12}/> Hapus Semua</button>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -429,7 +536,7 @@ export default function RekapRewardAdmin() {
         </div>
       )}
 
-      {/* MODAL HAPUS */}
+      {/* MODAL HAPUS SATU */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-scaleIn p-6 text-center" onClick={e => e.stopPropagation()}>
@@ -440,6 +547,66 @@ export default function RekapRewardAdmin() {
               <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
               <button onClick={() => handleDelete(showDeleteConfirm.id, showDeleteConfirm.nisn, showDeleteConfirm.reward_poin)} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">Hapus</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HAPUS SEMUA — 2x Konfirmasi */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { if (!deletingAll) { setShowDeleteAllModal(false); setDeleteAllStep(1) } }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn p-6" onClick={e => e.stopPropagation()}>
+            {deleteAllStep === 1 ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><Trash2 size={24} className="text-red-500"/></div>
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-800">Hapus Semua Data Reward?</h3>
+                    <p className="text-xs text-gray-500">Tindakan ini tidak dapat dibatalkan</p>
+                  </div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5 text-sm text-red-700">
+                  <p className="font-semibold">⚠️ Peringatan:</p>
+                  <ul className="list-disc ml-5 mt-1 space-y-1 text-xs">
+                    <li>Semua data reward di tabel <b>tb_reward_siswa</b> akan dihapus permanen</li>
+                    <li>Kolom <b>total_reward</b> di tabel siswa akan direset ke <b>0</b></li>
+                    <li>Data yang sudah dihapus <b>tidak dapat dikembalikan</b></li>
+                  </ul>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => { setShowDeleteAllModal(false); setDeleteAllStep(1) }} className="flex-1 px-4 py-2.5 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
+                  <button onClick={handleDeleteAllStep2} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">Lanjutkan</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><AlertTriangle size={24} className="text-red-500"/></div>
+                  <div>
+                    <h3 className="font-bold text-lg text-red-600">Konfirmasi Akhir</h3>
+                    <p className="text-xs text-gray-500">Ketik teks berikut untuk mengkonfirmasi</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">Ketik <span className="font-extrabold text-red-600 bg-red-50 px-2 py-1 rounded">HAPUS SEMUA</span> untuk melanjutkan:</p>
+                <input
+                  type="text"
+                  value={deleteAllText}
+                  onChange={e => setDeleteAllText(e.target.value)}
+                  placeholder="HAPUS SEMUA"
+                  className="w-full p-3 border-2 border-red-200 rounded-xl text-center text-sm font-bold tracking-wider focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:outline-none text-gray-800"
+                  autoComplete="off"
+                />
+                <div className="flex gap-3 mt-4">
+                  <button onClick={() => { setShowDeleteAllModal(false); setDeleteAllStep(1) }} className="flex-1 px-4 py-2.5 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
+                  <button
+                    onClick={handleConfirmDeleteAll}
+                    disabled={deletingAll || deleteAllText !== 'HAPUS SEMUA'}
+                    className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {deletingAll ? <><span className="animate-spin">⏳</span> Menghapus...</> : 'Ya, Hapus Semua'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

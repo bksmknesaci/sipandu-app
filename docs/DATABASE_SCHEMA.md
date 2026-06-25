@@ -16,6 +16,8 @@
 * logo_url (text)
 * hero_images (jsonb)
 * major_logos (jsonb)
+* kop_logo_dinas (text) -- URL logo dinas untuk KOP Surat PDF
+* kop_logo_sekolah (text) -- URL logo sekolah untuk KOP Surat PDF
 
 ## siswa
 
@@ -357,6 +359,12 @@ Index Tambahan
 * created_at (timestamptz)
 * updated_at (timestamptz)
 * UNIQUE(setting_key)
+
+Catatan Penggunaan Nilai (Value Constraints)
+* notifications
+* type: Menerima nilai 'sick_permission', 'parent_message', 'attendance_revision', 'reward', 'violation', 'student_handling', 'system'
+* priority: Menerima nilai 'INFO', 'SUCCESS', 'WARNING', 'DANGER'
+* action_url: Bisa berupa URL lengkap (https://...) atau null
 
 ## Catatan Penggunaan Nilai (Value Constraints)
 

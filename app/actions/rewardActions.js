@@ -202,3 +202,17 @@ export async function deleteRewardAction(rewardId, nisn, poinToDeduct) {
     return { success: true }
   } catch (err) { return { error: 'Terjadi kesalahan server' } }
 }
+
+export async function deleteAllRewardAction() {
+  try {
+    const { error: deleteError } = await supabaseAdmin.from('tb_reward_siswa').delete().neq('id', 0)
+    if (deleteError) return { error: 'Gagal menghapus semua data reward: ' + deleteError.message }
+
+    const { error: updateError } = await supabaseAdmin.from('siswa').update({ total_reward: 0 }).neq('id', 0)
+    if (updateError) console.error('Gagal reset total poin siswa:', updateError.message)
+
+    return { success: true }
+  } catch (err) {
+    return { error: 'Terjadi kesalahan server: ' + err.message }
+  }
+}

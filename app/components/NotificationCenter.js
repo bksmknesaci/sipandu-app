@@ -122,7 +122,7 @@ export default function NotificationCenter({ userId }) {
     const iv = setInterval(() => {
       setShaking(true);
       setTimeout(() => setShaking(false), 700);
-    }, 8000);
+    }, 4000);
     return () => clearInterval(iv);
   }, [unreadCount]);
 
@@ -404,7 +404,7 @@ function NotificationPanelContent({
           <div className="divide-y divide-gray-50">
             {notifications.map(notif => {
               const pStyle = PRIORITY_STYLES[notif.priority] || PRIORITY_STYLES.INFO;
-              const icon = TYPE_ICONS[notif.type] || '🔔';
+              const icon = notif.title?.includes('Izin') ? '📋' : (TYPE_ICONS[notif.type] || '🔔');
               const actionLabel = ACTION_LABELS[notif.type];
 
               return (

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GraduationCap, Briefcase, University, BarChart3, Search, Eye, Download, Printer, X, FileText, Trash2 } from 'lucide-react';
 import { getFormulirStats, getRekapFormulir, resetAllFormulirAction } from '@/app/actions/formulirActions';
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 
 function CountUp({ end, duration = 1200 }) {
   const [count, setCount] = useState(0);
@@ -74,7 +76,10 @@ export default function RekapFormulirPage() {
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Rekap_Formulir_${activeTab}.csv`; link.click();
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
+
     const w = window.open('', '_blank');
     const headers = activeTab === 'tracer' ? ['No', 'NISN', 'Nama', 'Tahun Lulus', 'Status Saat Ini'] : activeTab === 'karir' ? ['No', 'NISN', 'Nama', 'Kelas', 'Rencana Lulus'] : ['No', 'NISN', 'Nama', 'Kelas', 'Jalur', 'PT Tujuan', 'Status'];
     const rows = filteredData.map((d, idx) => {
@@ -82,7 +87,13 @@ export default function RekapFormulirPage() {
       if (activeTab === 'karir') return `<tr><td>${idx+1}</td><td>${d.nisn}</td><td>${d.nama}</td><td>${d.kelas}</td><td>${d.rencana_setelah_lulus}</td></tr>`;
       return `<tr><td>${idx+1}</td><td>${d.nisn}</td><td>${d.nama}</td><td>${d.kelas}</td><td>${d.jalur_pendaftaran}</td><td>${d.pt_tujuan}</td><td>${d.status_hasil}</td></tr>`;
     }).join('');
-    w.document.write(`<html><head><title>Rekap Formulir</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f3f4f6;font-weight:bold}</style></head><body><h2>Rekap Formulir ${activeTab.toUpperCase()}</h2><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></body></html>`);
+    const tabTitle = activeTab === 'tracer' ? 'TRACER STUDI LULUSAN' : activeTab === 'karir' ? 'PEMETAAN KARIR SISWA' : 'PENDATAAN SNBP & SNBT';
+    w.document.write(`<html><head><title>Rekap Formulir</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f3f4f6;font-weight:bold}</style></head><body>
+      ${kopHTML}
+      <h2 style="text-align:center;margin-bottom:15px">REKAP FORMULIR ${tabTitle}</h2>
+      <table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+      <p style="text-align:center;margin-top:15px;font-size:10px;color:#aaa;">Dicetak: ${new Date().toLocaleString('id-ID')} | SIPANDU</p>
+    </body></html>`);
     w.document.close(); setTimeout(() => w.print(), 300);
   };
 

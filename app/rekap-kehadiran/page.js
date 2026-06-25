@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import { getRekapKehadiran, resetSemesterAbsensi, resetAllAbsensi } from '@/app/actions/rekapActions'
 import { getKelasFilters } from '@/app/actions/absensiActions'
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 import PJInfoCard from '@/app/components/PJInfoCard'
 import { getHolidays } from '@/app/actions/effectiveDaysActions'
 
@@ -243,13 +245,12 @@ const jurusanOptions = tingkatFilter
     link.click()
   }
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
     const w = window.open('', '_blank')
     const totalEffDays = getTotalEffectiveDays(semMonths)
     
-    const logoDinas = "https://z-cdn-media.chatglm.cn/files/929820ad-a0a8-46c5-bc59-b82e9388cd84.png?auth_key=1881124029-cd40a19b190e4f11a5c8e1af584be597-0-5a7829ed925abcea2c21ae506f3cca45"
-    const logoSekolah = "https://z-cdn-media.chatglm.cn/files/e24c09cd-036a-42c7-b5bf-b34dca222130.png?auth_key=1881124029-68d2651a9ec24567bc048bdc06bb2054-0-8bd000793410b91e087b3032e2d7892b"
-
     const rowsHtml = filteredStudents.map((s, idx) => {
       let tH = 0, tS = 0, tI = 0, tA = 0
       const monthCells = semMonths.map(m => {
@@ -288,21 +289,7 @@ const jurusanOptions = tingkatFilter
         @media print { body { margin: 0; } }
       </style>
     </head><body>
-      <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:10px;">
-        <div style="width:80px; height:80px; flex-shrink:0;"><img src="${logoDinas}" style="width:100%; height:100%; object-fit:contain;"></div>
-        <div style="text-align:center; flex:1; padding: 0 15px;">
-          <p style="margin:0; font-size:12px;">PEMERINTAH DAERAH PROVINSI JAWA BARAT</p>
-          <p style="margin:0; font-size:12px; font-weight:bold;">DINAS PENDIDIKAN</p>
-          <p style="margin:0; font-size:13px; font-weight:bold;">CABANG DINAS PENDIDIKAN WILAYAH IX</p>
-          <p style="margin:2px 0 0 0; font-size:15px; font-weight:bold;">SEKOLAH MENENGAH KEJURUAN NEGERI 1 CIKEDUNG</p>
-          <p style="margin:2px 0 0 0; font-size:9px;">Jl. Raya Cikedung - Jatibarang Km 05 Kec. Cikedung Kab. Indramayu 45262</p>
-          <p style="margin:0; font-size:9px;">Telp. (0234) 5500198 | Website: www.smnk1cikedung.sch.id | Email: smkn1cikedung@rocketmail.com</p>
-        </div>
-        <div style="width:80px; height:80px; flex-shrink:0;"><img src="${logoSekolah}" style="width:100%; height:100%; object-fit:contain;"></div>
-      </div>
-      
-      <hr style="border:2px solid black; margin-top:5px; margin-bottom:15px;">
-      
+      ${kopHTML}
       <div style="text-align:center;">
         <h3 style="margin:0; font-size:14px; text-transform:uppercase;">REKAP KEHADIRAN SISWA</h3>
         <p style="margin:2px 0 0 0; font-size:12px; font-weight:bold;">Semester ${semNum} Tahun Ajaran ${academicStartYear}/${academicStartYear + 1}</p>

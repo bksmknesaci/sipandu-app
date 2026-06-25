@@ -895,3 +895,98 @@ Status: ACTIVE
 - Fix import XCircle dari lucide-react (sebelumnya menyebabkan Runtime ReferenceError di halaman QR Absensi saat validasi GPS)
 
 Status: ACTIVE
+
+## Entri Reward (Update)
+- Fix nama Wali Kelas tidak muncul pada profil siswa setelah pencarian
+- Menggunakan getPJByClass dari penanggungJawabActions.js untuk mengambil nama Wali Kelas yang sinkron dengan database
+
+Status: ACTIVE
+
+## Entri Pelanggaran (Update)
+- Fix nama Wali Kelas tidak muncul pada profil siswa setelah pencarian
+- Menggunakan getPJByClass dari penanggungJawabActions.js untuk mengambil nama Wali Kelas yang sinkron dengan database
+
+Status: ACTIVE
+
+## Absen Hadir Mandiri (Update)
+- Validasi GPS gagal (di luar radius): Tampilan layar penuh merah dengan ikon XCircle putih di lingkaran merah, judul "Absensi Ditolak!", pesan "Lokasi Anda DI LUAR radius", detail jarak dengan 1 desimal, selisih melebihi radius, badge "QR Tidak Terverifikasi", tombol "Coba Lagi"
+- Validasi GPS gagal (tidak bisa diakses): Tampilan layar penuh dengan ikon AlertTriangle, pesan "Gagal Mendapatkan Lokasi!", badge "GPS Tidak Tersedia", tombol "Coba Lagi"
+- Validasi GPS menjadi WAJIB ketika pengaturan GPS sudah diatur — tidak ada lagi silent skip yang menyebabkan absensi tetap masuk walau di luar radius
+- Spinner biru "QR Terbaca! Sedang Memvalidasi Lokasi GPS..." saat proses cek lokasi
+Console log di setiap tahap validasi GPS untuk memudahkan debugging
+
+Status: ACTIVE
+
+## Rekap Reward (Update)
+- Tambah server action deleteAllRewardAction() — hapus semua record dari tb_reward_siswa dan reset total_reward ke 0 di tabel siswa
+- app/admin/rekap-reward/page.js
+- Import: Tambah Printer, deleteAllRewardAction
+- Tombol Print PDF: Mengganti placeholder PDF — buka window baru dengan kop surat (logo Dinas Jabar + logo Sekolah), statistik, tabel data lengkap, auto-print
+- Tombol Hapus Semua: Di header tabel, sejajar dengan Print PDF
+- Modal Hapus Semua (2x Konfirmasi):
+Step 1: Peringatan dengan detail apa yang akan dihapus + tombol "Lanjutkan"
+Step 2: Input teks "HAPUS SEMUA" untuk konfirmasi akhir + tombol disabled sampai teks cocok
+- State baru: showDeleteAllModal, deleteAllStep, deleteAllText, deletingAll
+- Header tabel: Ditambahkan counter jumlah siswa dan layout responsive (flex-col di HP)
+
+Status: ACTIVE
+
+## Setting KOP Surat (Profil SIPANDU)
+- Section "Setting KOP Surat (Print PDF)" di halaman Profil SIPANDU
+- Upload Logo Dinas Pendidikan ke Supabase Storage (bucket: assets)
+- Upload Logo Sekolah ke Supabase Storage (bucket: assets)
+- Preview KOP Surat langsung di halaman profil (layout 3 kolom: logo dinas — teks kop — logo sekolah)
+- Indikator status: "✓ Sudah tersimpan" (hijau) atau "⚠ Klik Simpan untuk menyimpan" (kuning)
+- Logo disimpan di kolom kop_logo_dinas dan kop_logo_sekolah di tabel app_settings
+- Nama sekolah dan alamat di kop surat otomatis mengikuti data Informasi Sekolah
+Fallback placeholder teks "LOGO DINAS" / "LOGO SEKOLAH" jika belum diupload
+
+Status: ACTIVE
+
+## KOP Surat Dinamis di Print PDF
+- Helper kopSuratHelper.js: konversi logo URL → base64 agar 100% muncul di window print
+- Server action getKopSuratSettings() fetch data kop dari database
+- Integrasi KOP Surat di Print PDF Rekap Kehadiran (tab Semester)
+- Integrasi KOP Surat di Print PDF Rekap Reward
+- Integrasi KOP Surat di Print PDF Rekap Pelanggaran (Per Tingkat Semua Jurusan)
+- Integrasi KOP Surat di Cetak Rekap Pindah & Keluar
+- Integrasi KOP Surat di Cetak Rekap Formulir (Tracer Studi / Pemetaan Karir / SNBP-SNBT)
+- Semua logo menggunakan base64 embed (tidak bergantung pada file static public/)
+
+Status: ACTIVE
+
+---
+
+## Notifikasi Lonceng (Perbaikan)
+- Getaran lonceng otomatis saat ada notif baru masuk (dari Supabase Realtime)
+- Badge angka kecil nempel di lonceng menampilkan jumlah unread
+- Animasi shake berulang setiap 20 detik selama ada notif belum dibaca
+- Tab filter: Semua, Belum Dibaca, Penting, Sistem
+- Tombol Tandai Semua Dibaca & Hapus Semua
+- Tombol aksi per notifikasi (navigasi ke halaman terkait)
+- Footer "Lihat Semua Notifikasi →" ke halaman pusat notifikasi
+
+Status: ACTIVE
+
+---
+
+## Alur Notifikasi Aktif
+
+### Sekretaris → Admin → Sekretaris
+- Sekretaris kirim absensi → klik "Minta Persetujuan Edit" → **Admin muncul notif** "📝 Permintaan Revisi Absensi Baru"
+- Admin klik Approve → **Sekretaris muncul notif** "✅ Revisi Absensi Disetujui" dengan tombol ke halaman Absensi
+- Admin klik Reject → **Sekretaris muncul notif** "❌ Revisi Absensi Ditolak" dengan tombol ke halaman Absensi
+- Sekretaris juga muncul konfirmasi "📨 Permintaan Revisi Terkirim" setelah klik kirim permintaan
+
+### Siswa → Wali Kelas
+- Siswa submit Sakit → **WK muncul notif** "🤒 Pengajuan Sakit Baru" dengan tombol "Verifikasi"
+- Siswa submit Izin → **WK muncul notif** "📋 Pengajuan Izin Baru" dengan tombol "Verifikasi"
+- Orang Tua kirim pesan → **WK muncul notif** "💬 Pesan Baru dari Orang Tua" dengan tombol "Balas"
+
+### Pencarian User ID untuk Notifikasi
+- Fungsi getWaliKelasUserId: 4 strategi fallback (gabungan "X TKRO", pisah tingkat+jurusan, jurusan saja, full kelas ILIKE)
+- Fungsi getSekretarisUserId: 4 strategi fallback (sama)
+- Mencocokkan format kelas antara tabel siswa ("X") dan tabel users ("X TKRO 1")
+- Fungsi getAdminUserIds: ambil semua user aktif berrole Administrator
+
+Status: ACTIVE

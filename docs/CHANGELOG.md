@@ -1,5 +1,68 @@
 # Changelog SIPANDU
 
+## 2026-07-02
+- Perbaikan sistem notifikasi lonceng: createEditRequest() sekarang benar-benar mengirim - notifikasi ke Admin saat Sekretaris minta revisi absensi
+- Perbaikan approveEditRequest() dan rejectEditRequest() sekarang mengirim notifikasi ke pemohon (Sekretaris/WK) dengan pesan yang jelas
+- Tambah Strategi 0 di getWaliKelasUserId() dan getSekretarisUserId(): gabungan kelas+jurusan ("X TKRO") untuk mencocokkan format tabel users ("X TKRO 1")
+- Icon notifikasi Pengajuan Izin diganti dari 🤒 menjadi 📋 agar mudah dibedakan dengan Sakit
+- Ubah jeda getaran lonceng dari 8 detik menjadi 20 detik agar tidak terlalu sering
+- Dokumentasi tabel notifications di DATABASE_SCHEMA.md (type, priority, action_url)
+
+## 2026-07-01
+
+- Tambah kolom kop_logo_dinas dan kop_logo_sekolah di tabel app_settings (Supabase)
+- Buat helper lib/kopSuratHelper.js: loadImageAsBase64() dan generateKopSuratHTML()
+- Tambah server action getKopSuratSettings() di siswaActions.js
+- Tambah section "Setting KOP Surat (Print PDF)" di halaman Profil SIPANDU
+- Upload logo dinas & logo sekolah ke Supabase Storage (bucket: assets)
+- Preview KOP Surat langsung di halaman profil (3 kolom: logo dinas — teks — logo sekolah)
+- Indikator status tersimpan/belum tersimpan pada masing-masing logo
+- Integrasi KOP Surat dinamis di Print PDF Rekap Kehadiran (tab Semester)
+- Integrasi KOP Surat dinamis di Print PDF Rekap Reward
+- Integrasi KOP Surat dinamis di Print PDF Rekap Pelanggaran (Per Tingkat Semua Jurusan)
+- Integrasi KOP Surat dinamis di Cetak Rekap Pindah & Keluar
+- Integrasi KOP Surat dinamis di Cetak Rekap Formulir (Tracer / Karir / SNBP-SNBT)
+- Logo dikonversi ke base64 sebelum embed ke HTML print (menjamin 100% muncul)
+- Fallback placeholder teks jika logo belum diupload
+- Nama sekolah & alamat di kop surat otomatis mengikuti data pengaturan profil
+- Tambah kolom kop_logo_dinas dan kop_logo_sekolah di tabel app_settings (Supabase)
+- Buat helper lib/kopSuratHelper.js: loadImageAsBase64() dan generateKopSuratHTML()
+- Tambah server action getKopSuratSettings() di siswaActions.js
+- Tambah section "Setting KOP Surat (Print PDF)" di halaman Profil SIPANDU
+- Upload logo dinas & logo sekolah ke Supabase Storage (bucket: assets)
+- Preview KOP Surat langsung di halaman profil (3 kolom: logo dinas — teks — logo sekolah)
+- Indikator status tersimpan/belum tersimpan pada masing-masing logo
+- Integrasi KOP Surat dinamis di Print PDF Rekap Kehadiran (tab Semester)
+- Integrasi KOP Surat dinamis di Print PDF Rekap Reward
+- Integrasi KOP Surat dinamis di Print PDF Rekap Pelanggaran (Per Tingkat Semua Jurusan)
+- Integrasi KOP Surat dinamis di Cetak Rekap Pindah & Keluar
+- Integrasi KOP Surat dinamis di Cetak Rekap Formulir (Tracer / Karir / SNBP-SNBT)
+- Logo dikonversi ke base64 sebelum embed ke HTML print (menjamin 100% muncul)
+- Fallback placeholder teks jika logo belum diupload
+- Nama sekolah & alamat di kop surat otomatis mengikuti data pengaturan profil
+
+## 2026-06-30
+
+- Fix nama Wali Kelas tidak muncul di halaman Entri Reward setelah pencarian siswa
+- Fix nama Wali Kelas tidak muncul di halaman Entri Pelanggaran setelah pencarian siswa
+- Kedua halaman sekarang menggunakan getPJByClass dari penanggungJawabActions.js (sumber data sama dengan halaman Penanggung Jawab)
+- Revamp tampilan gagal GPS di Absen Hadir Mandiri: Layar penuh merah dengan ikon XCircle putih, "Absensi Ditolak!", "Lokasi Anda DI LUAR radius", detail jarak 1 desimal, selisih meter, badge "QR Tidak Terverifikasi", tombol "Coba Lagi"
+- Tambah layar gagal GPS terpisah: "Gagal Mendapatkan Lokasi!" ketika GPS tidak bisa diakses (timeout/permission denied)
+- Perbaikan kritis: Validasi GPS sekarang WAJIB ketika pengaturan GPS sudah diatur — hapus silent skip di catch block yang menyebabkan absensi tetap masuk walau di luar radius
+- Tambah console log di setiap tahap validasi GPS (settings loaded, jarak, error) untuk debugging
+- Tambah fallback format return getQRSettings (settings?.settings || settings?.data || settings)
+- Tambah server action deleteAllRewardAction() — hapus semua record dari tb_reward_siswa dan reset total_reward ke 0 di tabel siswa
+- app/admin/rekap-reward/page.js
+- Import: Tambah Printer, deleteAllRewardAction
+- Tombol Print PDF: Mengganti placeholder PDF — buka window baru dengan kop surat (logo Dinas Jabar + logo Sekolah), statistik, tabel data lengkap, auto-print
+- Tombol Hapus Semua: Di header tabel, sejajar dengan Print PDF
+- Modal Hapus Semua (2x Konfirmasi):
+Step 1: Peringatan dengan detail apa yang akan dihapus + tombol "Lanjutkan"
+Step 2: Input teks "HAPUS SEMUA" untuk konfirmasi akhir + tombol disabled sampai teks cocok
+- State baru: showDeleteAllModal, deleteAllStep, deleteAllText, deletingAll
+- Header tabel: Ditambahkan counter jumlah siswa dan layout responsive (flex-col di HP)
+- Perubahan dari kode sebelumnya: Hapus deklarasi origin yang terpisah di atas — cukup tulis sekali di baris pertama fungsi, lalu gunakan ${origin}/logo-dinas.png di semua tag <img>
+
 ## 2026-06-29
 
 - Fix Portal Orang Tua: Matching Wali Kelas & Sekretaris tidak sinkron dengan kelas siswa (WK XII muncul di siswa kelas X) diganti menggunakan getPJByClass dari penanggungJawabActions.js — sumber data sama persis dengan halaman Penanggung Jawab

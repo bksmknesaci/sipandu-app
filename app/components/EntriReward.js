@@ -65,6 +65,18 @@ export default function EntriReward({ userData }) {
     setSelectedStudent(student)
     setSearchTerm(student.nama)
     setShowDropdown(false)
+
+    // Ambil nama Wali Kelas dari sumber data yang sama dengan halaman Penanggung Jawab
+    try {
+      const { getPJByClass } = await import('@/app/actions/penanggungJawabActions')
+      const pj = await getPJByClass(student.kelas, student.jurusan)
+      if (pj?.wali?.nama) {
+        setSelectedStudent(prev => ({ ...prev, wali_kelas: pj.wali.nama }))
+      }
+    } catch (e) {
+      console.warn('[EntriReward] Gagal ambil Wali Kelas:', e)
+    }
+
     const res = await getStudentRewardHistory(student.nisn)
     if (res.data) setHistory(res.data)
   }
@@ -160,7 +172,7 @@ export default function EntriReward({ userData }) {
                 <p className="text-xs text-gray-500 font-medium mt-1">NISN: {selectedStudent.nisn} • {selectedStudent.kelas} {selectedStudent.jurusan}</p>
                 <div className="grid grid-cols-2 gap-4 w-full mt-5 text-xs font-semibold text-gray-600 bg-white/80 p-3 rounded-xl shadow-inner">
                   <div><span className="block text-gray-400 font-normal">J. Kelamin</span>{selectedStudent.jenis_kelamin || '-'}</div>
-                  <div><span className="block text-gray-400 font-normal">Wali Kelas</span>{selectedStudent.wali_kelas}</div>
+                  <div><span className="block text-gray-400 font-normal">Wali Kelas</span>{selectedStudent.wali_kelas || '-'}</div>
                 </div>
                 <div className="mt-5 w-full p-4 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-2">

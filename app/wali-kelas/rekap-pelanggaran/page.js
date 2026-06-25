@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, TrendingUp, Star, Users, Eye, X, Search, Filter, RefreshCw, FileText, Trash2 } from 'lucide-react'
 import { getRekapPelanggaranStats, getRekapPelanggaranTable, getStudentDetailPelanggaran, deleteAllPelanggaran } from '@/app/actions/pelanggaranActions'
 import { getKelasFilters } from '@/app/actions/absensiActions'
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 
 function CountUp({ end, duration = 1500 }) {
   const [count, setCount] = useState(0)
@@ -123,7 +125,10 @@ export default function RekapPelanggaran() {
   const isFiltered = !!(tingkatFilter || jurusanFilter || searchTerm.trim())
 
   // ── Print PDF per Tingkat Semua Jurusan ──
-  const handlePrintPDF = () => {
+  const handlePrintPDF = async () => {
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
+
     const dataToPrint = tingkatFilter
       ? tableData.filter(s => s.kelas === tingkatFilter)
       : tableData
@@ -133,7 +138,6 @@ export default function RekapPelanggaran() {
       return
     }
 
-    // Group by jurusan
     const grouped = {}
     dataToPrint.forEach(s => {
       const key = s.jurusan || 'Lainnya'
@@ -141,8 +145,6 @@ export default function RekapPelanggaran() {
       grouped[key].push(s)
     })
     const sortedJurusan = Object.keys(grouped).sort()
-
-    const no = { color: '#1f2937' }
 
     const sectionsHtml = sortedJurusan.map(jurusan => {
       const list = grouped[jurusan].sort((a, b) => (b.total_pelanggaran || 0) - (a.total_pelanggaran || 0))
@@ -196,12 +198,12 @@ export default function RekapPelanggaran() {
       '<html><head><title>Rekap Pelanggaran - ' + (tingkatFilter || 'Semua Tingkat') + '</title>' +
       '<style>body{font-family:Arial,sans-serif;padding:20px;margin:0;font-size:12px;} table{width:100%;} @media print{body{margin:0;}}</style>' +
       '</head><body>' +
+        kopHTML +
         '<div style="text-align:center;margin-bottom:16px;">' +
           '<h2 style="margin:0;font-size:16px;">REKAP PELANGGARAN SISWA</h2>' +
           '<p style="margin:4px 0 0 0;font-size:13px;font-weight:bold;">Tingkat: ' + (tingkatFilter || 'Semua Tingkat') + ' — Semua Jurusan</p>' +
           '<p style="margin:4px 0 0 0;font-size:11px;color:#6b7280;">Total: ' + dataToPrint.length + ' siswa, ' + grandTotal + ' poin pelanggaran</p>' +
         '</div>' +
-        '<hr style="border:1px solid #000;margin-bottom:16px;">' +
         sectionsHtml +
         '<div style="margin-top:20px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#9ca3af;text-align:center;">' +
           'Dicetak pada: ' + new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) +

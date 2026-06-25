@@ -114,3 +114,18 @@ export async function graduateAndDeleteAction(ids) {
   if (error) return { error: error.message };
   return { success: true, count: ids.length };
 }
+
+// ── KOP Surat Settings ──
+export async function getKopSuratSettings() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('app_settings')
+      .select('nama_sekolah, alamat, kop_logo_dinas, kop_logo_sekolah')
+      .eq('id', 1)
+      .single()
+    if (error) return {}
+    return data || {}
+  } catch (e) {
+    return {}
+  }
+}

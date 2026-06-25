@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import MajorLogoManager from '@/app/components/MajorLogoManager'; // ← TAMBAHAN
-import { ArrowLeft, Save, Upload, School, BookOpen, Users, Trash2 } from 'lucide-react';
+import MajorLogoManager from '@/app/components/MajorLogoManager';
+import { ArrowLeft, Save, Upload, School, BookOpen, Users, Trash2, FileText } from 'lucide-react';
 
 export default function ProfilSIPANDU() {
   const [loading, setLoading] = useState(true);
@@ -24,15 +24,17 @@ export default function ProfilSIPANDU() {
 
   const [heroImages, setHeroImages] = useState([]);
 
-  // Ambil data dari Supabase saat halaman dibuka
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  // KOP Surat
+  const [kopLogoDinasUrl, setKopLogoDinasUrl] = useState(null);
+  const [kopLogoDinasFile, setKopLogoDinasFile] = useState(null);
+  const [kopLogoSekolahUrl, setKopLogoSekolahUrl] = useState(null);
+  const [kopLogoSekolahFile, setKopLogoSekolahFile] = useState(null);
+
+  useEffect(() => { fetchSettings(); }, []);
 
   const fetchSettings = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('app_settings').select('*').eq('id', 1).single();
-    
     if (data) {
       setNamaSekolah(data.nama_sekolah || '');
       setAlamat(data.alamat || '');
@@ -46,11 +48,12 @@ export default function ProfilSIPANDU() {
       setTiktok(data.tiktok || '');
       setLogoUrl(data.logo_url || null);
       setHeroImages(data.hero_images || []);
+      setKopLogoDinasUrl(data.kop_logo_dinas || null);
+      setKopLogoSekolahUrl(data.kop_logo_sekolah || null);
     }
     setLoading(false);
   };
 
-  // Persiapan upload logo baru (Hanya preview, upload asli saat Save)
   const handleLogoUpload = (e) => {
     if (e.target.files[0]) {
       setLogoFile(e.target.files[0]);
@@ -58,52 +61,70 @@ export default function ProfilSIPANDU() {
     }
   };
 
-  // Upload Hero Images ke Supabase Storage (Diperbaiki agar tidak tabrakan nama file)
-const handleHeroUpload = async (e) => {
-  const files = Array.from(e.target.files);
-  if (heroImages.length + files.length > 5) return alert('Maksimal 5 foto!');
+  const handleKopDinasUpload = (e) => {
+    if (e.target.files[0]) {
+      setKopLogoDinasFile(e.target.files[0]);
+      setKopLogoDinasUrl(URL.createObjectURL(e.target.files[0]));
+    }
+  };
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    // Membuat nama file super unik: waktu + angka acak + index + ekstensi
-    const fileExt = file.name.split('.').pop();
-    const fileName = `hero_${Date.now()}_${Math.random().toString(36).substring(7)}_${i}.${fileExt}`;
-    
-    const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
-    
-    if (error) {
-      alert('Gagal upload foto ' + file.name + ': ' + error.message);
-    } else {
-      const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
-      if (urlData) {
-        setHeroImages(prev => [...prev, urlData.publicUrl]);
+  const handleKopSekolahUpload = (e) => {
+    if (e.target.files[0]) {
+      setKopLogoSekolahFile(e.target.files[0]);
+      setKopLogoSekolahUrl(URL.createObjectURL(e.target.files[0]));
+    }
+  };
+
+  const handleHeroUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (heroImages.length + files.length > 5) return alert('Maksimal 5 foto!');
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `hero_${Date.now()}_${Math.random().toString(36).substring(7)}_${i}.${fileExt}`;
+      const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
+      if (error) {
+        alert('Gagal upload foto ' + file.name + ': ' + error.message);
+      } else {
+        const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
+        if (urlData) setHeroImages(prev => [...prev, urlData.publicUrl]);
       }
     }
-  }
-};
+  };
 
-  // Hapus Hero Image dari daftar
   const handleDeleteImage = (indexToDelete) => {
     setHeroImages(heroImages.filter((_, index) => index !== indexToDelete));
   };
 
-  // Simpan Semua Pengaturan ke Supabase Database
+  // Upload file ke storage, return public URL
+  const uploadToStorage = async (file, prefix) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
+    if (error) throw new Error('Gagal upload: ' + error.message);
+    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
+    return urlData.publicUrl;
+  };
+
   const handleSave = async () => {
     let finalLogoUrl = logoUrl;
+    let finalKopDinasUrl = kopLogoDinasUrl;
+    let finalKopSekolahUrl = kopLogoSekolahUrl;
 
-    // Jika ada logo baru yang dipilih, upload dulu ke Storage
-    if (logoFile) {
-      const fileName = `logo_${Date.now()}_${logoFile.name}`;
-      const { data, error } = await supabase.storage.from('assets').upload(fileName, logoFile);
-      if (data) {
-        const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
-        finalLogoUrl = urlData.publicUrl;
-      } else {
-        return alert('Gagal upload logo: ' + error.message);
+    try {
+      if (logoFile) {
+        finalLogoUrl = await uploadToStorage(logoFile, 'logo');
       }
+      if (kopLogoDinasFile) {
+        finalKopDinasUrl = await uploadToStorage(kopLogoDinasFile, 'kop_dinas');
+      }
+      if (kopLogoSekolahFile) {
+        finalKopSekolahUrl = await uploadToStorage(kopLogoSekolahFile, 'kop_sekolah');
+      }
+    } catch (err) {
+      return alert(err.message);
     }
 
-    // Update tabel app_settings di Supabase
     const updates = {
       nama_sekolah: namaSekolah,
       alamat: alamat,
@@ -116,16 +137,19 @@ const handleHeroUpload = async (e) => {
       youtube: youtube,
       tiktok: tiktok,
       logo_url: finalLogoUrl,
-      hero_images: heroImages
+      hero_images: heroImages,
+      kop_logo_dinas: finalKopDinasUrl,
+      kop_logo_sekolah: finalKopSekolahUrl,
     };
 
     const { error } = await supabase.from('app_settings').update(updates).eq('id', 1);
-    
     if (error) {
       alert('Gagal menyimpan: ' + error.message);
     } else {
       alert('Pengaturan berhasil disimpan!');
-      setLogoFile(null); // Reset file setelah sukses
+      setLogoFile(null);
+      setKopLogoDinasFile(null);
+      setKopLogoSekolahFile(null);
     }
   };
 
@@ -136,8 +160,8 @@ const handleHeroUpload = async (e) => {
       <div className="max-w-4xl mx-auto">
         
         <Link href="/" className="inline-flex items-center gap-2 bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95 active:bg-blue-800 px-4 py-2 rounded-lg mb-6 transition-all duration-200">
-  <ArrowLeft size={20} /> Kembali ke Dashboard
-</Link>
+          <ArrowLeft size={20} /> Kembali ke Dashboard
+        </Link>
 
         <div className="flex items-center gap-3 mb-8">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600"><School size={28} /></div>
@@ -149,7 +173,7 @@ const handleHeroUpload = async (e) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* Bagian Logo */}
+          {/* Bagian Logo Aplikasi */}
           <div className="bg-white p-6 rounded-xl shadow-sm border md:col-span-2">
             <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Upload size={20}/> Upload Logo Aplikasi</h3>
             <div className="flex flex-col items-center gap-4">
@@ -159,6 +183,92 @@ const handleHeroUpload = async (e) => {
                 <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 border-2 border-dashed">No Logo</div>
               )}
               <input type="file" accept="image/*" onChange={handleLogoUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+            </div>
+          </div>
+
+          {/* ── Bagian KOP Surat ── */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border md:col-span-2">
+            <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2"><FileText size={20}/> Setting KOP Surat (Print PDF)</h3>
+            <p className="text-xs text-gray-400 mb-5 ml-7">Logo ini akan tampil di kop surat saat mencetak Rekap Kehadiran, Reward, Pelanggaran, Pindah/Keluar, dan Formulir.</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Logo Dinas */}
+              <div className="border border-gray-200 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Logo Dinas Pendidikan</label>
+                <div className="flex items-center gap-4">
+                  {kopLogoDinasUrl ? (
+                    <img src={kopLogoDinasUrl} alt="Logo Dinas" className="w-20 h-20 object-contain rounded-lg border p-1.5 bg-gray-50" />
+                  ) : (
+                    <div className="w-20 h-20 bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 border-2 border-dashed shrink-0">
+                      <Upload size={24} />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input type="file" accept="image/*" onChange={handleKopDinasUpload} className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer" />
+                    {kopLogoDinasUrl && !kopLogoDinasUrl.startsWith('blob:') && (
+                      <p className="text-[10px] text-green-600 mt-1.5 font-medium">✓ Sudah tersimpan</p>
+                    )}
+                    {kopLogoDinasUrl && kopLogoDinasUrl.startsWith('blob:') && (
+                      <p className="text-[10px] text-amber-600 mt-1.5 font-medium">⚠ Klik Simpan untuk menyimpan</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Logo Sekolah */}
+              <div className="border border-gray-200 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Logo Sekolah</label>
+                <div className="flex items-center gap-4">
+                  {kopLogoSekolahUrl ? (
+                    <img src={kopLogoSekolahUrl} alt="Logo Sekolah" className="w-20 h-20 object-contain rounded-lg border p-1.5 bg-gray-50" />
+                  ) : (
+                    <div className="w-20 h-20 bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 border-2 border-dashed shrink-0">
+                      <Upload size={24} />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input type="file" accept="image/*" onChange={handleKopSekolahUpload} className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                    {kopLogoSekolahUrl && !kopLogoSekolahUrl.startsWith('blob:') && (
+                      <p className="text-[10px] text-green-600 mt-1.5 font-medium">✓ Sudah tersimpan</p>
+                    )}
+                    {kopLogoSekolahUrl && kopLogoSekolahUrl.startsWith('blob:') && (
+                      <p className="text-[10px] text-amber-600 mt-1.5 font-medium">⚠ Klik Simpan untuk menyimpan</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview KOP */}
+            <div className="mt-5 border border-gray-200 rounded-xl p-4 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">Preview KOP Surat</p>
+              <div className="bg-white border rounded-lg p-4" style={{ fontFamily: 'Arial, sans-serif' }}>
+                <div className="flex justify-between items-center w-full mb-2">
+                  <div className="w-[70px] h-[70px] shrink-0 flex items-center justify-center">
+                    {kopLogoDinasUrl ? (
+                      <img src={kopLogoDinasUrl} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="w-full h-full border border-dashed border-gray-300 rounded flex items-center justify-center text-[7px] text-gray-400 text-center leading-tight">LOGO<br/>DINAS</div>
+                    )}
+                  </div>
+                  <div className="text-center flex-1 px-3">
+                    <p className="text-[10px] m-0">PEMERINTAH DAERAH PROVINSI JAWA BARAT</p>
+                    <p className="text-[10px] font-bold m-0">DINAS PENDIDIKAN</p>
+                    <p className="text-[11px] font-bold m-0">CABANG DINAS PENDIDIKAN WILAYAH IX</p>
+                    <p className="text-[12px] font-bold m-0 mt-0.5">{(namaSekolah || 'SMKN 1 CIKEDUNG').toUpperCase()}</p>
+                    <p className="text-[8px] m-0 mt-0.5">{alamat || 'Jl. Raya Cikedung - Jatibarang Km 05 Kec. Cikedung Kab. Indramayu 45262'}</p>
+                    <p className="text-[8px] m-0">Telp. (0234) 5500198 | Website: www.smnk1cikedung.sch.id</p>
+                  </div>
+                  <div className="w-[70px] h-[70px] shrink-0 flex items-center justify-center">
+                    {kopLogoSekolahUrl ? (
+                      <img src={kopLogoSekolahUrl} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="w-full h-full border border-dashed border-gray-300 rounded flex items-center justify-center text-[7px] text-gray-400 text-center leading-tight">LOGO<br/>SEKOLAH</div>
+                    )}
+                  </div>
+                </div>
+                <hr className="border-2 border-black mt-1" />
+              </div>
             </div>
           </div>
 
@@ -227,11 +337,11 @@ const handleHeroUpload = async (e) => {
             </div>
           </div>
 
-          <MajorLogoManager /> {/* ← TAMBAHAN: Komponen Manajemen Logo Jurusan */}
+          <MajorLogoManager />
 
           {/* Tombol Simpan */}
           <button onClick={handleSave} className="w-full bg-blue-600 md:col-span-2 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2">
-            <Save size={20}/> Simpan
+            <Save size={20}/> Simpan Semua Pengaturan
           </button>
         </div>
       </div>
