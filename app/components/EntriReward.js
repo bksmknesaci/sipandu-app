@@ -52,12 +52,18 @@ export default function EntriReward({ userData }) {
     setSearchTerm(val)
     if (val.length >= 3) {
       setIsSearching(true)
-      const res = await searchStudentsForReward(val, userData?.role, userData?.kelas)
-      if (res.data) setSearchResults(res.data)
+      const res = await searchStudentsForReward(val, userData?.role, userData?.kelas, userData?.id)
+      if (res.error) {
+        setToast({ type: 'error', message: 'Gagal mencari: ' + res.error })
+        setSearchResults([])
+      } else if (res.data) {
+        setSearchResults(res.data)
+      }
       setIsSearching(false)
       setShowDropdown(true)
     } else {
-      setSearchResults([]); setShowDropdown(false)
+      setSearchResults([])
+      setShowDropdown(false)
     }
   }, [userData])
 

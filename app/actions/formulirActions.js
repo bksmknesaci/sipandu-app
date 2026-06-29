@@ -1,25 +1,14 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getAlumniStats } from '@/app/actions/alumniActions'
 
 // ============================
-// SAVE TRACER STUDI
+// SAVE TRACER STUDI (foto aktivitas dihapus)
 // ============================
-export async function saveTracerStudi(payload, file) {
+export async function saveTracerStudi(payload) {
   try {
-    let fotoUrl = null
-    if (file && file.name) {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `tracer-${payload.nisn}-${Date.now()}.${fileExt}`
-      const buffer = Buffer.from(await file.arrayBuffer())
-      const { error: uploadError } = await supabaseAdmin.storage.from('bukti-formulir').upload(fileName, buffer, { contentType: file.type, upsert: true })
-      if (!uploadError) {
-        const { data: urlData } = supabaseAdmin.storage.from('bukti-formulir').getPublicUrl(fileName)
-        fotoUrl = urlData.publicUrl
-      }
-    }
-
-    const { error } = await supabaseAdmin.from('form_tracer_studi').insert([{ ...payload, foto_aktivitas_url: fotoUrl }])
+    const { error } = await supabaseAdmin.from('form_tracer_studi').insert([payload])
     if (error) return { error: error.message }
     return { success: true }
   } catch (err) {
@@ -66,14 +55,15 @@ export async function saveSnbpSnbt(payload, file) {
 }
 
 // ============================
-// GET FORMULIR STATS (For Dashboard)
+// GET FORMULIR STATS (For Dashboard + Home Alumni Stats)
 // ============================
 export async function getFormulirStats() {
   try {
-    const [tracer, karir, snbp] = await Promise.all([
-      supabaseAdmin.from('form_tracer_studi').select('id, status_saat_ini, created_at', { count: 'exact' }),
-      supabaseAdmin.from('form_pemetaan_karir').select('id, created_at', { count: 'exact' }),
-      supabaseAdmin.from('form_snbp_snbt').select('id, jalur_pendaftaran, status_hasil, created_at', { count: 'exact' })
+    const [tracer, karir, snbp, alumniStats] = await Promise.all([
+      supabaseAdmin.from('form_tracer_studi').select('id', { count: 'exact' }),
+      supabaseAdmin.from('form_pemetaan_karir').select('id', { count: 'exact' }),
+      supabaseAdmin.from('form_snbp_snbt').select('id', { count: 'exact' }),
+      getAlumniStats()
     ])
 
     const totalTracer = tracer.count || 0
@@ -85,10 +75,11 @@ export async function getFormulirStats() {
       totalTracer,
       totalKarir,
       totalSnbp,
-      totalAll
+      totalAll,
+      alumniStats
     }
   } catch (err) {
-    return { totalTracer: 0, totalKarir: 0, totalSnbp: 0, totalAll: 0 }
+    return { totalTracer: 0, totalKarir: 0, totalSnbp: 0, totalAll: 0, alumniStats: {} }
   }
 }
 
@@ -125,11 +116,9 @@ export async function getRekapFormulir(type, filters = {}) {
 // ============================
 export async function resetAllFormulirAction() {
   try {
-    // Hapus semua data dari ketiga tabel formulir
     await supabaseAdmin.from('form_tracer_studi').delete().neq('id', 0)
     await supabaseAdmin.from('form_pemetaan_karir').delete().neq('id', 0)
     await supabaseAdmin.from('form_snbp_snbt').delete().neq('id', 0)
-
     return { success: true }
   } catch (err) {
     return { error: err.message }

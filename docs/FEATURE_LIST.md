@@ -782,12 +782,12 @@ Status: ACTIVE
 ---
 
 ## Absen Hadir Mandiri (Update)
-Validasi GPS radius dari pengaturan QR Absensi (ambil dari tabel qr_settings)
-Hitung jarak menggunakan rumus Haversine, bandingkan dengan radius yang ditentukan Admin
-Tolak absensi jika jarak melebihi radius dengan pesan: "Jarak Anda X meter dari titik sekolah (batas radius Y meter)"
-Batasan scan QR hanya 1x per hari per siswa (ce tabel absensi input_by='QR Mandiri' hari ini)
-Jika siswa sudah scan QR hari ini, tampilkan pesan "Scan QR hanya bisa dilakukan 1x per hari"
-Admin bebas dari validasi GPS (langsung simpan tanpa cek jarak)
+- Validasi GPS radius dari pengaturan QR Absensi (ambil dari tabel qr_settings)
+- Hitung jarak menggunakan rumus Haversine, bandingkan dengan radius yang ditentukan Admin
+- Tolak absensi jika jarak melebihi radius dengan pesan: "Jarak Anda X meter dari titik sekolah (batas radius Y meter)"
+- Batasan scan QR hanya 1x per hari per siswa (ce tabel absensi input_by='QR Mandiri' hari ini)
+- Jika siswa sudah scan QR hari ini, tampilkan pesan "Scan QR hanya bisa dilakukan 1x per hari"
+- Admin bebas dari validasi GPS (langsung simpan tanpa cek jarak)
 Jika GPS tidak tersedia, validasi GPS dilewati (fallback, absensi tetap bisa dilakukan)
 
 Status: ACTIVE
@@ -795,27 +795,32 @@ Status: ACTIVE
 ---
 
 ## QR Absensi — Tab Manajemen Siswa (Update)
-Kartu statistik QR Absensi sekarang menampilkan data real dari database (bukan statik lokal)
-Kartu "Hadir Hari Ini" menampilkan jumlah siswa yang scan QR dan status Hadir hari ini
-Kartu "Belum Hadir" menampilkan total siswa aktif dikurangi hadir QR hari ini
-Kartu "Terlambat" placeholder (belum ada logika terlambat di tabel absensi)
-Kartu "QR Aktif" menampilkan jumlah QR yang statusnya aktif
-Kartu "Total Scan" menampilkan total scan QR dari awal hingga hari ini
-Tambah fungsi getQRStats di qrAbsensiActions.js (hitung hadirHadir & totalScan dari tabel absensi)
-Grid QR Code Kelas: 2 kolom di tampilan HP (grid-cols-2), 3 kolom tablet, 4 kolom desktop
+- Kartu statistik QR Absensi sekarang menampilkan data real dari database (bukan statik lokal)
+- Kartu "Hadir Hari Ini" menampilkan jumlah siswa yang scan QR dan status Hadir hari ini
+- Kartu "Belum Hadir" menampilkan total siswa aktif dikurangi hadir QR hari ini
+- Kartu "Terlambat" placeholder (belum ada logika terlambat di tabel absensi)
+- Kartu "QR Aktif" menampilkan jumlah QR yang statusnya aktif
+- Kartu "Total Scan" menampilkan total scan QR dari awal hingga hari ini
+- Tambah fungsi getQRStats di qrAbsensiActions.js (hitung hadirHadir & totalScan dari tabel absensi)
+- Grid QR Code Kelas: 2 kolom di tampilan HP (grid-cols-2), 3 kolom tablet, 4 kolom desktop
 
 Status: ACTIVE
 
 ---
 
 ## Absensi Kehadiran — Sekretaris (Update)
-Tombol H/S/I/A hanya mengubah tampilan lokal, TIDAK langsung menyimpan ke database
-Tombol "Kirim & Kunci" baru menyimpan semua status ke database sekaligus, baru kemudian mengunci
-Tombol "Simpan Perubahan" menyimpan dari tampilan lokal (untuk setelah Admin approve edit request)
-Siswa yang sudah absen via Sakit/Izin Online atau QR Mandiri otomatis terkunci (tombol dikunci + ikon gembok)
-Sekretaris hanya bisa klik H dan A (Sakit/Izin dikunci karena harus via halaman terpisah)
-Admin bebas klik semua tombol tanpa batasan
-Fix: tidak ada lagi duplikasi data saat sekretaris klik tombol berkali-kali sebelum simpan
+- Tombol H/S/I/A hanya mengubah tampilan lokal, TIDAK langsung menyimpan ke database
+- Tombol "Kirim & Kunci" baru menyimpan semua status ke database sekaligus, baru kemudian mengunci
+- Tombol "Simpan Perubahan" menyimpan dari tampilan lokal (untuk setelah Admin approve edit request)
+- Siswa yang sudah absen via Sakit/Izin Online atau QR Mandiri otomatis terkunci (tombol dikunci + ikon gembok)
+- Sekretaris hanya bisa klik H dan A (Sakit/Izin dikunci karena harus via halaman terpisah)
+- Admin bebas klik semua tombol tanpa batasan waktu
+- Filter tanggal khusus Administrator: date picker untuk mengisi/edit absensi hari lampau
+- Admin: banner kuning "Mode Edit Absensi Hari Lampau" saat tanggal != hari ini
+- Admin: tombol "Hari Ini" untuk reset ke tanggal sekarang
+- Admin: tidak ada batasan tanggal maksimal masa depan (max={today})
+- Status submitted otomatis reset saat Admin ganti tanggal
+- Fix: tidak ada lagi duplikasi data saat sekretaris klik tombol berkali-kali sebelum simpan
 
 Status: ACTIVE
 
@@ -841,7 +846,7 @@ Status: ACTIVE
 
 ---
 
-## Rekap Pelanggaran (Update)
+## Menu Rekap Pelanggaran (Update)
 - Tambah filter Tingkat (dropdown dinamis dari database)
 - Tambah filter Jurusan (otomatis sesuai tingkat yang dipilih)
 - Tambah kolom pencarian (cari nama, NISN, atau kelas)
@@ -849,9 +854,11 @@ Status: ACTIVE
 - Badge counter saat filter aktif ("12 dari 45 siswa")
 - Pesan empty state berbeda antara "belum ada data" vs "tidak cocok dengan filter"
 - Tombol Print PDF Per Tingkat Semua Jurusan (dikelompokkan per jurusan, dengan status disiplin)
-- Tombol Hapus Semua Rekap (2x konfirmasi: confirm + ketik "HAPUS SEMUA")
+- Tombol Hapus Semua Rekap (2x konfirmasi: confirm + ketik "HAPUS SEMUA") — khusus Administrator
 - Tombol Reset Filter (muncul hanya saat filter aktif)
 - Tombol Refresh Data di header tabel
+- Optimalisasi: Stats dihitung langsung dari data tabel tanpa query terpisah (hemat 1 DB round-trip)
+- Wali Kelas: dropdown Tingkat & Jurusan disabled, hanya data kelas binaan, tombol Hapus Semua tersembunyi
 
 Status: ACTIVE
 
@@ -988,5 +995,92 @@ Status: ACTIVE
 - Fungsi getSekretarisUserId: 4 strategi fallback (sama)
 - Mencocokkan format kelas antara tabel siswa ("X") dan tabel users ("X TKRO 1")
 - Fungsi getAdminUserIds: ambil semua user aktif berrole Administrator
+
+Status: ACTIVE
+
+## Entri Reward (Update — 2026-07-03)
+- Fix pencarian siswa untuk role Wali Kelas: Filter otomatis berdasarkan kelas binaan (ekstrak tingkat + jurusan dari userData.kelas)
+- Format parsing: "XI TKRO 1" → kelas="XI", jurusan="TKRO 1" (menggunakan slice join agar cocok dengan format kolom jurusan di tabel siswa)
+- Prioritas ambil kelas dari database (tabel users) jika userId tersedia, fallback ke userData.kelas dari localStorage
+
+Status: ACTIVE
+
+## Entri Pelanggaran (Update — 2026-07-03)
+- Fix pencarian siswa untuk role Wali Kelas: Filter otomatis berdasarkan kelas binaan (sama logikanya dengan Entri Reward)
+- Format parsing: "XI TKRO 1" → kelas="XI", jurusan="TKRO 1"
+- Prioritas ambil kelas dari database (tabel users) jika userId tersedia, fallback ke userData.kelas dari localStorage
+
+Status: ACTIVE
+
+## Rekap Kehadiran (Update — 2026-07-03)
+- Tombol "Reset Semester" hanya ditampilkan untuk role Administrator
+- Tombol "Reset Semua (Tahunan)" hanya ditampilkan untuk role Administrator
+- Role Wali Kelas dan role lainnya tidak melihat kedua tombol reset tersebut
+
+Status: ACTIVE
+
+## Dashboard Admin (Update — 2026-07-03)
+- Stat card "Total Reward" dan "Total Pelanggaran" sekarang menampilkan total POIN (SUM dari tb_reward_siswa dan tb_pelanggaran_siswa), bukan jumlah entri (COUNT)
+- Label stat card diubah menjadi "Total Poin Reward" dan "Total Poin Pelanggaran" agar jelas
+- Tabel Top 10 Siswa Berprestasi: tambah info kelas dan jurusan di bawah nama siswa
+- Tabel Top 10 Pelanggaran Tertinggi: tambah kolom "Kelas" untuk menunjukkan asal kelas siswa
+- Query dioptimasi: hapus 2 query count terpisah, hitung total langsung dari data utama
+
+Status: ACTIVE
+
+## Beranda Home (Update — 2026-07-03)
+- Grafik Rekap Reward Terbaik sekarang menggunakan data real dari tb_reward_siswa (bukan mockup)
+- Grafik Rekap Pelanggaran Tertinggi sekarang menggunakan data real dari tb_pelanggaran_siswa (bukan mockup)
+- Data grafik dikelompokkan per kelas+jurusan dengan sum poin, diurutkan dari tertinggi
+- Tambah server action getHomeRewardChart() di rewardActions.js
+- Tambah server action getHomePelanggaranChart() di pelanggaranActions.js
+- Hapus data mockup hardcoded (allRewardData, allPelanggaranData) dari page.js
+- Grafik otomatis sinkron dengan setiap entri reward/pelanggaran baru
+
+Status: ACTIVE
+
+## ## Menu Rekap Formulir (Update)
+- Tab Tracer: tambah 3 tombol per baris — ✅ Publikasikan/Sembunyikan, ⭐ Jadikan Pilihan/Lepas, 📌 Sematkan di Atas
+- Tambah Kisah Inspiratif Alumni di halaman HOME (Beranda)
+- Tambah Halaman daftar semua kisah alumni dengan search, filter (tahun/jurusan/status/kota), pagination, modal detail
+
+Status: ACTIVE
+
+## Menu Formulir (Siswa & Alumni)
+- Ganti menu "Informasi" menjadi "Formulir" di Header (AppShell)
+- Halaman Pusat Formulir (3 Kartu Pilihan dengan gradient & hover animasi)
+- Form Tracer Studi Lulusan (Dinamis berdasarkan status: Kuliah, Bekerja, Wirausaha)
+- Form Pemetaan Karir (Multi-select minat karir)
+- Form Pendataan SNBP & SNBT (Upload bukti PDF/JPG/PNG)
+- Pilihan Status Saat Ini: 9 opsi (Kuliah, Bekerja, Wirausaha, Kuliah dan Bekerja, Kursus/Pelatihan, Mencari Kerja, TNI/Polri, Gap Year, Lainnya)
+- Upload file bukti ke Supabase Storage (Bucket: bukti-formulir)
+- Halaman sukses setelah submit formulir
+
+Status: ACTIVE
+
+## Kisah Inspiratif Alumni (Beranda HOME)
+- Carousel otomatis (8 detik) menampilkan testimoni alumni yang dipublikasikan
+- Avatar lingkaran inisial (gradient warna via inline style) di samping kiri nama alumni
+- Navigasi panah kiri/kanan (desktop) dan dot indicator
+- Tombol "Baca Selengkapnya" untuk testimoni panjang (>300 karakter)
+- Modal detail alumni (tanpa framer-motion, pakai CSS @keyframes)
+- Stats mini cards: menampilkan semua 9 status alumni (Kuliah, Bekerja, Wirausaha, Kuliah dan Bekerja, Kursus/Pelatihan, Mencari Kerja, TNI/Polri, Gap Year, Lainnya)
+- CTA Banner "Jadilah Alumni Inspiratif Berikutnya" ke halaman /alumni
+- Data dari server action getPublishedAlumni() & getAlumniStats()
+
+Status: ACTIVE
+
+## Halaman Semua Kisah Alumni (/alumni)
+- Header gradient biru-ungu dengan ikon GraduationCap
+- Pencarian real-time (nama, NISN, kata kunci)
+- Filter dropdown dinamis dari database: Tahun Lulus, Jurusan, Status (9 opsi), Kota
+- Grid kartu 2 kolom di HP, 3 kolom di desktop
+- Avatar lingkaran inisial (gradient warna via inline style) di tengah atas kartu
+- Status badge warna per jenis (9 variasi)
+- Info instansi, lokasi, dan preview testimoni (desktop only)
+- Modal detail alumni (tanpa framer-motion, pakai CSS @keyframes)
+- Pagination dengan nomor halaman
+- Empty state berbeda untuk "belum ada data" vs "tidak cocok filter"
+- Data dari server action getAllAlumni() dengan filter & pagination server-side
 
 Status: ACTIVE

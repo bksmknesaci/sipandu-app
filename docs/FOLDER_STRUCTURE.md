@@ -16,6 +16,7 @@ SIPANDU-APP/
 │   │
 │   ├── actions/
 │   │   ├── absensiActions.js
+│   │   ├── alumniActions.js
 │   │   ├── cariSiswaActions.js
 │   │   ├── dashboardActions.js
 │   │   ├── effectiveDaysActions.js
@@ -47,6 +48,9 @@ SIPANDU-APP/
 │   │   └── users/
 │   │       └── page.js
 │   │
+│   ├── alumni/
+│   │   └── page.js
+│   │
 │   ├── berita/
 │   │   └── [slug]/
 │   │       └── page.js
@@ -67,6 +71,7 @@ SIPANDU-APP/
 │   │   ├── DashboardNotifications.js
 │   │   ├── EntriPelanggaran.js
 │   │   ├── EntriReward.js
+│   │   ├── KisahAlumni.js
 │   │   ├── MajorLogoManager.js
 │   │   ├── NotificationCenter.js
 │   │   ├── PJInfoCard.js

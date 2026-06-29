@@ -30,15 +30,37 @@ export async function getKategoriPelanggaran() {
   return kategoriPelanggaran
 }
 
-export async function searchStudentsForPelanggaran(query, userRole, userKelas) {
+export async function searchStudentsForPelanggaran(query, userRole, userKelas, userId) {
   if (!query || query.length < 3) return { data: [] }
+
   let dbQuery = supabaseAdmin
     .from('siswa')
     .select('nisn, nama, kelas, jurusan, jenis_kelamin, total_reward, total_pelanggaran')
     .or(`nama.ilike.%${query}%,nisn.ilike.%${query}%`)
     .limit(10)
 
-  if (userRole === 'Wali Kelas' && userKelas) dbQuery = dbQuery.eq('kelas', userKelas)
+  // ── Filter kelas binaan Wali Kelas ──
+  // userData.kelas: "XI TKRO 1" → parts: ["XI", "TKRO", "1"]
+  // tabel siswa: kelas="XI", jurusan="TKRO 1"
+  if (userRole === 'Wali Kelas') {
+    let kelasAKurat = null
+    if (userId) {
+      const { data: userRow } = await supabaseAdmin.from('users').select('kelas').eq('id', userId).single()
+      kelasAKurat = userRow?.kelas
+    }
+
+    const kelasYangDigunakan = kelasAKurat || userKelas
+
+    if (kelasYangDigunakan) {
+      const parts = kelasYangDigunakan.trim().split(/\s+/)
+
+      if (parts.length >= 2) {
+        const tingkat = parts[0]                    // "XI"
+        const jurusan = parts.slice(1).join(' ')    // "TKRO 1"
+        dbQuery = dbQuery.eq('kelas', tingkat).eq('jurusan', jurusan)
+      }
+    }
+  }
 
   const { data, error } = await dbQuery
   if (error) return { error: error.message }
@@ -150,4 +172,28 @@ export async function deleteAllPelanggaran() {
     .gte('id', 1)
   if (error) return { error: error.message }
   return { success: true }
+}
+
+export async function getHomePelanggaranChart() {
+  try {
+    const { data: pelanggaran } = await supabaseAdmin
+      .from('tb_pelanggaran_siswa')
+      .select('kelas, jurusan, poin')
+
+    const kelasMap = {}
+    for (const p of (pelanggaran || [])) {
+      const name = `${p.kelas} ${p.jurusan}`.trim()
+      if (!kelasMap[name]) kelasMap[name] = 0
+      kelasMap[name] += p.poin || 0
+    }
+
+    const chartData = Object.entries(kelasMap)
+      .map(([name, pelanggaran]) => ({ name, pelanggaran }))
+      .sort((a, b) => b.pelanggaran - a.pelanggaran)
+      .slice(0, 8)
+
+    return chartData
+  } catch (err) {
+    return []
+  }
 }

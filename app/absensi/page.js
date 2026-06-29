@@ -68,6 +68,16 @@ export default function AbsensiKehadiran() {
   const [timeStatus, setTimeStatus] = useState('within')
   const today = new Date().toLocaleDateString('sv-SE')
   const todayDisplay = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+
+  // Filter tanggal khusus Administrator
+  const [selectedDate, setSelectedDate] = useState(today)
+  const isAdmin = userData?.role === 'Administrator'
+  const isSekretaris = userData?.role === 'Sekretaris Kelas'
+  const fetchDate = isAdmin ? selectedDate : today
+  const activeDateDisplay = isAdmin
+    ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : todayDisplay
+
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editRequestReason, setEditRequestReason] = useState('')
@@ -117,9 +127,9 @@ export default function AbsensiKehadiran() {
   const handleTingkatChange = (val) => { setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
   const handleJurusanChange = (val) => { setSelectedJurusan(val) }
   const tingkatOptions = [...new Set(kelasJurusanList.map(c => c.kelas))].sort()
-const jurusanOptions = selectedTingkat
-  ? [...new Set(kelasJurusanList.filter(c => c.kelas === selectedTingkat).map(c => c.jurusan))].sort()
-  : [...new Set(kelasJurusanList.map(c => c.jurusan))].sort()
+  const jurusanOptions = selectedTingkat
+    ? [...new Set(kelasJurusanList.filter(c => c.kelas === selectedTingkat).map(c => c.jurusan))].sort()
+    : [...new Set(kelasJurusanList.map(c => c.jurusan))].sort()
 
   useEffect(() => {
     const checkTime = () => {
@@ -137,12 +147,12 @@ const jurusanOptions = selectedTingkat
   const fetchData = useCallback(async () => {
     if (!selectedKelas) return; setLoading(true)
     try {
-      const [absensiRes, statsRes] = await Promise.all([getAbsensiByDate(today, selectedTingkat, selectedJurusan), getAbsensiStats(today, selectedTingkat, selectedJurusan)])
+      const [absensiRes, statsRes] = await Promise.all([getAbsensiByDate(fetchDate, selectedTingkat, selectedJurusan), getAbsensiStats(fetchDate, selectedTingkat, selectedJurusan)])
       if (absensiRes.data) setSiswaList(absensiRes.data); if (statsRes) setStats(statsRes)
       if (absensiRes.data && absensiRes.data.length === 0) setKelasNotFound(true); else setKelasNotFound(false)
     } catch (e) { console.error(e) }
     setLoading(false)
-  }, [selectedKelas, selectedTingkat, selectedJurusan, today])
+  }, [selectedKelas, selectedTingkat, selectedJurusan, fetchDate])
 
   useEffect(() => { if (selectedKelas) fetchData() }, [selectedKelas, fetchData])
   const showToast = (message, type = 'success') => setToast({ message, type, key: Date.now() })
@@ -151,15 +161,13 @@ const jurusanOptions = selectedTingkat
   const checkSubmitted = useCallback(async () => {
     if (!selectedKelas) return
     try {
-      const res = await isAbsensiSubmitted(today, selectedTingkat, selectedJurusan); setIsSubmitted(res.submitted || false)
-      if (userData?.role === 'Sekretaris Kelas' && userData?.id) { const reqRes = await checkPendingRequest(userData.id, today); setHasPendingRequest(reqRes.hasPending); setHasApprovedRequest(reqRes.hasApproved) }
+      const res = await isAbsensiSubmitted(fetchDate, selectedTingkat, selectedJurusan); setIsSubmitted(res.submitted || false)
+      if (userData?.role === 'Sekretaris Kelas' && userData?.id) { const reqRes = await checkPendingRequest(userData.id, fetchDate); setHasPendingRequest(reqRes.hasPending); setHasApprovedRequest(reqRes.hasApproved) }
     } catch (e) { console.error(e) }
-  }, [selectedKelas, selectedTingkat, selectedJurusan, today, userData])
+  }, [selectedKelas, selectedTingkat, selectedJurusan, fetchDate, userData])
 
   useEffect(() => { if (selectedKelas) checkSubmitted() }, [selectedKelas, checkSubmitted])  
 
-  const isAdmin = userData?.role === 'Administrator'
-  const isSekretaris = userData?.role === 'Sekretaris Kelas'
   const canEdit = isAdmin || (isSekretaris && withinTime && selectedKelas === userData?.kelas && (!isSubmitted || hasApprovedRequest))
 
   const handleBadgeClick = async (siswa, newStatus) => {
@@ -179,9 +187,9 @@ const jurusanOptions = selectedTingkat
     })
   }
 
-   const handleSaveAll = async () => {
+  const handleSaveAll = async () => {
     const records = siswaList.filter(s => s.status && s.status !== null).map(s => ({
-      siswa_id: s.id, tanggal: today, status: s.status,
+      siswa_id: s.id, tanggal: fetchDate, status: s.status,
       input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false
     }))
     if (records.length === 0) { showToast('Belum ada data absensi untuk disimpan', 'error'); return }
@@ -195,7 +203,7 @@ const jurusanOptions = selectedTingkat
     if (!canEdit) return; const belum = siswaList.filter(s => !s.status)
     if (belum.length === 0) { showToast('Semua siswa sudah memiliki status', 'info'); return }
     setSaving(true)
-    const records = belum.map(s => ({ siswa_id: s.id, tanggal: today, status: 'Hadir', input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false }))
+    const records = belum.map(s => ({ siswa_id: s.id, tanggal: fetchDate, status: 'Hadir', input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false }))
     const result = await batchUpsertAbsensi(records)
     if (result.error) { showToast(result.error, 'error') } else { showToast(`${result.count} siswa ditandai Hadir!`) }
     setSaving(false); fetchData()
@@ -205,15 +213,13 @@ const jurusanOptions = selectedTingkat
     if (!canEdit) return; const belum = siswaList.filter(s => !s.status)
     if (belum.length > 0) { showToast(`${belum.length} siswa belum diabsen. Lengkapi semua terlebih dahulu!`, 'error'); return }
     setIsSubmitting(true)
-    // Simpan semua status ke DB terlebih dahulu
     const records = siswaList.filter(s => s.status).map(s => ({
-      siswa_id: s.id, tanggal: today, status: s.status,
+      siswa_id: s.id, tanggal: fetchDate, status: s.status,
       input_by: 'Sekretaris Kelas', locked: false
     }))
     const saveResult = await batchUpsertAbsensi(records)
     if (saveResult.error) { showToast(saveResult.error, 'error'); setIsSubmitting(false); return }
-    // Lalu kunci semua record
-    const lockResult = await submitAbsensi(today, selectedTingkat, selectedJurusan)
+    const lockResult = await submitAbsensi(fetchDate, selectedTingkat, selectedJurusan)
     if (lockResult.error) showToast(lockResult.error, 'error')
     else { setIsSubmitted(true); showToast('Absensi berhasil dikirim dan terkunci!') }
     setIsSubmitting(false)
@@ -222,10 +228,15 @@ const jurusanOptions = selectedTingkat
   const handleRequestEdit = async () => {
     if (!editRequestReason.trim()) { showToast('Isi alasan permintaan edit', 'error'); return }
     try {
-      const result = await createEditRequest(userData.id, selectedTingkat, selectedJurusan, today, editRequestReason)
+      const result = await createEditRequest(userData.id, selectedTingkat, selectedJurusan, fetchDate, editRequestReason)
       if (result.error) showToast(result.error, 'error'); else { setHasPendingRequest(true); setShowEditRequestModal(false); setEditRequestReason(''); showToast('Permintaan edit berhasil dikirim ke Admin', 'success') }
     } catch (e) { showToast('Gagal mengirim permintaan', 'error') }
   }
+
+  // Admin: reset isSubmitted saat ganti tanggal
+  useEffect(() => {
+    if (isAdmin) { setIsSubmitted(false); setHasPendingRequest(false); setHasApprovedRequest(false) }
+  }, [selectedDate, isAdmin])
 
   return (
     <div className="p-6 md:p-8 space-y-6 bg-gray-50/50 min-h-screen">
@@ -237,7 +248,7 @@ const jurusanOptions = selectedTingkat
 
       <div>
         <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2"><CalendarDays size={28} className="text-blue-600"/> Absensi Kehadiran Harian</h1>
-        <p className="text-sm text-gray-500 mt-1">{todayDisplay}</p>
+        <p className="text-sm text-gray-500 mt-1">{activeDateDisplay}</p>
       </div>
 
       {isSekretaris && withinTime && timeRemaining && (
@@ -253,9 +264,20 @@ const jurusanOptions = selectedTingkat
         </div>
       )}
 
+      {/* Info banner untuk Admin saat memilih tanggal bukan hari ini */}
+      {isAdmin && selectedDate !== today && (
+        <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl">📅</div>
+          <div>
+            <p className="text-sm font-bold text-amber-800">Mode Edit Absensi Hari Lampau</p>
+            <p className="text-xs text-amber-700">Anda sedang mengedit absensi tanggal <span className="font-bold">{activeDateDisplay}</span>. Data akan disimpan ke tanggal tersebut.</p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[{ label: 'Tanggal', value: todayDisplay, icon: CalendarDays, color: 'text-blue-600 bg-blue-50' },{ label: 'Kelas', value: selectedKelas || '—', icon: GraduationCap, color: 'text-purple-600 bg-purple-50' },{ label: userData?.role === 'Administrator' ? 'Admin' : 'Sekretaris', value: userData?.nama || '—', icon: Shield, color: 'text-emerald-600 bg-emerald-50' },{ label: 'Jumlah Siswa', value: stats.total, icon: Users, color: 'text-gray-600 bg-gray-50' },{ label: 'Sudah Absen', value: stats.total - stats.belum, icon: CheckCircle, color: 'text-green-600 bg-green-50' },{ label: 'Belum Absen', value: stats.belum, icon: AlertTriangle, color: 'text-orange-600 bg-orange-50' }].map((item, idx) => (
+          {[{ label: 'Tanggal', value: isAdmin ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : todayDisplay, icon: CalendarDays, color: 'text-blue-600 bg-blue-50' },{ label: 'Kelas', value: selectedKelas || '—', icon: GraduationCap, color: 'text-purple-600 bg-purple-50' },{ label: userData?.role === 'Administrator' ? 'Admin' : 'Sekretaris', value: userData?.nama || '—', icon: Shield, color: 'text-emerald-600 bg-emerald-50' },{ label: 'Jumlah Siswa', value: stats.total, icon: Users, color: 'text-gray-600 bg-gray-50' },{ label: 'Sudah Absen', value: stats.total - stats.belum, icon: CheckCircle, color: 'text-green-600 bg-green-50' },{ label: 'Belum Absen', value: stats.belum, icon: AlertTriangle, color: 'text-orange-600 bg-orange-50' }].map((item, idx) => (
             <div key={idx} className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.color}`}><item.icon size={18}/></div><div><p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{item.label}</p><p className="text-sm font-bold text-gray-800 truncate max-w-[140px]">{item.value}</p></div></div>
           ))}
         </div>
@@ -266,6 +288,26 @@ const jurusanOptions = selectedTingkat
           <div className="flex items-center gap-2"><Filter size={18} className="text-gray-500"/><span className="text-sm font-semibold text-gray-700">Filter:</span></div>
           {isAdmin ? (
             <>
+              {/* Filter Tanggal — khusus Administrator */}
+              <div className="flex items-center gap-1.5">
+                <CalendarDays size={14} className="text-blue-500" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  max={today}
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800"
+                />
+                {selectedDate !== today && (
+                  <button
+                    onClick={() => setSelectedDate(today)}
+                    className="px-2.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                    title="Kembali ke hari ini"
+                  >
+                    Hari Ini
+                  </button>
+                )}
+              </div>
               <select value={selectedTingkat} onChange={e => handleTingkatChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px]"><option value="">Tingkat</option>{tingkatOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
               <select value={selectedJurusan} onChange={e => handleJurusanChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[150px]"><option value="">Jurusan</option>{jurusanOptions.map(j => <option key={j} value={j}>{j}</option>)}</select>
               {selectedKelas && <span className="text-xs text-blue-600 font-bold bg-blue-50 px-3 py-1.5 rounded-lg">✅ {selectedKelas}</span>}
@@ -373,7 +415,7 @@ const jurusanOptions = selectedTingkat
         </div>
       )}
 
-      {!selectedKelas && !loading && (<div className="text-center py-20"><GraduationCap size={64} className="mx-auto text-gray-200 mb-4"/><p className="text-gray-500 font-semibold text-lg">Pilih Kelas Terlebih Dahulu</p><p className="text-gray-400 text-sm mt-1">{isAdmin ? 'Gunakan filter di atas: Tingkat → Jurusan' : 'Kelas Anda belum ditetapkan'}</p></div>)}
+      {!selectedKelas && !loading && (<div className="text-center py-20"><GraduationCap size={64} className="mx-auto text-gray-200 mb-4"/><p className="text-gray-500 font-semibold text-lg">Pilih Kelas Terlebih Dahulu</p><p className="text-gray-400 text-sm mt-1">{isAdmin ? 'Gunakan filter di atas: Tanggal → Tingkat → Jurusan' : 'Kelas Anda belum ditetapkan'}</p></div>)}
 
       {showEditRequestModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowEditRequestModal(false)}>

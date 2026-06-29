@@ -37,8 +37,21 @@ export default function EntriPelanggaran({ userData }) {
 
   const handleSearch = useCallback(async (val) => {
     setSearchTerm(val)
-    if (val.length >= 3) { setIsSearching(true); const res = await searchStudentsForPelanggaran(val, userData?.role, userData?.kelas); if (res.data) setSearchResults(res.data); setIsSearching(false); setShowDropdown(true) } 
-    else { setSearchResults([]); setShowDropdown(false) }
+    if (val.length >= 3) {
+      setIsSearching(true)
+      const res = await searchStudentsForPelanggaran(val, userData?.role, userData?.kelas, userData?.id)
+      if (res.error) {
+        setToast({ type: 'error', message: 'Gagal mencari: ' + res.error })
+        setSearchResults([])
+      } else if (res.data) {
+        setSearchResults(res.data)
+      }
+      setIsSearching(false)
+      setShowDropdown(true)
+    } else {
+      setSearchResults([])
+      setShowDropdown(false)
+    }
   }, [userData])
 
   const selectStudent = async (student) => {

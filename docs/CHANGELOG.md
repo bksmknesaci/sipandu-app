@@ -1,5 +1,54 @@
 # Changelog SIPANDU
 
+## 2026-07-05
+
+- Rekap Pelanggaran Wali Kelas: tambah tombol "Hapus Semua" khusus role Administrator (2x konfirmasi ketik "HAPUS SEMUA")
+- Optimalisasi Rekap Pelanggaran: hapus query getRekapPelanggaranStats() yang terpisah — stats kini dihitung langsung dari data tabel (hemat 1 DB round-trip, loading lebih cepat)
+- Absensi Kehadiran: tambah kolom filter tanggal (date picker) khusus role Administrator
+- Absensi Kehadiran: Admin bisa mengisi/edit absensi di hari lampau yang terlewat sekretaris
+- Absensi Kehadiran: banner kuning peringatan "Mode Edit Absensi Hari Lampau" saat Admin memilih tanggal bukan hari ini
+- Absensi Kehadiran: tombol "Hari Ini" untuk reset ke tanggal sekarang
+- Absensi Kehadiran: status isSubmitted otomatis reset saat Admin ganti tanggal
+- File diubah: app/wali-kelas/rekap-pelanggaran/page.js, app/absensi/page.js
+
+## 2026-07-04
+
+- Fix error "motion is not defined" pada modal detail alumni di halaman Semua Kisah Alumni (app/alumni/page.js) dan Kisah Inspiratif Alumni di HOME (app/components/KisahAlumni.js) — ganti motion.div dengan div + CSS @keyframes
+- Fix avatar lingkaran putih tanpa huruf inisial — akar masalah: class gradient Tailwind dinamis (from-blue-400 to-cyan-500) di-purge oleh JIT compiler karena tidak terdeteksi saat build. Solusi: ganti ke inline style background: linear-gradient() dengan warna hex langsung
+- Tambahkan avatar lingkaran inisial di samping kiri nama alumni pada carousel Kisah Inspiratif Alumni di halaman HOME
+- Avatar di halaman Semua Kisah Alumni tetap di posisi tengah atas kartu
+- Ubah grid halaman Semua Kisah Alumni menjadi 2 kolom di HP (grid-cols-2 lg:grid-cols-3)
+- Fix filter dropdown Tahun Lulus, Jurusan, Status tidak berfungsi di halaman Semua Kisah Alumni — akar masalah: query dropdown di alumniActions.js menggunakan head: true sehingga hanya mengembalikan count tanpa data rows. Solusi: hapus head: true, ambil data rows, gunakan new Set() untuk nilai unik
+- Tambahkan statusConfig dan statusOrder lengkap 9 opsi di KisahAlumni.js dan alumni/page.js: Kuliah, Bekerja, Wirausaha, Kuliah dan Bekerja, Kursus/Pelatihan, Mencari Kerja, TNI/Polri, Gap Year, Lainnya
+- Stats mini cards di HOME sekarang menampilkan semua status alumni yang ada datanya (sebelumnya hanya 5 status)
+- Hapus fitur "Upload Foto Aktivitas (Opsional)" di halaman Formulir Tracer Studi Lulusan untuk menghemat storage — hapus useRef, fileInputRef, dan section upload. handleSubmit kirim null sebagai file
+- Tambahkan opsi TNI/Polri dan Gap Year di pilihan Status Saat Ini pada Formulir Tracer Studi Lulusan (total 9 opsi, sinkron dengan statusConfig di halaman publik)
+- File diubah: app/alumni/page.js, app/components/KisahAlumni.js, app/actions/alumniActions.js, app/formulir/tracer-studi/page.js
+
+## 2026-07-03
+- Di Supabase SQL	Tambah kolom is_published, is_featured, pin_order + index
+- Tab Tracer: tambah 3 tombol per baris — ✅ Publikasikan/Sembunyikan, ⭐ Jadikan Pilihan/Lepas, 📌 Sematkan di Atas
+- File baru — Halaman daftar semua kisah alumni dengan search, filter (tahun/jurusan/status/kota), pagination, modal detail
+
+## 2026-07-03 (Pembaruan Dashboard & Beranda)
+- Fix pencarian siswa di Entri Reward & Entri Pelanggaran untuk role Wali Kelas: siswa yang muncul hanya dari kelas binaannya
+- Akar masalah: kolom jurusan di tabel siswa berformat "TKRO 1" (ikut nomor), sedangkan parsing sebelumnya hanya mengambil parts[1]="TKRO" sehingga tidak cocok
+- Perbaikan: gunakan parts.slice(1).join(' ') agar menghasilkan "TKRO 1" yang sesuai dengan data di tabel siswa
+- Tambah prioritas ambil kelas langsung dari database (tabel users berdasarkan userId) sebagai sumber utama, fallback ke userData.kelas dari localStorage
+- Rekap Pelanggaran Wali Kelas: auto-filter data hanya siswa kelas binaan, dropdown Tingkat & Jurusan disabled untuk WK
+- Rekap Pelanggaran Wali Kelas: hapus tombol "Hapus Semua" (hanya Admin yang boleh)
+- Rekap Kehadiran: sembunyikan tombol "Reset Semester" dan "Reset Semua (Tahunan)" untuk non-Administrator
+- File diubah: app/actions/rewardActions.js, app/actions/pelanggaranActions.js, app/components/EntriReward.js, app/components/EntriPelanggaran.js, app/wali-kelas/rekap-pelanggaran/page.js, app/rekap-kehadiran/page.js
+- Dashboard Admin: Stat card Total Reward & Total Pelanggaran diubah dari COUNT (jumlah entri) menjadi SUM (jumlah poin) agar mencerminkan perolehan aktual
+- Dashboard Admin: Tabel Top 10 Reward & Pelanggaran ditambahkan kolom kelas+jurusan agar Admin tahu asal kelas siswa
+- Dashboard Admin: Query dioptimasi — hapus 2 query count terpisah, hitung total langsung dari data entri
+- Dashboard Admin: Label stat card diubah jadi "Total Poin Reward" dan "Total Poin Pelanggaran"
+- Beranda Home: Grafik Rekap Reward Terbaik diganti dari data mockup ke data real dari tb_reward_siswa (group by kelas+jurusan, sum poin)
+- Beranda Home: Grafik Rekap Pelanggaran Tertinggi diganti dari data mockup ke data real dari tb_pelanggaran_siswa (group by kelas+jurusan, sum poin)
+- Tambah server action getHomeRewardChart() di app/actions/rewardActions.js
+- Tambah server action getHomePelanggaranChart() di app/actions/pelanggaranActions.js
+- File diubah: app/actions/dashboardActions.js, app/actions/rewardActions.js, app/actions/pelanggaranActions.js, app/dashboard/AdminDashboard.js, app/page.js
+
 ## 2026-07-02
 - Perbaikan sistem notifikasi lonceng: createEditRequest() sekarang benar-benar mengirim - notifikasi ke Admin saat Sekretaris minta revisi absensi
 - Perbaikan approveEditRequest() dan rejectEditRequest() sekarang mengirim notifikasi ke pemohon (Sekretaris/WK) dengan pesan yang jelas
@@ -7,6 +56,13 @@
 - Icon notifikasi Pengajuan Izin diganti dari 🤒 menjadi 📋 agar mudah dibedakan dengan Sakit
 - Ubah jeda getaran lonceng dari 8 detik menjadi 20 detik agar tidak terlalu sering
 - Dokumentasi tabel notifications di DATABASE_SCHEMA.md (type, priority, action_url)
+- app/actions/absensiActions.js :
+  -- Ganti import baris atas
+  -- Ganti seluruh fungsi createEditRequest
+  -- Ganti seluruh fungsi approveEditRequest
+  -- Ganti seluruh fungsi rejectEditRequest
+  -- Pastikan getRoleByUserId hanya ada 1 kali
+  -- Hapus duplikat getRoleByUserId
 
 ## 2026-07-01
 

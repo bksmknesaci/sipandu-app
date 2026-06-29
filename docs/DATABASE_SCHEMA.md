@@ -191,7 +191,7 @@ absensi
 * file_name (TEXT)
 * created_at (TIMESTAMPTZ DEFAULT NOW())
 
-## form_tracer_studi
+## form_tracer_studi (Update - Tambahkan kolom kontrol publikasi alumni)
 
 * id (BIGSERIAL PRIMARY KEY)
 * nisn (TEXT)
@@ -207,6 +207,9 @@ absensi
 testimoni (TEXT)
 * foto_aktivitas_url (TEXT)
 * created_at (TIMESTAMPTZ DEFAULT NOW())
+* is_published (bool)
+* is_featured (bool)
+* pin_order (int4) 
 
 ## form_pemetaan_karir
 

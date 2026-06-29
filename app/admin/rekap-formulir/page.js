@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GraduationCap, Briefcase, University, BarChart3, Search, Eye, Download, Printer, X, FileText, Trash2 } from 'lucide-react';
+import { GraduationCap, Briefcase, University, BarChart3, Search, Eye, Download, Printer, X, FileText, Trash2, EyeOff, Star, Pin, Check, XCircle } from 'lucide-react';
 import { getFormulirStats, getRekapFormulir, resetAllFormulirAction } from '@/app/actions/formulirActions';
+import { toggleAlumniPublish, toggleAlumniFeatured, toggleAlumniPin } from '@/app/actions/alumniActions';
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
 import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
 
@@ -22,13 +23,14 @@ function CountUp({ end, duration = 1200 }) {
 }
 
 export default function RekapFormulirPage() {
-  const [stats, setStats] = useState({ totalTracer: 0, totalKarir: 0, totalSnbp: 0, totalAll: 0 });
+  const [stats, setStats] = useState({ totalTracer: 0, totalKarir: 0, totalSnbp: 0, totalAll: 0, alumniStats: {} });
   const [activeTab, setActiveTab] = useState('tracer');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDetail, setShowDetail] = useState(null);
   const [resetting, setResetting] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => { loadStats(); }, []);
 
@@ -46,8 +48,19 @@ export default function RekapFormulirPage() {
     setLoading(false);
   };
 
+  const handleAction = async (id, action, value) => {
+    setActionLoading(id);
+    let res;
+    if (action === 'publish') res = await toggleAlumniPublish(id, value);
+    else if (action === 'featured') res = await toggleAlumniFeatured(id, value);
+    else if (action === 'pin') res = await toggleAlumniPin(id, value);
+    setActionLoading(null);
+    if (res?.error) alert('Gagal: ' + res.error);
+    else fetchData();
+  };
+
   const handleResetAll = async () => {
-    if (!confirm('⚠️ PERINGATAN!\n\nSemua data formulir (Tracer Studi, Pemetaan Karir, SNBP/SNBT) akan dihapus permanen.\n\nLanjutkan?')) return;
+    if (!confirm('⚠️ PERHATIAN!\n\nSemua data formulir (Tracer Studi, Pemetaan Karir, SNBP/SNBP/SNBT) akan dihapus permanen.\n\nLanjutkan?')) return;
     setResetting(true);
     const res = await resetAllFormulirAction();
     if (res.error) {
@@ -190,8 +203,40 @@ export default function RekapFormulirPage() {
                       <>
                         <td className="py-3 px-4 text-gray-600">{d.tahun_lulus}</td>
                         <td className="py-3 px-4 text-gray-600">{d.jurusan}</td>
-                        <td className="py-3 px-4"><span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">{d.status_saat_ini}</span></td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">{d.status_saat_ini}</span>
+                          {d.is_published && <span className="ml-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">✅ Terpublikasi</span>}
+                        </td>
                         <td className="py-3 px-4 text-gray-500 text-xs max-w-[150px] truncate">{d.testimoni || '-'}</td>
+                        {/* Kolom Aksi Alumni — hanya di tab Tracer */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <button
+                              onClick={() => handleAction(d.id, 'publish', !d.is_published)}
+                              disabled={actionLoading === d.id}
+                              className={`p-1.5 rounded-lg border text-[10px] font-bold transition disabled:opacity-40 ${d.is_published ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+                              title={d.is_published ? 'Sembunyikan dari Beranda' : 'Publikasikan ke Beranda'}
+                            >
+                              {actionLoading === d.id ? '⏳' : (d.is_published ? <EyeOff size={12}/> : <Eye size={12}/>)}
+                            </button>
+                            <button
+                              onClick={() => handleAction(d.id, 'featured', !d.is_featured)}
+                              disabled={actionLoading === d.id}
+                              className={`p-1.5 rounded-lg border text-[10px] font-bold transition disabled:opacity-40 ${d.is_featured ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'}`}
+                              title={d.is_featured ? 'Batalkan Pilihan' : 'Jadikan Kisah Pilihan'}
+                            >
+                              {actionLoading === d.id ? '⏳' : <Star size={12} className={d.is_featured ? 'fill-amber-400' : ''}/>}
+                            </button>
+                            <button
+                              onClick={() => handleAction(d.id, 'pin', d.pin_order === 999 ? 1 : 999)}
+                              disabled={actionLoading === d.id}
+                              className={`p-1.5 rounded-lg border text-[10px] font-bold transition disabled:opacity-40 ${d.pin_order !== 999 ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+                              title={d.pin_order !== 999 ? 'Lepas Sematan' : 'Sematkan di Atas'}
+                            >
+                              {actionLoading === d.id ? '⏳' : <Pin size={12} className={d.pin_order !== 999 ? 'fill-indigo-500' : ''}/>}
+                            </button>
+                          </div>
+                        </td>
                       </>
                     )}
                     {activeTab === 'karir' && (
@@ -235,7 +280,7 @@ export default function RekapFormulirPage() {
             </div>
             <div className="p-6 grid grid-cols-2 gap-4 text-sm">
               {Object.entries(showDetail).map(([key, value]) => {
-                if (key === 'id' || key.includes('_url')) return null;
+                if (key === 'id' || key === 'is_published' || key === 'is_featured' || key === 'pin_order' || key.includes('_url')) return null;
                 const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 let displayVal = value || '-';
                 if (key === 'minat_karir') {
@@ -249,12 +294,6 @@ export default function RekapFormulirPage() {
                   </div>
                 );
               })}
-              {showDetail.foto_aktivitas_url && (
-                <div className="col-span-2">
-                  <span className="text-gray-500 font-medium block mb-1">Foto Aktivitas</span>
-                  <img src={showDetail.foto_aktivitas_url} alt="Bukti" className="max-h-48 rounded-lg border"/>
-                </div>
-              )}
               {showDetail.bukti_file_url && (
                 <div className="col-span-2">
                   <span className="text-gray-500 font-medium block mb-1">Bukti File</span>

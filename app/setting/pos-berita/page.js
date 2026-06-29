@@ -16,28 +16,90 @@ function getImageUrl(url) {
   return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/news-media/${url}`;
 }
 
-function compressImage(file, maxWidth = 1400, quality = 0.92) {
+function canvasToBlob(canvas, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', quality);
+  });
+}
+
+function compressImage(file, targetSizeKB = 200) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
+      img.onload = async () => {
+        const maxWidth = 1400;
         let w = img.width;
         let h = img.height;
         if (w > maxWidth) {
           h = (h * maxWidth) / w;
           w = maxWidth;
         }
+
+        const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
+        // Isi putih dulu agar PNG transparan tidak jadi hitam
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob(
-          (blob) => resolve(new File([blob], file.name, { type: 'image/jpeg' })),
-          'image/jpeg',
-          quality
-        );
+
+        const targetBytes = targetSizeKB * 1024;
+
+        // Cek apakah kualitas penuh sudah di bawah target
+        const fullBlob = await canvasToBlob(canvas, 1.0);
+        if (fullBlob.size <= targetBytes) {
+          resolve(new File([fullBlob], file.name, { type: 'image/jpeg' }));
+          return;
+        }
+
+        // Binary search kualitas untuk mendekati target ~200KB
+        let low = 0.1;
+        let high = 1.0;
+        let resultBlob = null;
+
+        for (let i = 0; i < 10; i++) {
+          const mid = (low + high) / 2;
+          const blob = await canvasToBlob(canvas, mid);
+          if (blob.size <= targetBytes) {
+            resultBlob = blob;
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+
+        if (resultBlob) {
+          resolve(new File([resultBlob], file.name, { type: 'image/jpeg' }));
+          return;
+        }
+
+        // Jika kualitas terendah masih di atas target, perkecil dimensi 70%
+        w = Math.floor(w * 0.7);
+        h = Math.floor(h * 0.7);
+        canvas.width = w;
+        canvas.height = h;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+
+        low = 0.1;
+        high = 1.0;
+        resultBlob = null;
+        for (let i = 0; i < 10; i++) {
+          const mid = (low + high) / 2;
+          const blob = await canvasToBlob(canvas, mid);
+          if (blob.size <= targetBytes) {
+            resultBlob = blob;
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+
+        const finalBlob = resultBlob || await canvasToBlob(canvas, 0.3);
+        resolve(new File([finalBlob], file.name, { type: 'image/jpeg' }));
       };
       img.src = e.target.result;
     };
@@ -505,7 +567,7 @@ export default function PosBeritaPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <p className="text-sm text-gray-400">Klik untuk upload cover</p>
-                      <p className="text-xs text-gray-300">Max 800x600, otomatis dikompres</p>
+                      <p className="text-xs text-gray-300">Otomatis dikompres ~200 KB</p>
                     </div>
                   )}
                 </div>

@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, Save, CheckCircle, GraduationCap } from 'lucide-react';
 import { saveTracerStudi } from '@/app/actions/formulirActions';
 import { useRouter } from 'next/navigation';
 
 export default function TracerStudiPage() {
   const router = useRouter();
-  const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   
@@ -25,8 +24,7 @@ export default function TracerStudiPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const file = fileInputRef.current?.files?.[0] || null;
-    const res = await saveTracerStudi(form, file);
+    const res = await saveTracerStudi(form, null);
     if (res.error) alert('Gagal menyimpan: ' + res.error);
     else setSuccess(true);
     setSaving(false);
@@ -74,7 +72,7 @@ export default function TracerStudiPage() {
           <div className="space-y-4">
             <h3 className="font-bold text-gray-800">Status Saat Ini</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {['Kuliah', 'Bekerja', 'Wirausaha', 'Kuliah dan Bekerja', 'Kursus/Pelatihan', 'Mencari Kerja', 'Lainnya'].map(status => (
+              {['Kuliah', 'Bekerja', 'Wirausaha', 'Kuliah dan Bekerja', 'Kursus/Pelatihan', 'Mencari Kerja', 'TNI/Polri', 'Gap Year', 'Lainnya'].map(status => (
                 <label key={status} className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer transition ${form.status_saat_ini === status ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50'}`}>
                   <input type="radio" name="status_saat_ini" value={status} checked={form.status_saat_ini === status} onChange={handleChange} className="w-4 h-4 text-blue-600" required/>
                   <span className="text-sm font-medium">{status}</span>
@@ -124,11 +122,6 @@ export default function TracerStudiPage() {
           <div className="space-y-2">
             <label className="text-sm font-semibold text-gray-700">Testimoni Alumni</label>
             <textarea name="testimoni" value={form.testimoni} onChange={handleChange} rows={3} placeholder="Tulis testimoni atau pesan Anda..." className="w-full p-2.5 border rounded-xl text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"></textarea>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700">Upload Foto Aktivitas (Opsional)</label>
-            <input type="file" ref={fileInputRef} accept="image/*" className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
           </div>
 
           <button type="submit" disabled={saving} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2">

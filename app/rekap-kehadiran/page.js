@@ -658,8 +658,12 @@ const jurusanOptions = tingkatFilter
               <input type="text" placeholder="Cari Nama/NISN..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-40" style={blackText} />
               <button onClick={handleExportExcel} className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-2 rounded-xl text-xs font-semibold hover:bg-emerald-100 transition border border-emerald-200"><FileSpreadsheet size={14}/> CSV</button>
               <button onClick={handleExportPDF} className="flex items-center gap-1 bg-red-50 text-red-700 px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-100 transition border border-red-200"><FileText size={14}/> PDF</button>
-              <button onClick={handleResetSemester} disabled={resetting} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-gray-900 transition shadow-sm disabled:opacity-50"><Trash2 size={14}/> {resetting ? '⏳' : 'Reset Semester'}</button>
-              <button onClick={handleResetAll} disabled={resettingAll} className="flex items-center gap-1 bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-800 transition shadow-sm disabled:opacity-50"><AlertTriangle size={14}/> {resettingAll ? '⏳' : 'Reset Semua (Tahunan)'}</button>
+              {user?.role === 'Administrator' && (
+                <>
+                  <button onClick={handleResetSemester} disabled={resetting} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-gray-900 transition shadow-sm disabled:opacity-50"><Trash2 size={14}/> {resetting ? '⏳' : 'Reset Semester'}</button>
+                  <button onClick={handleResetAll} disabled={resettingAll} className="flex items-center gap-1 bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-800 transition shadow-sm disabled:opacity-50"><AlertTriangle size={14}/> {resettingAll ? '⏳' : 'Reset Semua (Tahunan)'}</button>
+                </>
+              )}
             </div>
           </div>
 

@@ -5,6 +5,8 @@ import {
   getWaliKelasUserId,
   getSekretarisUserId,
   getAdminUserIds,
+  createNotification,
+  notifyMultipleUsers,
   createNotificationWithAdminCC,
   notifyWaliKelasSakitIzin,
 } from '@/app/actions/notificationActions';
@@ -129,7 +131,64 @@ export async function isAbsensiSubmitted(tanggal, kelas, jurusan) {
   return { submitted: allHaveStatus && allLocked }
 }
 
+export async function createEditRequest(userId, kelas, jurusan, tanggal, reason) {
+  const { data, error } = await supabaseAdmin.from('absensi_edit_requests').insert([{
+    user_id: userId, kelas, jurusan, tanggal, reason, status: 'pending'
+  }]).select().single()
+  if (error) return { error: error.message }
 
+  // Kirim notifikasi ke SEMUA Admin
+  try {
+    const adminIds = await getAdminUserIds();
+    if (adminIds.length > 0) {
+      await notifyMultipleUsers({
+        userIds: adminIds,
+        title: '📝 Permintaan Revisi Absensi Baru',
+        message: `${kelas ? kelas + ' ' : ''}${jurusan || ''} — Tanggal ${tanggal}. Alasan: "${(reason || '-').substring(0, 100)}"`,
+        type: 'attendance_revision',
+        priority: 'WARNING',
+        referenceType: 'absensi_edit_request',
+        referenceId: String(data?.id || ''),
+        actionUrl: '/absensi',
+      });
+      console.log(`[createEditRequest] ✅ Notifikasi terkirim ke ${adminIds.length} Admin`);
+    }
+  } catch (notifErr) {
+    console.error('[createEditRequest] Gagal kirim notifikasi ke Admin:', notifErr);
+  }
+
+  // Kirim konfirmasi ke pemohon
+  try {
+    const requestorRole = data ? await getRoleByUserId(data.user_id) : null;
+    let targetId = data.user_id;
+    
+    if (requestorRole === 'Sekretaris Kelas') {
+      const sekId = await getSekretarisUserId(kelas, jurusan);
+      if (sekId) targetId = sekId;
+    } else if (requestorRole === 'Wali Kelas') {
+      const wkId = await getWaliKelasUserId(kelas, jurusan);
+      if (wkId) targetId = wkId;
+    }
+    
+    if (targetId && String(targetId) !== String(adminId)) {
+      await createNotification({
+        userId: targetId,
+        title: '📨 Permintaan Revisi Terkirim',
+        message: `Permintaan revisi absensi tanggal ${tanggal} telah dikirim ke Administrator. Tunggu persetujuan sebelum bisa mengedit.`,
+        type: 'attendance_revision',
+        priority: 'INFO',
+        referenceType: 'absensi_edit_request',
+        referenceId: String(data?.id || ''),
+        actionUrl: '/absensi',
+      });
+      console.log(`[createEditRequest] ✅ Konfirmasi dikirim ke id=${targetId} (role: ${requestorRole})`);
+    }
+  } catch (err) {
+    console.error('[createEditRequest] Gagal kirim konfirmasi ke pemohon:', err);
+  }
+
+  return { success: true, data }
+}
 
 export async function approveEditRequest(requestId, adminId, kelas, jurusan, tanggal) {
   // 1. Update status request
@@ -156,14 +215,15 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
       const requestorRole = await getRoleByUserId(reqData.user_id);
       let targetId = reqData.user_id;
       
-      // Jika pemohon adalah Sekretaris, cari ID Sekretaris kelas yang sama
       if (requestorRole === 'Sekretaris Kelas') {
         const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
         if (sekId) targetId = sekId;
+      } else if (requestorRole === 'Wali Kelas') {
+        const wkId = await getWaliKelasUserId(reqData.kelas, reqData.jurusan);
+        if (wkId) targetId = wkId;
       }
       
       if (targetId && String(targetId) !== String(adminId)) {
-        const { createNotification } = await import('@/app/actions/notificationActions');
         await createNotification({
           userId: targetId,
           title: '✅ Revisi Absensi Disetujui',
@@ -174,7 +234,7 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
           referenceId: String(requestId),
           actionUrl: '/absensi',
         });
-        console.log(`[approveEdit] Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
+        console.log(`[approveEdit] ✅ Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
       }
     }
   } catch (notifErr) {
@@ -200,10 +260,12 @@ export async function rejectEditRequest(requestId, adminId) {
       if (requestorRole === 'Sekretaris Kelas') {
         const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
         if (sekId) targetId = sekId;
+      } else if (requestorRole === 'Wali Kelas') {
+        const wkId = await getWaliKelasUserId(reqData.kelas, reqData.jurusan);
+        if (wkId) targetId = wkId;
       }
       
       if (targetId && String(targetId) !== String(adminId)) {
-        const { createNotification } = await import('@/app/actions/notificationActions');
         await createNotification({
           userId: targetId,
           title: '❌ Revisi Absensi Ditolak',
@@ -214,7 +276,7 @@ export async function rejectEditRequest(requestId, adminId) {
           referenceId: String(requestId),
           actionUrl: '/absensi',
         });
-        console.log(`[rejectEdit] Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
+        console.log(`[rejectEdit] ✅ Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
       }
     }
   } catch (notifErr) {
@@ -285,6 +347,9 @@ export async function submitSakitIzin(formData) {
     console.error('[submitSakitIzin] Gagal kirim notifikasi WK:', notifErr);
   }
 
+  // Tambahkan SEBELUM baris return { success: true }
+  console.log(`[submitSakitIzin] ✅ Data masuk ke tabel absensi: siswa_id=${siswaData.id}, tanggal=${formData.tanggal}, status=${formData.jenis_absensi}, locked=true`);
+
   return { success: true }
 }
 
@@ -325,6 +390,9 @@ export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {
     const { error: absensiError } = await supabaseAdmin.from('absensi').upsert({ siswa_id: siswa.id, tanggal: tanggal, status: 'Hadir', input_by: 'QR Mandiri', locked: true, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' })
     if (absensiError) return { error: absensiError.message }
   }
+  // Tambahkan SEBELUM return { success: true, data: siswa }
+  console.log(`[submitAbsenMandiri] ✅ Data masuk ke tabel absensi: siswa_id=${siswa.id}, tanggal=${tanggal}, status=Hadir, locked=true`);
+
   return { success: true, data: siswa }
 }
 

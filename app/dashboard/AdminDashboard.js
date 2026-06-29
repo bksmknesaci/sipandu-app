@@ -169,8 +169,8 @@ export default function AdminDashboard() {
       {/* ── Baris 3: Operasional ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
-          { label: 'Total Reward', value: data.totalReward || 0, icon: '🏆', bg: 'from-yellow-400 to-amber-500', shadow: 'shadow-yellow-200' },
-          { label: 'Total Pelanggaran', value: data.totalPelanggaran || 0, icon: '⚠️', bg: 'from-red-500 to-rose-600', shadow: 'shadow-red-200' },
+          { label: 'Total Poin Reward', value: data.totalReward || 0, icon: '🏆', bg: 'from-yellow-400 to-amber-500', shadow: 'shadow-yellow-200' },
+          { label: 'Total Poin Pelanggaran', value: data.totalPelanggaran || 0, icon: '⚠️', bg: 'from-red-500 to-rose-600', shadow: 'shadow-red-200' },
           { label: 'Penanganan Aktif', value: data.penangananAktif || 0, icon: '📋', bg: 'from-orange-500 to-red-500', shadow: 'shadow-orange-200' },
           { label: 'Total Berita', value: data.totalBerita || 0, icon: '📰', bg: 'from-cyan-500 to-blue-500', shadow: 'shadow-blue-200' },
         ].map((c) => (
@@ -276,7 +276,8 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 truncate">{resolveNama(s)}</p>
-                  <p className="text-xs text-gray-400">{s.total} poin</p>
+                  <p className="text-[11px] text-gray-400">{s.kelas} {s.jurusan}</p>
+                  <p className="text-xs text-amber-600 font-bold">{s.total} poin</p>
                 </div>
               </div>
             ))}
@@ -289,11 +290,12 @@ export default function AdminDashboard() {
         <h3 className="font-bold text-gray-800 text-sm mb-4">⚠️ Top 10 Pelanggaran Tertinggi</h3>
         {topPelanggaran.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full text-sm min-w-[650px]">
               <thead>
                 <tr className="border-b-2 border-gray-100">
                   <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500 uppercase">Peringkat</th>
                   <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500 uppercase">Nama Siswa</th>
+                  <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500 uppercase">Kelas</th>
                   <th className="text-center py-2.5 px-4 text-xs font-semibold text-gray-500 uppercase">Total Poin</th>
                   <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Kasus Terakhir</th>
                 </tr>
@@ -303,6 +305,7 @@ export default function AdminDashboard() {
                   <tr key={i} className="border-b border-gray-50 hover:bg-red-50/30">
                     <td className="py-2.5 px-4 font-bold text-gray-400">{i + 1}</td>
                     <td className="py-2.5 px-4 font-medium text-gray-800 whitespace-nowrap">{resolveNama(s)}</td>
+                    <td className="py-2.5 px-4 text-gray-500 text-xs whitespace-nowrap">{s.kelas} {s.jurusan}</td>
                     <td className="py-2.5 px-4 text-center"><span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-bold">{s.total}</span></td>
                     <td className="py-2.5 px-4 text-gray-500 text-xs truncate max-w-[200px]">{(s.items && s.items[0]) ? s.items[0].jenis_pelanggaran : '—'}</td>
                   </tr>

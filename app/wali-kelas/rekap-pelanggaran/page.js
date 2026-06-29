@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, TrendingUp, Star, Users, Eye, X, Search, Filter, RefreshCw, FileText, Trash2 } from 'lucide-react'
-import { getRekapPelanggaranStats, getRekapPelanggaranTable, getStudentDetailPelanggaran, deleteAllPelanggaran } from '@/app/actions/pelanggaranActions'
+import { getRekapPelanggaranTable, getStudentDetailPelanggaran, deleteAllPelanggaran } from '@/app/actions/pelanggaranActions'
 import { getKelasFilters } from '@/app/actions/absensiActions'
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
 import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
@@ -11,11 +11,10 @@ function CountUp({ end, duration = 1500 }) {
   const [count, setCount] = useState(0)
   useEffect(() => {
     const startTime = Date.now()
-    const startVal = 0
     const animate = () => {
       const elapsed = Date.now() - startTime
       const progress = Math.min(elapsed / duration, 1)
-      setCount(Math.round(startVal + (end - startVal) * progress))
+      setCount(Math.round(end * progress))
       if (progress < 1) requestAnimationFrame(animate)
     }
     requestAnimationFrame(animate)
@@ -31,18 +30,36 @@ const getStatusDisiplin = (poin) => {
 }
 
 export default function RekapPelanggaran() {
-  const [rawStats, setRawStats] = useState({ total: 0, ringan: 0, sedang: 0, berat: 0 })
+  const [userData, setUserData] = useState(null)
   const [tableData, setTableData] = useState([])
   const [loading, setLoading] = useState(true)
   const [showDetail, setShowDetail] = useState(null)
   const [detailData, setDetailData] = useState(null)
-  const [deleting, setDeleting] = useState(false)
+  const [deletingAll, setDeletingAll] = useState(false)
 
   // Filter States
   const [tingkatFilter, setTingkatFilter] = useState('')
   const [jurusanFilter, setJurusanFilter] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [kelasJurusanList, setKelasJurusanList] = useState([])
+
+  // ── Ambil userData & auto-set filter kelas binaan WK ──
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData')
+      if (stored) {
+        const u = JSON.parse(stored)
+        setUserData(u)
+        if (u.role === 'Wali Kelas' && u.kelas) {
+          const parts = u.kelas.trim().split(/\s+/)
+          if (parts.length >= 2) {
+            setTingkatFilter(parts[0])
+            setJurusanFilter(parts.slice(1).join(' '))
+          }
+        }
+      }
+    } catch {}
+  }, [])
 
   // Fetch kelas jurusan untuk filter dropdown
   useEffect(() => {
@@ -53,17 +70,17 @@ export default function RekapPelanggaran() {
     fetchFilters()
   }, [])
 
-  // Fetch data utama
+  // Fetch data utama — optimasi: hanya 1 query, stats dihitung dari tableData
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     setLoading(true)
-    const [statRes, tableRes] = await Promise.all([
-      getRekapPelanggaranStats(),
-      getRekapPelanggaranTable()
-    ])
-    setRawStats(statRes || {})
-    setTableData(tableRes?.data || [])
+    try {
+      const tableRes = await getRekapPelanggaranTable()
+      setTableData(tableRes?.data || [])
+    } catch (e) {
+      console.error(e)
+    }
     setLoading(false)
   }
 
@@ -82,12 +99,8 @@ export default function RekapPelanggaran() {
   // Filter & search
   const filteredData = useMemo(() => {
     let result = tableData
-    if (tingkatFilter) {
-      result = result.filter(s => s.kelas === tingkatFilter)
-    }
-    if (jurusanFilter) {
-      result = result.filter(s => s.jurusan === jurusanFilter)
-    }
+    if (tingkatFilter) result = result.filter(s => s.kelas === tingkatFilter)
+    if (jurusanFilter) result = result.filter(s => s.jurusan === jurusanFilter)
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase().trim()
       result = result.filter(s =>
@@ -99,18 +112,16 @@ export default function RekapPelanggaran() {
     return result
   }, [tableData, tingkatFilter, jurusanFilter, searchTerm])
 
-  // Hitung ulang stats dari data terfilter
-  const stats = useMemo(() => {
-    if (!tingkatFilter && !jurusanFilter && !searchTerm.trim()) return rawStats
-    return {
-      total: filteredData.reduce((s, d) => s + (d.total_pelanggaran || 0), 0),
-      ringan: filteredData.reduce((s, d) => s + (d.ringan || 0), 0),
-      sedang: filteredData.reduce((s, d) => s + (d.sedang || 0), 0),
-      berat: filteredData.reduce((s, d) => s + (d.berat || 0), 0),
-    }
-  }, [filteredData, rawStats, tingkatFilter, jurusanFilter, searchTerm])
+  // Stats dihitung langsung dari filteredData — tanpa query terpisah
+  const stats = useMemo(() => ({
+    total: filteredData.reduce((s, d) => s + (d.total_pelanggaran || 0), 0),
+    ringan: filteredData.reduce((s, d) => s + (d.ringan || 0), 0),
+    sedang: filteredData.reduce((s, d) => s + (d.sedang || 0), 0),
+    berat: filteredData.reduce((s, d) => s + (d.berat || 0), 0),
+  }), [filteredData])
 
   const handleResetFilter = () => {
+    if (userData?.role === 'Wali Kelas') { setSearchTerm(''); return }
     setTingkatFilter('')
     setJurusanFilter('')
     setSearchTerm('')
@@ -122,7 +133,27 @@ export default function RekapPelanggaran() {
     setShowDetail(nisn)
   }
 
+  const handleDeleteAll = async () => {
+    const val1 = prompt('Ketik "HAPUS SEMUA" untuk konfirmasi:')
+    if (val1 !== 'HAPUS SEMUA') return alert('Konfirmasi dibatalkan.')
+    const val2 = prompt('Ketik sekali lagi "HAPUS SEMUA" untuk memastikan:')
+    if (val2 !== 'HAPUS SEMUA') return alert('Konfirmasi dibatalkan.')
+
+    setDeletingAll(true)
+    try {
+      const result = await deleteAllPelanggaran()
+      if (result.error) throw new Error(result.error)
+      fetchData()
+      alert('Semua data pelanggaran berhasil dihapus.')
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menghapus: ' + err.message)
+    }
+    setDeletingAll(false)
+  }
+
   const isFiltered = !!(tingkatFilter || jurusanFilter || searchTerm.trim())
+  const isWK = userData?.role === 'Wali Kelas'
 
   // ── Print PDF per Tingkat Semua Jurusan ──
   const handlePrintPDF = async () => {
@@ -133,10 +164,7 @@ export default function RekapPelanggaran() {
       ? tableData.filter(s => s.kelas === tingkatFilter)
       : tableData
 
-    if (dataToPrint.length === 0) {
-      alert('Tidak ada data untuk dicetak')
-      return
-    }
+    if (dataToPrint.length === 0) { alert('Tidak ada data untuk dicetak'); return }
 
     const grouped = {}
     dataToPrint.forEach(s => {
@@ -152,8 +180,7 @@ export default function RekapPelanggaran() {
       return (
         '<div style="margin-bottom:24px;">' +
           '<h4 style="font-size:13px;font-weight:bold;color:#1e40af;margin-bottom:8px;border-bottom:2px solid #1e40af;padding-bottom:4px;">' +
-            'Jurusan ' + jurusan + ' (' + list.length + ' siswa, Total: ' + totalPoin + ' poin)' +
-          '</h4>' +
+            'Jurusan ' + jurusan + ' (' + list.length + ' siswa, Total: ' + totalPoin + ' poin)</h4>' +
           '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
             '<thead><tr style="background:#f3f4f6;">' +
               '<th style="border:1px solid #000;padding:5px;text-align:center;width:30px;">No</th>' +
@@ -196,7 +223,7 @@ export default function RekapPelanggaran() {
     const w = window.open('', '_blank')
     w.document.write(
       '<html><head><title>Rekap Pelanggaran - ' + (tingkatFilter || 'Semua Tingkat') + '</title>' +
-      '<style>body{font-family:Arial,sans-serif;padding:20px;margin:0;font-size:12px;} table{width:100%;} @media print{body{margin:0;}}</style>' +
+      '<style>body{font-family:Arial,sans-serif;padding:20px;margin:0;font-size:12px;} @media print{body{margin:0;}}</style>' +
       '</head><body>' +
         kopHTML +
         '<div style="text-align:center;margin-bottom:16px;">' +
@@ -215,25 +242,6 @@ export default function RekapPelanggaran() {
     setTimeout(() => w.print(), 500)
   }
 
-  // ── Hapus Semua ──
-  const handleDeleteAll = async () => {
-    if (!confirm('PERHATIAN!\nSemua data pelanggaran akan dihapus permanen.\nLanjutkan?')) return
-    const konfirmasi = prompt('Ketik "HAPUS SEMUA" untuk konfirmasi:')
-    if (konfirmasi !== 'HAPUS SEMUA') {
-      alert('Penghapusan dibatalkan.')
-      return
-    }
-    setDeleting(true)
-    const res = await deleteAllPelanggaran()
-    if (res.error) {
-      alert('Gagal menghapus: ' + res.error)
-    } else {
-      alert('Semua data pelanggaran berhasil dihapus!')
-      fetchData()
-    }
-    setDeleting(false)
-  }
-
   return (
     <div className="p-4 md:p-8 space-y-6 bg-gray-50/50 min-h-screen">
 
@@ -244,7 +252,7 @@ export default function RekapPelanggaran() {
         </div>
         <div className="text-center md:text-left">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Rekap Pelanggaran Siswa</h1>
-          <p className="text-red-100 mt-2 text-sm md:text-base font-medium">Monitoring seluruh riwayat pelanggaran siswa dan tingkat kedisiplinan.</p>
+          <p className="text-red-100 mt-2 text-sm md:text-base font-medium">Monitoring riwayat pelanggaran siswa kelas binaan Anda.</p>
         </div>
       </div>
 
@@ -275,6 +283,7 @@ export default function RekapPelanggaran() {
             value={tingkatFilter}
             onChange={e => { setTingkatFilter(e.target.value); setJurusanFilter('') }}
             className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none bg-white text-gray-800 min-w-[120px]"
+            disabled={isWK}
           >
             <option value="">Semua Tingkat</option>
             {tingkatOptions.map(t => (
@@ -286,6 +295,7 @@ export default function RekapPelanggaran() {
             value={jurusanFilter}
             onChange={e => setJurusanFilter(e.target.value)}
             className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none bg-white text-gray-800 min-w-[150px]"
+            disabled={isWK}
           >
             <option value="">Semua Jurusan</option>
             {jurusanOptions.map(j => (
@@ -320,7 +330,12 @@ export default function RekapPelanggaran() {
         <div className="p-5 border-b flex flex-wrap justify-between items-center gap-3">
           <h3 className="font-bold text-gray-700">
             Tabel Pelanggaran Siswa
-            {isFiltered && (
+            {isWK && (
+              <span className="ml-2 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                Kelas {tingkatFilter} {jurusanFilter}
+              </span>
+            )}
+            {isFiltered && !isWK && (
               <span className="ml-2 text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
                 {filteredData.length} dari {tableData.length} siswa
               </span>
@@ -333,19 +348,22 @@ export default function RekapPelanggaran() {
             >
               <FileText size={14} /> PDF Per Tingkat
             </button>
+            {/* Hapus Semua — khusus Administrator */}
+            {!isWK && (
+              <button
+                onClick={handleDeleteAll}
+                disabled={deletingAll}
+                className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+              >
+                <Trash2 size={14} /> {deletingAll ? 'Menghapus...' : 'Hapus Semua'}
+              </button>
+            )}
             <button
               onClick={fetchData}
               className="p-2 bg-gray-50 rounded-xl border hover:bg-gray-100 transition"
               title="Refresh Data"
             >
               <RefreshCw size={14} className="text-gray-500" />
-            </button>
-            <button
-              onClick={handleDeleteAll}
-              disabled={deleting}
-              className="flex items-center gap-1.5 bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-800 transition shadow-sm disabled:opacity-50"
-            >
-              <Trash2 size={14} /> {deleting ? 'Menghapus...' : 'Hapus Semua'}
             </button>
           </div>
         </div>
@@ -373,7 +391,7 @@ export default function RekapPelanggaran() {
               ) : filteredData.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="text-center py-8 text-gray-400">
-                    {isFiltered ? 'Tidak ada data yang cocok dengan filter' : 'Tidak ada data'}
+                    {isFiltered ? 'Tidak ada data yang cocok dengan filter' : 'Tidak ada data pelanggaran untuk kelas binaan Anda'}
                   </td>
                 </tr>
               ) : (

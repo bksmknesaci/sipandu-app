@@ -21,8 +21,6 @@ export async function getAdminDashboardData() {
     wkCountRes,
     sekCountRes,
     beritaCountRes,
-    rewardCountRes,
-    pelanggaranCountRes,
     rewardDataRes,
     pelanggaranDataRes,
     absensiHariIniRes,
@@ -34,10 +32,8 @@ export async function getAdminDashboardData() {
     supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('role', 'Wali Kelas').eq('status', 'Aktif'),
     supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('role', 'Sekretaris Kelas').eq('status', 'Aktif'),
     supabaseAdmin.from('news_posts').select('*', { count: 'exact', head: true }).eq('status', 'Publish'),
-    supabaseAdmin.from('tb_reward_siswa').select('*', { count: 'exact', head: true }),
-    supabaseAdmin.from('tb_pelanggaran_siswa').select('*', { count: 'exact', head: true }),
-    supabaseAdmin.from('tb_reward_siswa').select('nisn, nama_siswa, reward_poin'),
-    supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, nama_siswa, poin, jenis_pelanggaran'),
+    supabaseAdmin.from('tb_reward_siswa').select('nisn, nama_siswa, reward_poin, kelas, jurusan'),
+    supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, nama_siswa, poin, jenis_pelanggaran, kelas, jurusan'),
     supabaseAdmin.from('absensi').select('status, siswa_id, input_by, created_at').eq('tanggal', today),
     supabaseAdmin.from('news_posts').select('id, title, category, views').eq('status', 'Publish').order('published_at', { ascending: false }).limit(5),
     supabaseAdmin.from('siswa').select('id, kelas, jurusan, nama'),
@@ -49,9 +45,11 @@ export async function getAdminDashboardData() {
   const totalWaliKelas = wkCountRes.count || 0;
   const totalSekretaris = sekCountRes.count || 0;
   const totalBerita = beritaCountRes.count || 0;
-  const totalReward = rewardCountRes.count || 0;
-  const totalPelanggaran = pelanggaranCountRes.count || 0;
   const penangananAktif = (penangananRes.data || []).filter(p => p.sp1 || p.sp2 || p.sp3).length;
+
+  // ── Total Reward & Pelanggaran (SUM poin dari data entri, bukan count) ──
+  const totalReward = (rewardDataRes.data || []).reduce((sum, r) => sum + (r.reward_poin || 0), 0);
+  const totalPelanggaran = (pelanggaranDataRes.data || []).reduce((sum, p) => sum + (p.poin || 0), 0);
 
   // ── Kehadiran Hari Ini ──
   const absensiHariIni = absensiHariIniRes.data || [];
@@ -73,21 +71,21 @@ export async function getAdminDashboardData() {
   }
   const totalKelas = kelasSet.size;
 
-  // ── Top 10 Reward (pakai nama_siswa, bukan nisn) ──
+  // ── Top 10 Reward (sum poin dari tb_reward_siswa, sertakan kelas & jurusan) ──
   const rewardMap = {};
   for (const r of (rewardDataRes.data || [])) {
     if (!rewardMap[r.nisn]) {
-      rewardMap[r.nisn] = { nisn: r.nisn, nama: r.nama_siswa || r.nisn, total: 0 };
+      rewardMap[r.nisn] = { nisn: r.nisn, nama: r.nama_siswa || r.nisn, kelas: r.kelas || '', jurusan: r.jurusan || '', total: 0 };
     }
     rewardMap[r.nisn].total += r.reward_poin || 0;
   }
   const topReward = Object.values(rewardMap).sort((a, b) => b.total - a.total).slice(0, 10);
 
-  // ── Top 10 Pelanggaran (pakai nama_siswa, bukan nisn) ──
+  // ── Top 10 Pelanggaran (sum poin dari tb_pelanggaran_siswa, sertakan kelas & jurusan) ──
   const pelanggaranMap = {};
   for (const p of (pelanggaranDataRes.data || [])) {
     if (!pelanggaranMap[p.nisn]) {
-      pelanggaranMap[p.nisn] = { nisn: p.nisn, nama: p.nama_siswa || p.nisn, total: 0, items: [] };
+      pelanggaranMap[p.nisn] = { nisn: p.nisn, nama: p.nama_siswa || p.nisn, kelas: p.kelas || '', jurusan: p.jurusan || '', total: 0, items: [] };
     }
     pelanggaranMap[p.nisn].total += p.poin || 0;
     pelanggaranMap[p.nisn].items.push({ jenis_pelanggaran: p.jenis_pelanggaran });
@@ -213,7 +211,7 @@ export async function getWaliKelasDashboardFull(kelas) {
     .order('created_at', { ascending: false })
     .limit(10);
 
-  // Reward (filter by NISN, pakai nama_siswa)
+  // Reward (sum poin dari tb_reward_siswa, filter by NISN kelas ini)
   const { data: rewardData } = await supabaseAdmin
     .from('tb_reward_siswa')
     .select('nisn, nama_siswa, reward_poin')
@@ -230,7 +228,7 @@ export async function getWaliKelasDashboardFull(kelas) {
   }
   const topReward = Object.values(rewardMap).sort((a, b) => b.total - a.total).slice(0, 5);
 
-  // Pelanggaran (filter by NISN, pakai nama_siswa)
+  // Pelanggaran (sum poin dari tb_pelanggaran_siswa, filter by NISN kelas ini)
   const { data: pelanggaranData } = await supabaseAdmin
     .from('tb_pelanggaran_siswa')
     .select('nisn, nama_siswa, poin')
