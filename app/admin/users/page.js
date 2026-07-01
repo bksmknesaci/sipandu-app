@@ -36,6 +36,13 @@ const parseKelas = (kelas) => {
   return { tingkat: parts[0] || '', jurusan: parts[1] || '', nomor: parts[2] || '' }
 }
 
+// Normalisasi string: trim, collapse multiple spaces, uppercase first letter per kata
+// Digunakan agar filter dropdown tidak terpengaruh inkonsistensi whitespace di database
+const normalizeStr = (s) => {
+  if (!s) return ''
+  return s.trim().replace(/\s+/g, ' ')
+}
+
 function CountUp({ end, duration = 1200 }) {
   const [count, setCount] = useState(0)
   const prevEnd = useRef(0)
@@ -102,7 +109,7 @@ function ImportModal({ isOpen, onClose, onImport }) {
 
   const downloadExcelTemplate = () => {
     const headers = ['nama', 'username', 'email', 'password', 'role', 'kelas', 'jurusan', 'whatsapp', 'status'];
-    const exampleData = ['Ahmad Fauzi', 'ahmad.fauzi', 'ahmad@sipandu.id', 'password123', 'Siswa', 'X TKRO 1', 'TKRO 1', '081234567890', 'Aktif'];
+    const exampleData = ['Ahmad Fauzi', 'ahmad.fauzi', 'ahmad@sipandu.id', 'password123', 'OSIS', 'X', 'TKRO 1', '081234567890', 'Aktif'];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, exampleData]);
     ws['!cols'] = [
@@ -230,6 +237,7 @@ export default function ManajemenUser() {
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterKelas, setFilterKelas] = useState('')
+  const [filterJurusan, setFilterJurusan] = useState('')
   const [kelasOptions, setKelasOptions] = useState([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -273,6 +281,21 @@ export default function ManajemenUser() {
   }, [])
 
   const showToast = (message, type = 'success') => setToast({ message, type, key: Date.now() })
+  // Deduplikasi jurusan berdasarkan nilai ternormalisasi
+  // "TKRO 1" dan "TKRO  1" dianggap sama → hanya tampil 1 di dropdown
+  const jurusanOptions = (() => {
+    const seen = new Set()
+    const result = []
+    users.forEach(u => {
+      if (!u.jurusan) return
+      const norm = normalizeStr(u.jurusan)
+      if (norm && !seen.has(norm)) {
+        seen.add(norm)
+        result.push(norm)
+      }
+    })
+    return result.sort()
+  })()
 
   const stats = {
     total: users.length, admin: users.filter(u => u.role === 'Administrator').length,
@@ -283,8 +306,9 @@ export default function ManajemenUser() {
     const matchSearch = u.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || u.username?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase()) || u.whatsapp?.includes(searchTerm)
     const matchRole = !filterRole || u.role === filterRole
     const matchStatus = !filterStatus || u.status === filterStatus
-    const matchKelas = !filterKelas || u.kelas === filterKelas
-    return matchSearch && matchRole && matchStatus && matchKelas
+    const matchKelas = !filterKelas || normalizeStr(u.kelas) === normalizeStr(filterKelas)
+    const matchJurusan = !filterJurusan || normalizeStr(u.jurusan) === normalizeStr(filterJurusan)
+    return matchSearch && matchRole && matchStatus && matchKelas && matchJurusan
   })
 
   const sortedUsers = [...filteredUsers].sort((a, b) => {
@@ -383,7 +407,7 @@ export default function ManajemenUser() {
   const handleExportCSV = () => {
     if (sortedUsers.length === 0) { showToast('Tidak ada data untuk diexport', 'error'); return }
     const headers = ['No', 'Nama', 'Username', 'Email', 'Role', 'Kelas', 'Jurusan', 'WhatsApp', 'Status']
-    const rows = sortedUsers.map((u, i) => [i + 1, u.nama || '', u.username || '', u.email || '', u.role || '', u.kelas || '', u.jurusan || '', u.whatsapp || '', u.status || ''])
+    const rows = sortedUsers.map((u, i) => [i + 1, u.nama || '', u.username || '', u.email || '', u.role || '', parseKelas(u.kelas).tingkat || '', u.jurusan || '', u.whatsapp || '', u.status || ''])
     const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Data_Users_${new Date().toISOString().split('T')[0]}.csv`; link.click()
@@ -398,7 +422,7 @@ export default function ManajemenUser() {
       <td style="border:1px solid #ccc;padding:6px">${u.username || ''}</td>
       <td style="border:1px solid #ccc;padding:6px">${u.email || ''}</td>
       <td style="border:1px solid #ccc;padding:6px;text-align:center">${u.role || ''}</td>
-      <td style="border:1px solid #ccc;padding:6px;text-align:center">${u.kelas || '-'}</td>
+      <td style="border:1px solid #ccc;padding:6px;text-align:center">${parseKelas(u.kelas).tingkat || '-'}</td>
       <td style="border:1px solid #ccc;padding:6px;text-align:center">${u.jurusan || '-'}</td>
       <td style="border:1px solid #ccc;padding:6px">${u.whatsapp || '-'}</td>
       <td style="border:1px solid #ccc;padding:6px;text-align:center">${u.status || ''}</td>
@@ -441,6 +465,9 @@ export default function ManajemenUser() {
 
       <div className="flex flex-wrap gap-3">
         <button onClick={openAddModal} className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2.5 rounded-xl hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all text-sm font-semibold shadow-lg shadow-blue-500/25"><Plus size={16}/> Tambah User</button>
+        {userData?.role === 'Administrator' && (
+          <button onClick={() => setIsDeleteAllOpen(true)} className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-5 py-2.5 rounded-xl hover:bg-red-100 hover:border-red-300 active:scale-95 transition-all text-sm font-semibold"><Trash2 size={16}/> Hapus Semua</button>
+        )}
         <button onClick={() => setIsImportOpen(true)} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Upload size={16}/> Import Excel</button>
         <button onClick={handleExportCSV} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Download size={16}/> Export Data</button>
         <button onClick={handleCetak} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Printer size={16}/> Cetak Data</button>
@@ -448,7 +475,7 @@ export default function ManajemenUser() {
       </div>
 
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
             <input type="text" ref={searchRef} placeholder="Cari Nama / Username / Email..." style={blackText}
@@ -460,6 +487,9 @@ export default function ManajemenUser() {
           </select>
           <select style={blackText} className="border border-gray-200 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" value={filterKelas} onChange={(e) => { setFilterKelas(e.target.value); setCurrentPage(1) }}>
             <option value="">Semua Kelas</option>{kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
+          </select>
+          <select style={blackText} className="border border-gray-200 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" value={filterJurusan} onChange={(e) => { setFilterJurusan(e.target.value); setCurrentPage(1) }}>
+            <option value="">Semua Jurusan</option>{jurusanOptions.map(j => <option key={j} value={j}>{j}</option>)}
           </select>
           <select style={blackText} className="border border-gray-200 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1) }}>
             <option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Nonaktif">Nonaktif</option>
@@ -531,7 +561,6 @@ export default function ManajemenUser() {
         <div className="flex items-center justify-between p-4 border-t border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500">Halaman <span className="font-semibold text-gray-700">{currentPage}</span> dari <span className="font-semibold text-gray-700">{totalPages || 1}</span> <span className="text-gray-400 ml-1">({sortedUsers.length} data)</span></span>
-            <button onClick={() => setIsDeleteAllOpen(true)} className="text-xs text-red-500 hover:text-red-700 font-semibold hover:underline transition ml-2">Hapus Semua</button>
           </div>
           <div className="flex gap-1.5">
             <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-blue-600 hover:text-white disabled:opacity-40 transition-all shadow-sm"><ChevronLeft size={16}/></button>

@@ -1,26 +1,24 @@
-"use client"
+'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   CalendarDays, Users, UserCheck, HeartPulse, Shield, AlertTriangle,
-  Clock, CheckCircle, Save, Lock, GraduationCap, Filter
+  Clock, CheckCircle, Save, Lock, GraduationCap, Filter,
+  Send, X, XCircle, MessageCircle, Loader2
 } from 'lucide-react'
 import {
   getAllKelas, getKelasFilters, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
   submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest
 } from '@/app/actions/absensiActions'
+// [WA] Import fungsi WhatsApp
+import { getAlphaStudentsForWA, executeSendWA } from '@/app/actions/whatsappActions'
 
 function CountUp({ end, duration = 1000 }) {
   const [count, setCount] = useState(0)
   const prevEnd = React.useRef(0)
   useEffect(() => {
     const startVal = prevEnd.current; const startTime = Date.now()
-    const animate = () => {
-      const elapsed = Date.now() - startTime; const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setCount(Math.round(startVal + (end - startVal) * eased))
-      if (progress < 1) requestAnimationFrame(animate)
-    }
+    const animate = () => { const elapsed = Date.now() - startTime; const progress = Math.min(elapsed / duration, 1); const eased = 1 - Math.pow(1 - progress, 3); setCount(Math.round(startVal + (end - startVal) * eased)); if (progress < 1) requestAnimationFrame(animate) }
     requestAnimationFrame(animate); prevEnd.current = end
   }, [end, duration])
   return <span>{count}</span>
@@ -33,9 +31,7 @@ function getWIBHourMinutes() {
   return { hour: parseInt(parts.find(p => p.type === 'hour').value), minute: parseInt(parts.find(p => p.type === 'minute').value) }
 }
 
-function formatWIBTime() {
-  return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' })
-}
+function formatWIBTime() { return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' }) }
 
 function parseKelasJurusan(kelas) {
   if (!kelas) return { tingkat: '', jurusan: '' }
@@ -86,6 +82,11 @@ export default function AbsensiKehadiran() {
   const [hasApprovedRequest, setHasApprovedRequest] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
 
+  // [WA] State untuk Finalisasi & Kirim WhatsApp
+  const [waModal, setWaModal] = useState(null) // null | 'confirm' | 'sending' | 'result'
+  const [waAlphaStudents, setWaAlphaStudents] = useState([])
+  const [waResult, setWaResult] = useState(null)
+
   useEffect(() => {
     if (userData?.role !== 'Sekretaris Kelas') return
     const updateTimer = () => {
@@ -105,24 +106,9 @@ export default function AbsensiKehadiran() {
 
   useEffect(() => { try { const stored = localStorage.getItem('userData'); if (stored) setUserData(JSON.parse(stored)) } catch {} }, [])
   useEffect(() => { const init = async () => { setLoading(true); const kelasRes = await getAllKelas(); if (kelasRes.kelas) setKelasList(kelasRes.kelas); setLoading(false) }; init() }, [])
-  useEffect(() => {
-    const fetchFilters = async () => {
-      const res = await getKelasFilters()
-      if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList)
-    }
-    fetchFilters()
-  }, [])
-  useEffect(() => {
-    if (userData && userData.role === 'Sekretaris Kelas' && userData.kelas) {
-      const parsed = parseKelasJurusan(userData.kelas); setSelectedTingkat(parsed.tingkat); setSelectedJurusan(parsed.jurusan); setSelectedKelas(userData.kelas); setKelasNotFound(false)
-    }
-  }, [userData])
-
-  useEffect(() => {
-    if (userData?.role !== 'Administrator') return
-    if (selectedTingkat && selectedJurusan) { setSelectedKelas(`${selectedTingkat} ${selectedJurusan}`); setKelasNotFound(false) } 
-    else { setSelectedKelas(''); setKelasNotFound(false) }
-  }, [selectedTingkat, selectedJurusan, userData])
+  useEffect(() => { const fetchFilters = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; fetchFilters() }, [])
+  useEffect(() => { if (userData && userData.role === 'Sekretaris Kelas' && userData.kelas) { const parsed = parseKelasJurusan(userData.kelas); setSelectedTingkat(parsed.tingkat); setSelectedJurusan(parsed.jurusan); setSelectedKelas(userData.kelas); setKelasNotFound(false) } }, [userData])
+  useEffect(() => { if (userData?.role !== 'Administrator') return; if (selectedTingkat && selectedJurusan) { setSelectedKelas(`${selectedTingkat} ${selectedJurusan}`); setKelasNotFound(false) } else { setSelectedKelas(''); setKelasNotFound(false) } }, [selectedTingkat, selectedJurusan, userData])
 
   const handleTingkatChange = (val) => { setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
   const handleJurusanChange = (val) => { setSelectedJurusan(val) }
@@ -136,8 +122,8 @@ export default function AbsensiKehadiran() {
       setCurrentTime(formatWIBTime())
       if (userData && userData.role === 'Sekretaris Kelas') {
         const { hour, minute } = getWIBHourMinutes(); const totalMin = hour * 60 + minute
-        if (totalMin < 9 * 60 + 5) { setWithinTime(false); setTimeStatus('before') } 
-        else if (totalMin > 14 * 60 + 40) { setWithinTime(false); setTimeStatus('after') } 
+        if (totalMin < 9 * 60 + 5) { setWithinTime(false); setTimeStatus('before') }
+        else if (totalMin > 14 * 60 + 40) { setWithinTime(false); setTimeStatus('after') }
         else { setWithinTime(true); setTimeStatus('within') }
       } else { setWithinTime(true); setTimeStatus('within') }
     }
@@ -166,7 +152,7 @@ export default function AbsensiKehadiran() {
     } catch (e) { console.error(e) }
   }, [selectedKelas, selectedTingkat, selectedJurusan, fetchDate, userData])
 
-  useEffect(() => { if (selectedKelas) checkSubmitted() }, [selectedKelas, checkSubmitted])  
+  useEffect(() => { if (selectedKelas) checkSubmitted() }, [selectedKelas, checkSubmitted])
 
   const canEdit = isAdmin || (isSekretaris && withinTime && selectedKelas === userData?.kelas && (!isSubmitted || hasApprovedRequest))
 
@@ -174,7 +160,6 @@ export default function AbsensiKehadiran() {
     if (!canEdit) return
     if (isSekretaris && siswa.locked) return
     if (isSekretaris && !['Hadir', 'Alpha'].includes(newStatus)) return
-
     setSiswaList(prev => prev.map(s => s.id === siswa.id ? { ...s, status: newStatus, input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator' } : s))
     setStats(prev => {
       const oldStatus = siswa.status; const newStats = { ...prev }
@@ -190,13 +175,19 @@ export default function AbsensiKehadiran() {
   const handleSaveAll = async () => {
     const records = siswaList.filter(s => s.status && s.status !== null).map(s => ({
       siswa_id: s.id, tanggal: fetchDate, status: s.status,
-      input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false
+      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : (isSekretaris ? 'Sekretaris Kelas' : 'Administrator'),
+      locked: false
     }))
     if (records.length === 0) { showToast('Belum ada data absensi untuk disimpan', 'error'); return }
     setSaving(true)
     const result = await batchUpsertAbsensi(records)
-    if (result.error) { showToast(result.error, 'error') } else { showToast(`${result.count} data absensi berhasil disimpan!`) }
-    setSaving(false)
+    if (result.error) { showToast(result.error, 'error'); setSaving(false); return }
+    if (isSekretaris && hasApprovedRequest) {
+      const lockResult = await submitAbsensi(fetchDate, selectedTingkat, selectedJurusan)
+      if (lockResult.error) { showToast('Gagal mengunci: ' + lockResult.error, 'error') }
+      else { setIsSubmitted(true); setHasApprovedRequest(false); showToast(`${result.count} data absensi berhasil direvisi dan dikunci kembali!`) }
+    } else { showToast(`${result.count} data absensi berhasil disimpan!`) }
+    setSaving(false); fetchData()
   }
 
   const handleMarkAllHadir = async () => {
@@ -215,7 +206,8 @@ export default function AbsensiKehadiran() {
     setIsSubmitting(true)
     const records = siswaList.filter(s => s.status).map(s => ({
       siswa_id: s.id, tanggal: fetchDate, status: s.status,
-      input_by: 'Sekretaris Kelas', locked: false
+      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : 'Sekretaris Kelas',
+      locked: false
     }))
     const saveResult = await batchUpsertAbsensi(records)
     if (saveResult.error) { showToast(saveResult.error, 'error'); setIsSubmitting(false); return }
@@ -234,9 +226,41 @@ export default function AbsensiKehadiran() {
   }
 
   // Admin: reset isSubmitted saat ganti tanggal
-  useEffect(() => {
-    if (isAdmin) { setIsSubmitted(false); setHasPendingRequest(false); setHasApprovedRequest(false) }
-  }, [selectedDate, isAdmin])
+  useEffect(() => { if (isAdmin) { setIsSubmitted(false); setHasPendingRequest(false); setHasApprovedRequest(false) } }, [selectedDate, isAdmin])
+
+  // ═══════════════════════════════════════════════════════════
+  // [WA] FINALISASI & KIRIM WHATSAPP
+  // ═══════════════════════════════════════════════════════════
+  const handleOpenWAModal = async () => {
+    // 1. Cari siswa Alpha yang punya parent_whatsapp
+    const res = await getAlphaStudentsForWA(fetchDate, selectedTingkat, selectedJurusan)
+    if (res.error) { showToast(res.error, 'error'); return }
+    setWaAlphaStudents(res.students || [])
+    setWaModal('confirm')
+  }
+
+  const handleExecuteSendWA = async () => {
+    setWaModal('sending')
+    const res = await executeSendWA(waAlphaStudents, fetchDate, userData?.id)
+    if (res.error) {
+      showToast(res.error, 'error')
+      setWaModal(null)
+      return
+    }
+    setWaResult(res.results)
+    setWaModal('result')
+    // Refresh data absensi
+    fetchData()
+    checkSubmitted()
+  }
+
+  const handleCloseWAModal = () => {
+    setWaModal(null)
+    setWaAlphaStudents([])
+    setWaResult(null)
+  }
+
+  // ═══════════════════════════════════════════════════════════
 
   return (
     <div className="p-6 md:p-8 space-y-6 bg-gray-50/50 min-h-screen">
@@ -264,7 +288,6 @@ export default function AbsensiKehadiran() {
         </div>
       )}
 
-      {/* Info banner untuk Admin saat memilih tanggal bukan hari ini */}
       {isAdmin && selectedDate !== today && (
         <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl">📅</div>
@@ -288,24 +311,11 @@ export default function AbsensiKehadiran() {
           <div className="flex items-center gap-2"><Filter size={18} className="text-gray-500"/><span className="text-sm font-semibold text-gray-700">Filter:</span></div>
           {isAdmin ? (
             <>
-              {/* Filter Tanggal — khusus Administrator */}
               <div className="flex items-center gap-1.5">
                 <CalendarDays size={14} className="text-blue-500" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => setSelectedDate(e.target.value)}
-                  max={today}
-                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800"
-                />
+                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} max={today} className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800" />
                 {selectedDate !== today && (
-                  <button
-                    onClick={() => setSelectedDate(today)}
-                    className="px-2.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
-                    title="Kembali ke hari ini"
-                  >
-                    Hari Ini
-                  </button>
+                  <button onClick={() => setSelectedDate(today)} className="px-2.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition" title="Kembali ke hari ini">Hari Ini</button>
                 )}
               </div>
               <select value={selectedTingkat} onChange={e => handleTingkatChange(e.target.value)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px]"><option value="">Tingkat</option>{tingkatOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
@@ -349,8 +359,7 @@ export default function AbsensiKehadiran() {
                   {siswaList.map((siswa, idx) => {
                     const currentStatus = siswa.status
                     const isAutoSubmitted = siswa.input_by === 'Sakit/Izin Online' || siswa.input_by === 'QR Mandiri'
-                    const isLockedBySystem = isAutoSubmitted && isSekretaris
-                    
+                    const isLockedBySystem = isSekretaris && (siswa.input_by === 'Sakit/Izin Online' || siswa.input_by === 'QR Mandiri' || siswa.input_by === 'Sistem Otomatis' || siswa.input_by === 'Administrator')
                     return (
                       <tr key={siswa.id} className="hover:bg-blue-50/20 transition-colors">
                         <td className="py-3 px-4 text-gray-500 font-medium">{idx + 1}</td>
@@ -409,6 +418,13 @@ export default function AbsensiKehadiran() {
                   <><span className="px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold border border-blue-200">✅ Admin menyetujui edit (1x saja)</span><button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Perubahan</>}</button></>
                 )}
                 {isAdmin && <button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Semua</>}</button>}
+                {/* [WA] Tombol Finalisasi & Kirim WhatsApp — hanya untuk Admin */}
+                {isAdmin && stats.alpha > 0 && (
+                  <button onClick={handleOpenWAModal}
+                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 transition flex items-center gap-2 shadow-lg shadow-green-500/25">
+                    <MessageCircle size={16}/> Finalisasi & Kirim WA
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -417,6 +433,7 @@ export default function AbsensiKehadiran() {
 
       {!selectedKelas && !loading && (<div className="text-center py-20"><GraduationCap size={64} className="mx-auto text-gray-200 mb-4"/><p className="text-gray-500 font-semibold text-lg">Pilih Kelas Terlebih Dahulu</p><p className="text-gray-400 text-sm mt-1">{isAdmin ? 'Gunakan filter di atas: Tanggal → Tingkat → Jurusan' : 'Kelas Anda belum ditetapkan'}</p></div>)}
 
+      {/* Modal Minta Persetujuan Edit */}
       {showEditRequestModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowEditRequestModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn" onClick={e => e.stopPropagation()}>
@@ -433,7 +450,130 @@ export default function AbsensiKehadiran() {
         </div>
       )}
 
-      <style jsx>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } } .animate-slideDown { animation: slideDown 0.3s ease-out; }`}</style>
+      {/* ═══════════════════════════════════════════════════════════
+          [WA] MODAL WHATSAPP — KONFIRMASI / SENDING / RESULT
+      ═══════════════════════════════════════════════════════════ */}
+      {waModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4" onClick={handleCloseWAModal}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn" onClick={e => e.stopPropagation()}>
+
+            {/* ── STEP 1: KONFIRMASI ── */}
+            {waModal === 'confirm' && (
+              <>
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-4 text-white shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg"><MessageCircle size={20} /></div><div><h3 className="font-bold text-sm">Finalisasi & Kirim WhatsApp</h3><p className="text-xs text-green-100">Konfirmasi pengiriman notifikasi</p></div></div>
+                    <button onClick={handleCloseWAModal} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition shrink-0"><X size={16} /></button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p className="text-sm text-amber-800 font-semibold mb-1">📋 Ringkasan Pengiriman</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                      <div className="text-gray-500">Kelas</div><div className="font-bold text-gray-800">{selectedKelas}</div>
+                      <div className="text-gray-500">Tanggal</div><div className="font-bold text-gray-800">{activeDateDisplay}</div>
+                      <div className="text-gray-500">Siswa Alpha</div><div className="font-bold text-gray-800">{waAlphaStudents.length} siswa</div>
+                      <div className="text-gray-500">Punya No. WA</div><div className="font-bold text-green-700">{waAlphaStudents.filter(s => s.phoneValid).length} siswa</div>
+                    </div>
+                  </div>
+
+                  {waAlphaStudents.some(s => !s.phoneValid) && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                      <p className="text-sm text-red-700 font-semibold mb-2">⚠️ {waAlphaStudents.filter(s => !s.phoneValid).length} siswa tidak akan menerima WA:</p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {waAlphaStudents.filter(s => !s.phoneValid).map((s, i) => (
+                          <p key={i} className="text-xs text-red-600">• {s.nama} — <span className="font-mono">{s.phone || 'Tidak ada nomor'}</span></p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {waAlphaStudents.filter(s => s.phoneValid).length > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <p className="text-sm text-green-700 font-semibold mb-2">✅ Akan mengirim ke {waAlphaStudents.filter(s => s.phoneValid).length} orang tua:</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {waAlphaStudents.filter(s => s.phoneValid).map((s, i) => (
+                          <p key={i} className="text-xs text-green-700">• {s.nama} ({s.kelas} {s.jurusan}) — <span className="font-mono">{s.phone}</span></p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 border-t bg-gray-50 shrink-0 flex gap-3">
+                  <button onClick={handleCloseWAModal} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">Batal</button>
+                  <button onClick={handleExecuteSendWA} disabled={waAlphaStudents.filter(s => s.phoneValid).length === 0}
+                    className="flex-1 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl text-sm font-bold hover:from-green-700 hover:to-emerald-700 transition shadow-lg shadow-green-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <Send size={16} /> Kirim Sekarang
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── STEP 2: SENDING ── */}
+            {waModal === 'sending' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-10">
+                <div className="w-16 h-16 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4" />
+                <p className="text-lg font-bold text-gray-800">Sedang Mengirim WhatsApp...</p>
+                <p className="text-sm text-gray-500 mt-1">Mohon tunggu, jangan tutup halaman ini</p>
+                <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+                  <Loader2 size={12} className="animate-spin" /> Mengirim ke {waAlphaStudents.filter(s => s.phoneValid).length} orang tua
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP 3: RESULT ── */}
+            {waModal === 'result' && waResult && (
+              <>
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-4 text-white shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg">📊</div><div><h3 className="font-bold text-sm">Hasil Pengiriman</h3><p className="text-xs text-green-100">Ringkasan notifikasi WhatsApp</p></div></div>
+                    <button onClick={handleCloseWAModal} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition shrink-0"><X size={16} /></button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-extrabold text-green-700">{waResult.filter(r => r.status === 'success').length}</p>
+                      <p className="text-[10px] text-green-600 font-bold">✅ Berhasil</p>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-extrabold text-red-700">{waResult.filter(r => r.status === 'failed').length}</p>
+                      <p className="text-[10px] text-red-600 font-bold">❌ Gagal</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-extrabold text-gray-700">{waResult.length}</p>
+                      <p className="text-[10px] text-gray-600 font-bold">📊 Total</p>
+                    </div>
+                  </div>
+
+                  {/* Detail list */}
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {waResult.map((r, i) => (
+                      <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${r.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                        <span className="text-lg">{r.status === 'success' ? '✅' : '❌'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-800 truncate">{r.nama}</p>
+                          <p className="text-[10px] text-gray-500">{r.kelas} {r.jurusan} • {r.phone}</p>
+                          {r.error && <p className="text-[10px] text-red-600 mt-0.5">Alasan: {r.error}</p>}
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${r.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {r.status === 'success' ? 'Berhasil' : 'Gagal'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-4 border-t bg-gray-50 shrink-0">
+                  <button onClick={handleCloseWAModal} className="w-full py-3 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition">Tutup</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } } .animate-slideDown { animation: slideDown 0.3s ease-out; } @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } .animate-scaleIn { animation: scaleIn 0.2s ease-out; }`}</style>
     </div>
   )
 }

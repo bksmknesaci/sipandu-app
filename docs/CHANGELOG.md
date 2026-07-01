@@ -1,5 +1,80 @@
 # Changelog SIPANDU
 
+## 2026-07-08
+- Fitur baru: Konfigurasi WhatsApp (Fonnte API) di menu Setting/Pengaturan
+- Halaman Konfigurasi WhatsApp dengan 3 tab: Konfigurasi API, Pengaturan Pengaturan Pengiriman, Riwayat Pengiriman
+- Integrasi Fonnte API: simpan token, uji koneksi dengan error detail, status integrasi real-time
+- Keamanan: API Token disimpan di server via supabaseAdmin, ditampilkan dengan masking (●●●●●) di frontend
+- Tambah kolom parent_whatsapp di tabel siswa (nomor WhatsApp orang tua, format internasional Indonesia)
+- Tambah kolom No WA Ortu di tabel Daftar Siswa dengan badge hijau 📱
+- Validasi nomor WA saat simpan (format internasional: 08xxx → 628xxx, 10-15 digit)
+- Update template Import CSV Siswa: tambah kolom "No WA Ortu" di index 6
+- Update Export CSV Siswa: tambah kolom "No WA Ortu" di export
+- Update Cetak Siswa: tambah kolom "No WA Ortu" di cetak browser
+- Fix saveSiswaAction: mapping key frontend (nis) ke kolom database (nisn) via helper mapSiswaToDB — error "Could not find the 'nis' column" sudah diperbaiki
+- Fix openEditModal: mapping s.nisn → formData.nis agar field NISN tidak undefined saat modal edit dibuka
+- Fix importSiswaAction: mapping nis → nisn di setiap baris CSV sebelum insert
+- Absensi Kehadiran: tombol "✅ Finalisasi & Kirim WA" untuk Administrator (muncul jika ada siswa Alpha)
+- Alur Finalisasi: Simpan → Finalisasi & Kirim WA → Konfirmasi (ringkasan) → Sending (spinner) → Result (summary per siswa)
+- Sistem otomatis mencari siswa Alpha yang punya parent_whatsapp valid dari tabel siswa
+- Template pesan WhatsApp profesional (Assalamu'alaikum, nama siswa, kelas, tanggal, status, nama sekolah, SIPANDU)
+- Log pengiriman dicatat di tabel whatsapp_logs (status, response, retry_count)
+- Riwayat Pengiriman: tabel dengan filter status, pencarian, pagination, tombol Kirim Ulang untuk log gagal
+- Riwayat Pengiriman: tombol "Hapus Semua Riwayat" dengan konfirmasi ketik "HAPUS SEMUA" (2x konfirmasi)
+- Dashboard Admin: widget "WhatsApp Hari Ini" (3 kartu: Terkirim/Gagal/Menunggu) menggunakan getWhatsAppTodayStats
+- Sidebar: tambah SubLink "Konfigurasi WhatsApp" di menu Pengaturan
+- Mobile Admin: tambah menu "Konfigurasi WhatsApp" dengan warna emerald
+- Tabel baru di database: whatsapp_config (single row), whatsapp_logs
+- Kolom baru di tabel siswa: parent_whatsapp
+- File baru: app/actions/whatsappActions.js, app/setting/konfigurasi-whatsapp/page.js
+- File diubah: app/components/AppShell.js, app/admin/siswa/page.js, app/absensi/page.js, app/dashboard/AdminDashboard.js, app/mobile/admin/page.js
+
+## 2026-07-07
+- Fix halaman Penanggung Jawab: Total Kelas Aktif hanya menampilkan 3 (X, XI, XII) karena grouping menggunakan kolom kelas saja — sekarang grouping menggunakan gabungan kelas + jurusan sesuai format data terbaru
+- Fix getDerivedPJ(): pengelompokan sekarang berdasarkan kelas + jurusan ternormalisasi, bukan kelas saja
+- Fix getPJByClass(): query menggunakan kolom kelas dan jurusan secara terpisah (bukan gabungan string "X TKRO 1" di satu kolom), sesuai perubahan format data
+- Tambah normalisasi whitespace (trim + collapse multiple spaces) di penanggungJawabActions.js — mencegah grouping ganda akibat inkonsistensi spasi di database
+- Fix dropdown jurusan ganda di Manajemen User: "TKRO 1" dan "TKRO 1" (double space) sekarang di-deduplikasi menjadi 1 item di dropdown
+- Fix filter kelas & jurusan di Manajemen User: perbandingan menggunakan string ternormalisasi agar data dengan whitespace berbeda tetap terfilter dengan benar
+- Halaman Penanggung Jawab: status badge 3 tingkat (Aktif/hijau, Tidak Aktif/abu, Belum Ada PJ/kuning)
+- Halaman Penanggung Jawab: handle null updated_at (tampil "-" bukan "1/1/1970")
+- Halaman Penanggung Jawab: pencarian juga mencakup nama sekretaris
+- Halaman Penanggung Jawab: sorting otomatis X → XII lalu jurusan alfabet
+- Notifikasi lonceng: fix shake interval dari 4000ms menjadi 5000ms
+- Notifikasi lonceng: tambah error callback pada WebSocket subscribe — error "Failed to fetch" ditangani dengan warn instead of uncaught
+- File diubah: app/actions/penanggungJawabActions.js, app/admin/users/page.js, app/components/NotificationCenter.js, app/setting/penanggung-jawab/page.js
+
+## 2026-07-06
+- Fix kritis notif Admin: Login hardcoded admin/admin123 menggunakan client supabase yang diblokir RLS → adminData.id selalu null → notif tidak pernah muncul di lonceng Admin
+- Fix: Ganti query client ke server action getAdminLoginData() menggunakan supabaseAdmin (bypass RLS)
+- Fix: Safety net di AppShell otomatis memperbaiki admin ID null di localStorage dari session lama via resolveAdminUserId()
+- Tambah server action getAdminLoginData() dan resolveAdminUserId() di userActions.js
+- Notifikasi lonceng Admin: popup konfirmasi revisi absensi (bukan redirect ke halaman Absensi) — tampil detail kelas, tanggal, alasan + tombol Setujui/Tolak
+- Notifikasi Pusat Notifikasi: popup konfirmasi revisi absensi sama seperti lonceng — konsisten untuk Admin
+- Tambah server action getEditRequestDetails() di absensiActions.js
+- Tambah polling fallback 15 detik di NotificationCenter — notif tetap muncul meski WebSocket gagal connect
+- Absensi Kehadiran: Data Sakit/Izin Online & QR Mandiri disimpan dengan locked: false (tidak langsung dikunci sebelum Sekretaris klik "Kirim & Kunci")
+- Absensi Kehadiran: Sekretaris hanya bisa edit status Hadir & Alpha — Sakit/Izin terkunci (harus via halaman terpisah)
+- Absensi Kehadiran: Record dari QR Mandiri, Sakit/Izin Online, Sistem Otomatis, Administrator dikunci total untuk Sekretaris
+- Absensi Kehadiran: Badge "SCAN QR" / "ONLINE" di kolom Keterangan tetap dipertahankan setelah Sekretaris kirim absensi (input_by tidak ditimpa)
+- Absensi Kehadiran: Setelah Admin setujui revisi, Sekretaris klik "Simpan Perubahan" → data langsung terkunci otomatis (hanya 1x edit)
+- Fix isAbsensiSubmitted(): tambah pengecekan absensiList.length < siswaIds.length → return false (cegah false "submitted" saat hanya sebagian siswa ada datanya)
+- Rekap Kehadiran Tab Semester & Tahunan: tambah fungsi getCountsWithAlpha() — siswa belum absen di hari efektif lewat otomatis tercatat Alpha (sinkron dengan Bulanan & Harian)
+- Rekap Kehadiran Tab Bulanan, Semester, Tahunan: tambah garis horizontal dan vertikal pada tabel agar pembatas antar kolom terlihat jelas
+- File diubah: app/actions/absensiActions.js, app/actions/userActions.js, app/actions/notificationActions.js, app/components/NotificationCenter.js, app/components/AppShell.js, app/login/page.js, app/absensi/page.js, app/rekap-kehadiran/page.js, app/notifikasi/page.js
+- Tambah filterJurusan state :	Dropdown filter baru
+- Tambah jurusanOptions :	Diambil dari data user yang ada (dinamis)
+- Grid filter 4 → 5 kolom :	Tambah dropdown "Semua Jurusan"
+- matchJurusan di filter :	Filter data berdasarkan kolom jurusan
+- Export CSV: parseKelas(u.kelas).tingkat	: Kolom KELAS hanya tampil X/XI/XII
+- Cetak: parseKelas(u.kelas).tingkat	: Kolom KELAS hanya tampil X/XI/XII
+- Contoh Excel template :	Kolom kelas dari "X TKRO 1" → "X", role dari "Siswa" → "OSIS" (sesuai daftar role)
+- Tombol Hapus Semua :	Dipindah dari bawah pagination ke baris action buttons, dengan style merah yang jelas terlihat, hanya muncul untuk role Administrator
+- app/setting/qr-absensi/page.js :	File baru — semua kode QR Absensi dipindahkan ke sini
+- app/admin/siswa/page.js :	Hapus kode QR: import, state, useEffect, fungsi, JSX tab, tombol, konstanta
+- app/components/AppShell.js :	Tambah SubLink "QR Absensi" di menu Pengaturan
+- Sekarang halaman QR Absensi ada di MENU SETTING → QR Absensi, terpisah dari Daftar Siswa. Semua fungsional QR tetap bekerja sama persis seperti sebelumnya.
+
 ## 2026-07-05
 
 - Rekap Pelanggaran Wali Kelas: tambah tombol "Hapus Semua" khusus role Administrator (2x konfirmasi ketik "HAPUS SEMUA")
@@ -10,6 +85,12 @@
 - Absensi Kehadiran: tombol "Hari Ini" untuk reset ke tanggal sekarang
 - Absensi Kehadiran: status isSubmitted otomatis reset saat Admin ganti tanggal
 - File diubah: app/wali-kelas/rekap-pelanggaran/page.js, app/absensi/page.js
+- notificationActions.js =	FIX BUG: parentMessageEmoji (tidak didefinisikan) → '💬'. Ini adalah akar masalah notif pesan tidak masuk lonceng WK
+- parentPortalActions.js =	Tambah 2 fungsi baru: getParentMessages(studentId) untuk ambil riwayat chat, sendWKReplyMessage(studentId, message, senderId) untuk WK kirim balasan
+- NotificationCenter.js =	① Import 2 fungsi baru dari parentPortalActions ② Tambah state popup chat (chatPopup, chatMessages, dll) ③ Baris notif klik → cek type parent_message → buka popup chat ④ Tombol "Balas" untuk parent_message → buka popup (bukan redirect ke /portal-ortu) ⑤ Popup chat: header gradient biru, pesan Orang Tua di kiri, balasan WK di kanan, auto-refresh 3 detik, Enter untuk kirim ⑥ Pesan dikelompok per tanggal, scroll otomatis ke bawah
+- notificationActions.js =	① deleteOldNotifications default diubah dari 90 hari → 30 hari ② Dipanggil otomatis di getUnreadCount() — setiap kali WK buka lonceng atau refresh notif, data lama terhapus otomatis di background
+- parentPortalActions.js	① Tambah deleteOldParentMessages(days = 10) — hapus pesan > 10 hari ② Dipanggil otomatis di getParentMessages() — setiap kali chat dibuka (di lonceng popup atau halaman pusat notif), data lama terhapus otomatis
+- notifikasi/page.js =	① Tambah import useMemo, useRef, chat helper functions, getParentMessages, sendWKReplyMessage ② Tambah state popup chat (sama persis dengan NotificationCenter) ③ handleNotifClick: notif parent_message → buka popup chat; selain itu → gunakan action_url normal ④ Tombol notif pesan diubah dari "Balas → /portal-ortu" menjadi "💬 Buka Chat" ⑤ Tambah popup chat lengkap (header, pesan bubble, input, auto-refresh 3 detik, scroll otomatis)
 
 ## 2026-07-04
 
@@ -54,7 +135,7 @@
 - Perbaikan approveEditRequest() dan rejectEditRequest() sekarang mengirim notifikasi ke pemohon (Sekretaris/WK) dengan pesan yang jelas
 - Tambah Strategi 0 di getWaliKelasUserId() dan getSekretarisUserId(): gabungan kelas+jurusan ("X TKRO") untuk mencocokkan format tabel users ("X TKRO 1")
 - Icon notifikasi Pengajuan Izin diganti dari 🤒 menjadi 📋 agar mudah dibedakan dengan Sakit
-- Ubah jeda getaran lonceng dari 8 detik menjadi 20 detik agar tidak terlalu sering
+- Ubah jeda getaran lonceng dari 4 detik menjadi 5 detik
 - Dokumentasi tabel notifications di DATABASE_SCHEMA.md (type, priority, action_url)
 - app/actions/absensiActions.js :
   -- Ganti import baris atas

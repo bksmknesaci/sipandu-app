@@ -28,6 +28,7 @@
 * jurusan (varchar)
 * status (varchar)
 * jenis_kelamin (varchar)
+* parent_whatsapp (text) -- Nomor WhatsApp orang tua siswa, format internasional Indonesia (628xxxxxxxxxx)
 
 ## users
 
@@ -374,3 +375,33 @@ Catatan Penggunaan Nilai (Value Constraints)
 * qr_settings
 * setting_key: Menerima nilai 'gps_latitude', 'gps_longitude', 'gps_radius', 'jam_masuk', 'jam_terlambat', 'jam_tutup'
 * setting_value: Bisa berupa angka (koordinat, radius) atau format waktu (HH:MM), atau null (belum diatur)
+
+## whatsapp_config
+
+* id (int8, primary key, default: 1)
+* api_token (text) -- Token API Fonnte (disimpan terenkripsi, tidak ditampilkan lengkap di frontend)
+* device_id (text) -- Device ID Fonnte (opsional, jika memiliki lebih dari 1 device)
+* sender_name (varchar) -- Nama pengirim yang muncul di WhatsApp penerima
+* mode (varchar) -- Nilai: 'testing', 'production'
+* is_connected (boolean, default: false)
+* gateway_phone (text) -- Nomor WhatsApp gateway yang terhubung
+* device_name (text) -- Nama device yang terdeteksi oleh Fonnte
+* last_sync_at (timestamptz)
+* send_alpha (boolean, default: true) -- Kirim WA otomatis ke ortu siswa Alpha saat finalisasi absensi
+* send_terlambat (boolean, default: false) -- Segera hadir (disiapkan untuk pengembangan selanjutnya)
+* send_pulang_awal (boolean, default: false) -- Pulang awal (disiapkan untuk pengembangan selanjutnya)
+* updated_at (timestamptz, default: now())
+* CONSTRAINT whatsapp_config_single_row CHECK (id = 1)
+
+## whatsapp_logs
+
+* id (bigserial, primary key)
+* student_id (bigint, references siswa(id) on delete set null)
+* phone (text) -- Nomor WhatsApp tujuan (sudah dinormalisasi ke format internasional)
+* message (text) -- Isi pesan WhatsApp yang dikirim
+* status (varchar, default: 'pending') -- Nilai: 'pending', 'success', 'failed'
+* response (text) -- Response mentah dari Fonnte API (JSON string)
+* sent_by (bigint) -- ID user yang memicu pengiriman
+* sent_at (timestamptz) -- Waktu pengiriman
+* retry_count (int, default: 0) -- Jumlah percobaan ulang
+* created_at (timestamptz, default: now())

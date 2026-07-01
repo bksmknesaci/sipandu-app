@@ -136,6 +136,8 @@ Status: ACTIVE
 - Validasi Kelas Wajib untuk Non-Administrator
 - Avatar Default Gradient (Jika Tidak Ada Foto)
 - Fix Layout Tabel (Horizontal Scroll, min-width agar tidak berantakan)
+- Fix dropdown jurusan ganda: deduplikasi berbasis normalisasi string — "TKRO 1" dan "TKRO 1" (double space) dianggap sama, hanya tampil 1 di dropdown
+- Fix filter kelas & jurusan: menggunakan perbandingan ternormalisasi (trim + collapse multiple spaces) agar data dengan whitespace berbeda tetap terfilter
 
 Status: ACTIVE
 
@@ -366,11 +368,17 @@ Status: ACTIVE
 ## Menu Penanggung Jawab Kelas (Setting)
 - Halaman Manajemen Penanggung Jawab (/setting/penanggung-jawab)
 - Data Wali Kelas & Sekretaris otomatis diambil dari Manajemen User (Role & Kelas)
-- Kartu Statistik (Total Kelas Aktif, Total Wali, Total Sekretaris, Total PJ)
+- Pengelompokan berdasarkan gabungan kolom kelas + jurusan (bukan kelas saja) — sesuai format data terbaru
+- Normalisasi whitespace otomatis saat grouping — data "TKRO 1" dan "TKRO 1" dikelompokkan ke baris yang sama
+- Kartu Statistik (Total Kelas Aktif dari kombinasi kelas+jurusan, Total Wali, Total Sekretaris, Total PJ)
+- Status badge 3 tingkat: Aktif (hijau), Tidak Aktif (abu), Belum Ada PJ (kuning)
 - Tabel Data PJ dengan Badge WhatsApp (Oranye untuk Wali, Ungu untuk Sekretaris)
-- Filter Pencarian Realtime
+- Filter Pencarian Realtime (kelas, jurusan, nama wali, nama sekretaris)
+- Empty state berbeda: "tidak cocok dengan pencarian" vs "belum ada data kelas"
+- Sorting otomatis: X → XI → XII, lalu jurusan alfabet
 - Modal Detail Penanggung Jawab
 - Komponen PJInfoCard yang terintegrasi di Rekap Kehadiran & Penanganan Siswa
+- getPJByClass() menggunakan query terpisah per kolom kelas & jurusan — bukan gabungan string lama
 
 Status: ACTIVE
 
@@ -974,6 +982,8 @@ Status: ACTIVE
 - Footer "Lihat Semua Notifikasi →" ke halaman pusat notifikasi
 
 Status: ACTIVE
+- Fix shake interval dari 4000ms menjadi 5000ms (tidak terlalu sering)
+- WebSocket subscribe ditambahkan error callback — error "Failed to fetch" tidak lagi muncul sebagai uncaught di console
 
 ---
 
@@ -1082,5 +1092,114 @@ Status: ACTIVE
 - Pagination dengan nomor halaman
 - Empty state berbeda untuk "belum ada data" vs "tidak cocok filter"
 - Data dari server action getAllAlumni() dengan filter & pagination server-side
+
+Status: ACTIVE
+
+## Notifikasi Lonceng (Update — 2026-07-06)
+- Popup konfirmasi revisi absensi untuk Admin: klik notif "Permintaan Revisi Baru" → muncul popup detail (kelas, tanggal, alasan) dengan tombol Setujui/Tolak, bukan redirect ke halaman Absensi
+- Popup konfirmasi revisi absensi juga berfungsi di halaman Pusat Notifikasi (/notifikasi) — konsisten dengan tombol lonceng
+- Setelah Admin setujui → notif ke Sekretaris "✅ Revisi Absensi Disetujui" dengan action ke /absensi
+- Setelah Admin tolak → notif ke Sekretaris "❌ Revisi Absensi Ditolak"
+- Polling fallback 15 detik di NotificationCenter — notif tetap muncul meski WebSocket Supabase gagal connect
+- Tambah server action getEditRequestDetails() untuk fetch detail permintaan revisi di popup
+
+Status: ACTIVE
+
+## Login Admin Hardcoded (Update — 2026-07-06)
+- Fix kritis: Login admin/admin123 sekarang menggunakan server action getAdminLoginData() (supabaseAdmin, bypass RLS) bukan client supabase yang diblokir RLS
+- Sebelumnya: adminData.id selalu null karena query client diblokir RLS → notif tidak pernah muncul di lonceng Admin
+- Sesudah: adminData.id = users.id dari database (contoh: 1) → notif cocok dan muncul
+- Safety net di AppShell: otomatis memperbaiki admin ID yang null di localStorage dari session lama
+- Tambah server action getAdminLoginData() dan resolveAdminUserId() di userActions.js
+
+Status: ACTIVE
+
+## Absensi Kehadiran — Penguncian & Hak Edit Sekretaris (Update — 2026-07-06)
+- Data dari Sakit/Izin Online, QR Mandiri, Sistem Otomatis, dan Administrator langsung tersimpan dengan locked: false (tidak dikunci sebelum Sekretaris klik "Kirim & Kunci")
+- Sekretaris hanya bisa mengedit status Hadir dan Alpha — tombol Sakit & Izin terkunci (harus via halaman terpisah)
+- Record dari inputan siswa online/QR/Sistem/Admin dikunci total untuk Sekretaris (gembok + tooltip "Dikunci: Input via ...")
+- Badge "SCAN QR" dan "ONLINE" di kolom Keterangan tetap ditampilkan dan tidak berubah menjadi "Sekretaris Kelas" setelah Sekretaris kirim absensi
+- Setelah Admin setujui revisi dan Sekretaris klik "Simpan Perubahan" → data langsung terkunci otomatis (1x edit saja)
+- isAbsensiSubmitted() diperbaiki: sekarang WAJIB cek jumlah record == total siswa, mencegah false "submitted" saat hanya sebagian siswa yang ada datanya
+
+Status: ACTIVE
+
+## Rekap Kehadiran (Update — 2026-07-06)
+- Tab Semester & Tahunan: siswa yang belum absen di hari efektif yang sudah lewat sekarang otomatis tercatat Alpha (sinkron dengan logika tab Bulanan & Harian)
+- Tambah fungsi getCountsWithAlpha() yang menghitung Alpha implisit: hari efektif lewat tanpa record = Alpha
+- Tab Bulanan: tambah garis horizontal dan vertikal pada tabel agar pembatas antar kolom terlihat jelas
+- Tab Semester & Tahunan: tambah garis horizontal dan vertikal pada tabel
+- Sebelumnya: tab Semester/Tahunan menampilkan 0 Alpha untuk siswa yang tidak ada record sama sekali
+
+Status: ACTIVE
+
+## Konfigurasi WhatsApp (Fonnte API)
+- Halaman Konfigurasi WhatsApp (/setting/konfigurasi-whatsapp)
+- 3 Tab: Konfigurasi API, Pengaturan Pengiriman, Riwayat Pengiriman
+- Tab Konfigurasi API:
+- Input Fonnte API Token (disimpan terenkripsi di server, tidak ditampilkan lengkap di frontend)
+- Input Device ID (opsional)
+- Input Nama Pengirim
+- Pilih Mode Testing/Production
+- Tombol "🔗 Uji Koneksi" dengan pesan error detail dari Fonnte (HTTP status, alasan gagal, timeout)
+- Card Status Integrasi (Terhubung/Belum Terhubung, info gateway phone, device name, last sync)
+- Tab Pengaturan Pengiriman:
+- Switch "Kirim otomatis ke Orang Tua siswa Alpha" (aktif default)
+- Switch "Kirim otomatis ke Orang Tidak Terlambat" (disiapkan untuk pengembangan selanjutnya)
+- Switch "Kirim otomatis ke Orang Tua siswa Pulang sebelum waktunya" (disiapkan untuk pengembangan selanjutnya)
+- Tab Riwayat Pengiriman:
+- Tabel riwayat lengkap (tanggal, nama siswa, kelas, no WA, status, pesan error, aksi)
+- Filter status (Semua/Berhasil/Gagal/Menunggu), pencarian nama/nomor
+- Pagination
+- Tombol "🔄 Kirim Ulang" untuk log yang gagal
+- Tombol "Hapus Semua Riwayat" dengan konfirmasi ketik "HAPUS SEMUA" (2x konfirmasi)
+- Server action whatsappActions.js: getWhatsAppConfig, saveWhatsAppConfig, testWhatsAppConnection, getAlphaStudentsForWA, executeSendWA, getWhatsAppLogs, retryWhatsAppLog, deleteAllWALogs, getWhatsAppTodayStats
+- Keamanan: API Token disimpan di server via supabaseAdmin, tidak pernah dikirim ke frontend secara utuh (masking ●●●●●)
+
+Status: ACTIVE
+
+## Kolom No WA Orang Tua di Daftar Siswa
+- Tambah kolom "No WA Oru" di tabel Daftar Siswa (posisi setelah Jurusan, sebelum Status)
+- Badge hijau dengan ikon 📱 untuk siswa yang sudah punya nomor
+- Validasi nomor sebelum disimpan (format internasional Indonesia: 08xxx → 628xxx, 10-15 digit)
+- Normalisasi otomatis saat simpan (trim, hapus spasi berlebih, 08→62)
+- Field input di modal Tambah/Edit Siswa dengan placeholder dan petunjuk format
+- Kolom termasuk di pencarian (cari by nomor WA)
+
+Status: ACTIVE
+
+## Import CSV Siswa (Update)
+- Template Import diperbarui: kolom "No WA Ortu" ditambahkan di index 6 (setelah Jurusan, sebelum Status)
+- Status berpindah ke index 7
+- Nomor WA otomatis dinormalisasi saat import (08xxx → 628xxx)
+
+Status: ACTIVE
+
+## Export CSV & Cetak Siswa (Update)
+- Kolom "No WA Ortu" ditambahkan di export CSV (setelah Jurusan, sebelum Status)
+- Kolom "No WA Ortu" ditambahkan di cetak/print browser (setelah Jurusan, sebelum Status)
+
+Status: ACTIVE
+
+## Absensi Kehadiran - Finalisasi & Kirim WhatsApp
+- Tombol "✅ Finalisasi & Kirim WA" muncul di halaman Absensi Kehadiran (hanya untuk Administrator, hanya jika ada siswa Alpha)
+- Alur: Admin isi absensi → Simpan Semua → Klik "Finalisasi & Kirim WA"
+- Modal konfirmasi 3 step:
+- Konfirmasi: Ringkasan (kelas, tanggal, total alpha, punya WA, tidak punya WA)
+- Sending: Spinner animasi + progress info
+- Result: Summary cards (Berhasil/Gagal/Total) + detail per siswa
+- Sistem mencari siswa Alpha yang memiliki parent_whatsapp valid dari tabel siswa
+- Template pesan profesional (Assalamu'alaikum, nama siswa, kelas, tanggal, status, nama sekolah, SIPANDU)
+- Log pengiriman dicatat di tabel whatsapp_logs (termasuk yang gagal)
+- Siswa tanpa No WA tetap ditampilkan di daftar yang tidak akan menerima WA
+- Tombol hanya muncul jika stats.alpha > 0
+
+Status: ACTIVE
+
+## Dashboard Admin - Widget WhatsApp Hari Ini
+- Widget kecil 3 kartu di Dashboard Admin (setelah baris Operasional, sebelum Charts)
+- Kartu: WA Terkirim (hijau), WA Gagal (merah), WA Menunggu (kuning)
+- Data diambil dari tabel whatsapp_logs yang terjadi hari ini
+- Angka menggunakan komponen CountUp animasi
 
 Status: ACTIVE

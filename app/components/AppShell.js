@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { updateProfileData } from '@/app/actions/userActions';
 import NotificationCenter from '@/app/components/NotificationCenter';
 import { 
-  Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, 
+  Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, QrCode,
   HeartPulse, GraduationCap, BookOpen, ClipboardList, CalendarDays, AlertTriangle, Award, 
   Settings, ChevronDown, ChevronRight, Users, FileText, UserMinus, 
   MessageCircle, Camera, PlayCircle, Music2, ExternalLink,
@@ -15,6 +15,7 @@ import {
   UserCircle, Mail, Phone, BookOpenCheck, ToggleLeft, Save, Edit3,
   LayoutGrid
 } from 'lucide-react';
+import { resolveAdminUserId } from '@/app/actions/userActions';
 
 export default function AppShell({ children }) {
   const router = useRouter();
@@ -69,6 +70,34 @@ export default function AppShell({ children }) {
       else setUserData(null);
     } catch { setUserData(null); }
   }, [pathname]);
+
+    // ═══════════════════════════════════════════════════════════════
+  // FIX: Safety net — perbaiki Admin ID yang null di localStorage
+  // Terjadi pada session lama yang login sebelum fix (id null karena RLS blokir)
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const fixAdminId = async () => {
+      if (!isLoggedIn || !userData) return;
+      if (userData.role !== 'Administrator') return;
+      if (userData.id && userData.id !== null) return; // Sudah benar, skip
+
+      console.log('[AppShell] ⚠️ Admin ID null/missing, mencoba perbaiki...');
+      try {
+        const result = await resolveAdminUserId(userData.username);
+        if (result.id) {
+          const updated = { ...userData, id: result.id };
+          localStorage.setItem('userData', JSON.stringify(updated));
+          setUserData(updated);
+          console.log(`[AppShell] ✅ Admin ID diperbaiki: null → ${result.id}`);
+        } else {
+          console.error('[AppShell] ❌ Gagal memperbaiki Admin ID, user tidak ditemukan di database');
+        }
+      } catch (e) {
+        console.error('[AppShell] Gagal resolve Admin ID:', e);
+      }
+    };
+    fixAdminId();
+  }, [isLoggedIn, userData?.id, userData?.role, userData?.username]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -375,6 +404,8 @@ export default function AppShell({ children }) {
                 <SubLink icon={UserCog} title="Managemen User" href="/admin/users" />
                 <SubLink icon={UserCheck} title="Penanggung Jawab" href="/setting/penanggung-jawab" />
                 <SubLink icon={CalendarCheck} title="Hari Efektif" href="/setting/hari-efektif" />
+                <SubLink icon={QrCode} title="QR Absensi" href="/setting/qr-absensi" />        
+                <SubLink icon={MessageCircle} title="Konfigurasi WhatsApp" href="/setting/konfigurasi-whatsapp" />
                 <SubLink icon={Newspaper} title="Pos Berita" href="/setting/pos-berita" />
               </DropdownMenu>
             </>
@@ -396,7 +427,7 @@ export default function AppShell({ children }) {
             <Link href="/" className="flex items-center gap-1 hover:text-white active:scale-90 active:text-blue-400 active:bg-white/10 rounded-lg px-2 py-1.5 transition-all duration-100"><Home size={18}/> <span className="hidden md:inline-block">Home</span></Link>
             <Link href="/tentang" className="flex items-center gap-1 hover:text-white active:scale-90 active:text-blue-400 active:bg-white/10 rounded-lg px-2 py-1.5 transition-all duration-100"><Info size={18}/> <span className="hidden md:inline-block">Tentang</span></Link>
             <Link href="/formulir" className="flex items-center gap-1 hover:text-white active:scale-90 active:text-blue-400 active:bg-white/10 rounded-lg px-2 py-1.5 transition-all duration-100"><ClipboardList size={18}/> <span className="hidden md:inline-block">Formulir</span></Link>
-            {isLoggedIn && <NotificationCenter userId={userData?.id} />}
+            {isLoggedIn && <NotificationCenter userId={userData?.id} userRole={userData?.role} />}
             {isLoggedIn ? (
               <button onClick={handleLogout} className="flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 active:scale-90 active:bg-red-800 transition-all duration-100">
                 <LogOut size={16}/> <span className="hidden md:inline-block">Logout</span>

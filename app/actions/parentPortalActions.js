@@ -241,3 +241,39 @@ export async function deleteParentMessage(messageId) {
 export async function markNotificationRead(id) {
   await supabaseAdmin.from('parent_notifications').update({ is_read: true }).eq('id', id)
 }
+
+// ── Ambil riwayat chat antara Orang Tua & WK ──
+export async function deleteOldParentMessages(days = 10) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const ds = cutoff.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
+  const { error } = await supabaseAdmin.from('parent_messages').delete().lt('created_at', ds);
+  if (error) console.error('[deleteOldParentMessages] Error:', error.message);
+  return { error };
+}
+
+export async function getParentMessages(studentId) {
+  // Auto-hapus pesan lama (>10 hari) di background
+  deleteOldParentMessages(10);
+  const { data, error } = await supabaseAdmin
+    .from('parent_messages')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) return { data: [], error: error.message }
+  return { data: data || [], error: null }
+}
+
+// ── WK kirim balasan pesan ke Orang Tua ──
+export async function sendWKReplyMessage(studentId, message, senderId) {
+  const { error } = await supabaseAdmin.from('parent_messages').insert({
+    student_id: studentId,
+    sender_type: 'Wali Kelas',
+    sender_id: senderId || null,
+    message,
+    is_read: false,
+  })
+  if (error) return { error: error.message }
+  return { success: true }
+}

@@ -2,9 +2,17 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+// ── Helper: mapping key frontend → kolom database ──
+function mapSiswaToDB(data) {
+  const { nis, parent_whatsapp, ...rest } = data;
+  return {
+    ...rest,
+    nisn: nis || null,
+    parent_whatsapp: parent_whatsapp || null,
+  };
+}
+
 export async function fetchSiswaAction() {
-  // Fetch semua data menggunakan pagination loop
-  // Supabase default limit 1000 per query, jadi kita loop sampai habis
   const pageSize = 1000;
   let allData = [];
   let page = 0;
@@ -28,16 +36,19 @@ export async function fetchSiswaAction() {
 }
 
 export async function saveSiswaAction(siswaData, editMode) {
-  const { id, ...dataWithoutId } = siswaData;
+  // Mapping key frontend → kolom database SEBELUM operasi DB
+  const dbData = mapSiswaToDB(siswaData);
+
+  const { id, ...dataWithoutId } = dbData;
 
   if (editMode) {
     if (!id) return { error: 'ID siswa tidak ditemukan untuk update' };
-    
+
     const { error } = await supabaseAdmin
       .from('siswa')
       .update(dataWithoutId)
       .eq('id', id);
-    
+
     if (error) {
       if (error.code === '23505') {
         return { error: 'NISN sudah terdaftar! Gunakan NISN lain.' };
@@ -48,7 +59,7 @@ export async function saveSiswaAction(siswaData, editMode) {
     const { error } = await supabaseAdmin
       .from('siswa')
       .insert([dataWithoutId]);
-    
+
     if (error) {
       if (error.code === '23505') {
         return { error: 'NISN sudah terdaftar! Gunakan NISN lain.' };
@@ -79,7 +90,12 @@ export async function deleteAllSiswaAction() {
 }
 
 export async function importSiswaAction(dataArray) {
-  const cleanData = dataArray.map(({ id, ...rest }) => rest);
+  // Mapping key CSV → kolom database untuk setiap baris
+  const cleanData = dataArray.map(({ id, nis, parent_whatsapp, ...rest }) => ({
+    ...rest,
+    nisn: nis || null,
+    parent_whatsapp: parent_whatsapp || null,
+  }));
 
   const { data, error } = await supabaseAdmin
     .from('siswa')
@@ -96,7 +112,6 @@ export async function importSiswaAction(dataArray) {
 }
 
 export async function promoteStudentsAction(updates) {
-  // updates = [{ id: 1, kelas: 'XI TKRO 1' }, { id: 2, kelas: 'XI RPL 1' }, ...]
   const promises = updates.map(u =>
     supabaseAdmin.from('siswa').update({ kelas: u.kelas }).eq('id', u.id)
   );

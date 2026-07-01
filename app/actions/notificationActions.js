@@ -96,7 +96,7 @@ export async function notifyWaliKelasParentMessage({ siswaNama, kelas, jurusan, 
   console.log(`[notifyWK-MSG] Wali Kelas DITEMUKAN id=${waliId}`);
   return createNotificationWithAdminCC({
     userId: waliId,
-    title: `${parentMessageEmoji} Pesan Baru dari Orang Tua`,
+    title: `💬 Pesan Baru dari Orang Tua`,
     message: `Orang tua ${siswaNama} (${kelas} ${jurusan}) mengirim pesan: "${(pesanPreview || '').substring(0, 80)}"`,
     type: 'parent_message',
     priority: 'WARNING',
@@ -113,7 +113,7 @@ export async function notifySekretarisRevision({ sekretarisId, siswaNama, tangga
   }
   return createNotificationWithAdminCC({
     userId: sekretarisId,
-    title: isApproved ? `${attendanceRevisionEmoji} Revisi Absensi Disetujui` : `${attendanceRevisionEmoji} Revisi Absensi Ditolak`,
+    title: isApproved ? `✅ Revisi Absensi Disetujui` : `❌ Revisi Absensi Ditolak`,
     message: `Pengajuan revisi absensi untuk ${siswaNama} (${kelas}) tanggal ${tanggal} telah ${isApproved ? 'disetujui' : 'ditolak'} oleh Administrator.`,
     type: 'attendance_revision',
     priority: isApproved ? 'SUCCESS' : 'DANGER',
@@ -127,6 +127,8 @@ export async function notifySekretarisRevision({ sekretarisId, siswaNama, tangga
 // READ
 // ═══════════════════════════════════════════════════════════════
 export async function getUnreadCount(userId) {
+  // Auto-hapus notifikasi lama (>30 hari) di background
+  deleteOldNotifications(30);
   const { count, error } = await supabaseAdmin
     .from('notifications')
     .select('*', { count: 'exact', head: true })
@@ -185,11 +187,12 @@ export async function deleteAllNotifications(userId) {
   return { error };
 }
 
-export async function deleteOldNotifications(days = 90) {
+export async function deleteOldNotifications(days = 30) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const ds = cutoff.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
   const { error } = await supabaseAdmin.from('notifications').delete().lt('created_at', ds);
+  if (error) console.error('[deleteOldNotifications] Error:', error.message);
   return { error };
 }
 
@@ -204,12 +207,16 @@ export async function getUserIdsByRole(role, { kelas, status = 'Aktif' } = {}) {
 }
 
 export async function getAdminUserIds() {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('users')
     .select('id')
     .eq('role', 'Administrator')
     .eq('status', 'Aktif');
-  return (data || []).map(u => u.id);
+  const ids = (data || []).map(u => u.id);
+  // Logging untuk debug: jika notif Admin tidak muncul, cek output ini di console
+  console.log(`[getAdminUserIds] role=Administrator, status=Aktif → ditemukan ${ids.length} user:`, ids);
+  if (error) console.error('[getAdminUserIds] Error:', error.message);
+  return ids;
 }
 
 /**

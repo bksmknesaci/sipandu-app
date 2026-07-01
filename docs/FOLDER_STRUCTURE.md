@@ -32,7 +32,8 @@ SIPANDU-APP/
 │   │   ├── rekapActions.js
 │   │   ├── rewardActions.js
 │   │   ├── siswaActions.js
-│   │   └── userActions.js
+│   |   ├── userActions.js
+│   │   └── whatsappActions.js
 │   │
 │   ├── admin/
 │   │   ├── rekap-formulir/
@@ -44,7 +45,7 @@ SIPANDU-APP/
 │   │   │   │   └── page.js
 │   │   │   ├── pindah-keluar/
 │   │   │   │   └── page.js
-│   │   │   └── page.js
+│   |   │   └── page.js
 │   │   └── users/
 │   │       └── page.js
 │   │
@@ -69,7 +70,7 @@ SIPANDU-APP/
 │   │   ├── CariDataSiswaWidget.js
 │   │   ├── DaftarTidakHadir.js
 │   │   ├── DashboardNotifications.js
-│   │   ├── EntriPelanggaran.js
+│   |   ├── EntriPelanggaran.js
 │   │   ├── EntriReward.js
 │   │   ├── KisahAlumni.js
 │   │   ├── MajorLogoManager.js
@@ -133,11 +134,15 @@ SIPANDU-APP/
 │   ├── setting/
 │   │   ├── hari-efektif/
 │   │   │   └── page.js
+│   │   |── konfigurasi-whatsapp/
+│   │   |   └── page.js
 │   │   ├── penanggung-jawab/
 │   │   │   └── page.js
 │   │   ├── pos-berita/
 │   │   │   └── page.js
-│   │   └── profil/
+│   │   ├── profil/
+│   │   │   └── page.js
+│   │   └── qr-absensi/
 │   │       └── page.js
 │   │
 │   ├── siswa-berprestasi/

@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCheck, Trash2, ExternalLink } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, ExternalLink, X, Send, MessageCircle, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getUnreadCount, getUserNotifications, markAsRead, markAllAsRead, deleteAllNotifications } from '@/app/actions/notificationActions';
+import { getParentMessages, sendWKReplyMessage } from '@/app/actions/parentPortalActions';
+import { getEditRequestDetails, approveEditRequest, rejectEditRequest } from '@/app/actions/absensiActions';
 
 // ─── Konstanta ─────────────────────────────────────────────────
 const TYPE_ICONS = {
@@ -56,8 +58,24 @@ function timeAgo(dateStr) {
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function chatTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function chatDateLabel(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return 'Hari ini';
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Kemarin';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // ─── Komponen Utama ────────────────────────────────────────────
-export default function NotificationCenter({ userId }) {
+export default function NotificationCenter({ userId, userRole }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -71,6 +89,20 @@ export default function NotificationCenter({ userId }) {
   const channelRef = useRef(null);
   const [shaking, setShaking] = useState(false);
   const isOpenRef = useRef(false);
+
+  // ── Chat Popup State ──
+  const [chatPopup, setChatPopup] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessage, setChatMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
+  
+  // ── Revision Popup State ──
+  const [revisionPopup, setRevisionPopup] = useState(null);
+  const [revisionDetails, setRevisionDetails] = useState(null);
+  const [revisionLoading, setRevisionLoading] = useState(false);
+  const [revisionAction, setRevisionAction] = useState(null);
 
   // ── Sinkron ref ──
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
@@ -111,7 +143,11 @@ export default function NotificationCenter({ userId }) {
         setShaking(true);
         setTimeout(() => setShaking(false), 700);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[NotificationCenter] WebSocket gagal, polling fallback aktif');
+        }
+      });
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
   }, [userId, fetchData]);
@@ -122,9 +158,157 @@ export default function NotificationCenter({ userId }) {
     const iv = setInterval(() => {
       setShaking(true);
       setTimeout(() => setShaking(false), 700);
-    }, 4000);
+    }, 5000);
     return () => clearInterval(iv);
   }, [unreadCount]);
+
+    // ── Polling fallback: fetch ulang setiap 15 detik ──
+  // Digunakan saat Supabase Realtime WebSocket gagal connect
+  // sehingga notif tetap muncul meski tanpa push real-time
+  useEffect(() => {
+    if (!userId) return;
+    const iv = setInterval(() => {
+      fetchData();
+    }, 15000);
+    return () => clearInterval(iv);
+  }, [userId, fetchData]);
+
+  // ── Chat: Fetch messages saat popup buka ──
+  const fetchChatMessages = useCallback(async () => {
+    if (!chatPopup?.studentId) return;
+    try {
+      const res = await getParentMessages(chatPopup.studentId);
+      if (!res.error) setChatMessages(res.data);
+    } catch (err) {
+      console.error('[ChatPopup] Fetch error:', err);
+    }
+  }, [chatPopup?.studentId]);
+
+  useEffect(() => {
+    if (!chatPopup) return;
+    setChatLoading(true);
+    fetchChatMessages().finally(() => setChatLoading(false));
+  }, [chatPopup, fetchChatMessages]);
+
+  // ── Chat: Auto-refresh tiap 3 detik ──
+  useEffect(() => {
+    if (!chatPopup) return;
+    const iv = setInterval(() => {
+      fetchChatMessages();
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [chatPopup?.studentId, fetchChatMessages]);
+
+  // ── Chat: Scroll ke bawah saat pesan baru ──
+  useEffect(() => {
+    if (chatEndRef.current && chatMessages.length > 0) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages.length]);
+
+  
+  // ── Revision: Fetch detail saat popup buka ──
+  useEffect(() => {
+    if (!revisionPopup?.requestId) return;
+    setRevisionLoading(true);
+    setRevisionDetails(null);
+    getEditRequestDetails(revisionPopup.requestId)
+      .then(res => {
+        if (res.data) setRevisionDetails(res.data);
+        else setRevisionDetails(null);
+      })
+      .catch(err => console.error('[RevisionPopup] Fetch error:', err))
+      .finally(() => setRevisionLoading(false));
+  }, [revisionPopup?.requestId]);
+
+  // ── Chat: Kirim balasan ──
+  const handleSendReply = async () => {
+    if (!chatMessage.trim() || !chatPopup) return;
+    setSendingMessage(true);
+    try {
+      const result = await sendWKReplyMessage(chatPopup.studentId, chatMessage, userId);
+      if (result.error) {
+        alert('Gagal mengirim: ' + result.error);
+      } else {
+        setChatMessage('');
+        fetchChatMessages();
+      }
+    } catch (err) {
+      alert('Gagal mengirim: ' + err.message);
+    }
+    setSendingMessage(false);
+  };
+
+  
+  // ── Revision: Setujui ──
+  const handleApproveRevision = async () => {
+    if (!revisionDetails || !userId) return;
+    setRevisionAction('approving');
+    try {
+      const result = await approveEditRequest(
+        revisionDetails.id, userId, revisionDetails.kelas, revisionDetails.jurusan, revisionDetails.tanggal
+      );
+      if (result.error) {
+        alert('Gagal menyetujui: ' + result.error);
+      } else {
+        setNotifications(prev => prev.filter(n => n.reference_id !== String(revisionDetails.id)));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+        setRevisionPopup(null);
+        setRevisionDetails(null);
+        fetchData();
+      }
+    } catch (err) {
+      alert('Gagal menyetujui: ' + err.message);
+    }
+    setRevisionAction(null);
+  };
+
+  // ── Revision: Tolak ──
+  const handleRejectRevision = async () => {
+    if (!revisionDetails || !userId) return;
+    if (!confirm('Tolak permintaan revisi absensi ini?')) return;
+    setRevisionAction('rejecting');
+    try {
+      const result = await rejectEditRequest(revisionDetails.id, userId);
+      if (result.error) {
+        alert('Gagal menolak: ' + result.error);
+      } else {
+        setNotifications(prev => prev.filter(n => n.reference_id !== String(revisionDetails.id)));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+        setRevisionPopup(null);
+        setRevisionDetails(null);
+        fetchData();
+      }
+    } catch (err) {
+      alert('Gagal menolak: ' + err.message);
+    }
+    setRevisionAction(null);
+  };
+
+  // ── Chat: Buka popup dari notif ──
+  const handleNotifClick = useCallback(async (notif) => {
+    await handleMarkOneRead(notif);
+
+    // Chat popup untuk pesan orang tua
+    if (notif.type === 'parent_message' && notif.reference_id) {
+      const match = notif.message?.match(/Orang tua (.+?) \((.+?)\)/);
+      setChatPopup({
+        studentId: parseInt(notif.reference_id),
+        studentName: match ? match[1] : 'Siswa',
+        kelasJurusan: match ? match[2] : '',
+      });
+      setIsOpen(false);
+      return;
+    }
+
+    // Popup konfirmasi revisi absensi untuk Admin
+    if (userRole === 'Administrator' && notif.type === 'attendance_revision' && notif.reference_id) {
+      console.log('[NotificationCenter] Buka revision popup, requestId:', notif.reference_id);
+      setRevisionPopup({ requestId: notif.reference_id });
+      setIsOpen(false);
+      return;
+    }
+  }, [userRole]);
 
   // ── Toggle: hitung posisi dropdown ──
   const handleToggle = useCallback(() => {
@@ -133,9 +317,6 @@ export default function NotificationCenter({ userId }) {
       const vh = window.innerHeight;
 
       if (vw < 768) {
-        // ══ MOBILE: posisi hardcoded di atas layar ══
-        // Tidak pakai getBoundingClientRect() karena bisa salah
-        // pada header dengan transform/stacking context
         setDropdownStyle({
           position: 'fixed',
           top: '8px',
@@ -146,7 +327,6 @@ export default function NotificationCenter({ userId }) {
           maxHeight: `${vh - 16}px`,
         });
       } else {
-        // ══ DESKTOP: posisi di bawah tombol lonceng ══
         if (bellRef.current) {
           const rect = bellRef.current.getBoundingClientRect();
           const availableHeight = vh - rect.bottom - 16;
@@ -160,7 +340,6 @@ export default function NotificationCenter({ userId }) {
             maxHeight: `${Math.max(220, Math.min(availableHeight, 520))}px`,
           });
         } else {
-          // Fallback jika bellRef belum ready
           setDropdownStyle({
             position: 'fixed',
             top: '56px',
@@ -186,7 +365,6 @@ export default function NotificationCenter({ userId }) {
       }
     }
     if (isOpen) {
-      // Delay sedikit agar click toggle tidak langsung tertutup
       const timer = setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('touchstart', handleClickOutside, { passive: true });
@@ -243,9 +421,13 @@ export default function NotificationCenter({ userId }) {
   };
 
   const handleAction = async (notif) => {
-    await handleMarkOneRead(notif);
-    setIsOpen(false);
-    if (notif.action_url) router.push(notif.action_url);
+    await handleNotifClick(notif);
+    // Jangan navigasi jika popup dibuka (chat atau revision)
+    if (notif.type === 'parent_message') return;
+    if (userRole === 'Administrator' && notif.type === 'attendance_revision' && notif.reference_id) return;
+    if (notif.action_url) {
+      router.push(notif.action_url);
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -262,6 +444,17 @@ export default function NotificationCenter({ userId }) {
     : activeTab === 'important' ? notifications.filter(n => ['WARNING', 'DANGER'].includes(n.priority))
     : activeTab === 'system' ? notifications.filter(n => n.type === 'system')
     : notifications;
+
+  // ── Group chat messages by date ──
+  const groupedMessages = useMemo(() => {
+    const groups = {};
+    (chatMessages || []).forEach(msg => {
+      const dateKey = new Date(msg.created_at).toLocaleDateString('id-ID');
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(msg);
+    });
+    return Object.entries(groups);
+  }, [chatMessages]);
 
   return (
     <>
@@ -307,8 +500,252 @@ export default function NotificationCenter({ userId }) {
             markingAll={markingAll}
             loading={loading}
             userId={userId}
+            onNotifClick={handleNotifClick}
           />
         </div>
+      )}
+
+      {/* ── CHAT POPUP ── */}
+      {chatPopup && (
+        <>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000]" onClick={() => setChatPopup(null)} />
+          <div
+            className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setChatPopup(null); }}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden"
+              style={{ maxHeight: '85vh', animation: 'chatPopupIn 0.25s ease-out' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 text-white shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg">
+                      <MessageCircle size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm truncate">{chatPopup.studentName}</h3>
+                      <p className="text-xs text-blue-100 truncate">{chatPopup.kelasJurusan}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setChatPopup(null)}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 transition-colors shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 min-h-[300px]">
+                {chatLoading && chatMessages.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-6 h-6 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <MessageCircle size={32} className="mb-2 opacity-40" />
+                    <p className="text-sm font-medium">Belum ada pesan</p>
+                  </div>
+                ) : (
+                  groupedMessages.map(([dateKey, msgs]) => (
+                    <div key={dateKey}>
+                      <div className="text-center">
+                        <span className="inline-block px-3 py-0.5 bg-white rounded-full text-[10px] font-bold text-gray-500 shadow-sm border border-gray-200">
+                          {chatDateLabel(msgs[0].created_at)}
+                        </span>
+                      </div>
+                      <div className="space-y-2 mt-2">
+                        {msgs.map(msg => {
+                          const isWK = msg.sender_type === 'Wali Kelas';
+                          return (
+                            <div key={msg.id} className={`flex ${isWK ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 shadow-sm ${isWK ? 'bg-blue-600 text-white rounded-br-2xl' : 'bg-white text-gray-800 rounded-bl-2xl border border-gray-200'}`}>
+                                {!isWK && (
+                                  <p className="text-[10px] font-semibold text-gray-400 mb-0.5">Orang Tua</p>
+                                )}
+                                <p className="text-sm leading-relaxed break-words">{msg.message}</p>
+                                <p className={`text-[9px] mt-1 ${isWK ? 'text-blue-200 text-right' : 'text-gray-400'}`}>{chatTime(msg.created_at)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="p-3 bg-white border-t border-gray-100 shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatMessage}
+                    onChange={e => setChatMessage(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendReply(); } }}
+                    placeholder="Ketik balasan..."
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800"
+                    disabled={sendingMessage}
+                  />
+                  <button
+                    onClick={handleSendReply}
+                    disabled={sendingMessage || !chatMessage.trim()}
+                    className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {sendingMessage ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send size={18} />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── REVISION POPUP ── */}
+      {revisionPopup && (
+        <>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000]" onClick={() => { setRevisionPopup(null); setRevisionDetails(null); }} />
+          <div
+            className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) { setRevisionPopup(null); setRevisionDetails(null); } }}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden"
+              style={{ maxHeight: '85vh', animation: 'chatPopupIn 0.25s ease-out' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 text-white shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg">
+                      📝
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm truncate">Permintaan Revisi Absensi</h3>
+                      <p className="text-xs text-amber-100 truncate">Menunggu konfirmasi Anda</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setRevisionPopup(null); setRevisionDetails(null); }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 transition-colors shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 bg-gray-50 min-h-[200px]">
+                {revisionLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <div className="w-6 h-6 border-2 border-amber-300 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : revisionDetails ? (
+                  <div className="space-y-4">
+                    {/* Status badge */}
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold border border-amber-200">
+                        ⏳ {revisionDetails.status === 'pending' ? 'Menunggu Persetujuan' : revisionDetails.status}
+                      </span>
+                    </div>
+
+                    {/* Detail grid */}
+                    <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                      {[
+                        { label: 'Kelas', value: `${revisionDetails.kelas || '-'} ${revisionDetails.jurusan || ''}`.trim() },
+                        { label: 'Tanggal', value: revisionDetails.tanggal ? new Date(revisionDetails.tanggal + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
+                        { label: 'Waktu Pengajuan', value: revisionDetails.created_at ? new Date(revisionDetails.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-' },
+                      ].map(item => (
+                        <div key={item.label} className="flex items-start gap-3 px-4 py-3">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider w-28 shrink-0 pt-0.5">{item.label}</span>
+                          <span className="text-sm font-semibold text-gray-800">{item.value}</span>
+                        </div>
+                      ))}
+                      <div className="px-4 py-3">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Alasan Permintaan</span>
+                        <p className="text-sm text-gray-700 mt-1.5 leading-relaxed bg-amber-50 border border-amber-100 rounded-lg p-3">
+                          "{revisionDetails.reason || '-'}"
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Info box */}
+                    <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                      <span className="text-blue-500 text-sm mt-0.5">ℹ️</span>
+                      <p className="text-xs text-blue-700 leading-relaxed">
+                        Menyetujui akan membuka kembali absensi kelas tersebut untuk direvisi. Sekretaris akan menerima notifikasi dan bisa langsung mengedit.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                    <AlertTriangle size={32} className="mb-2 opacity-40" />
+                    <p className="text-sm font-medium">Detail tidak ditemukan</p>
+                    <p className="text-xs mt-1">Permintaan mungkin sudah diproses</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer buttons */}
+              <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+                {!revisionLoading && revisionDetails?.status === 'pending' ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleRejectRevision}
+                      disabled={revisionAction === 'rejecting'}
+                      className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition border border-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {revisionAction === 'rejecting' ? (
+                        <div className="w-4 h-4 border-2 border-red-300 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <X size={16} />
+                      )}
+                      Tolak
+                    </button>
+                    <button
+                      onClick={handleApproveRevision}
+                      disabled={revisionAction === 'approving'}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {revisionAction === 'approving' ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <CheckCheck size={16} />
+                      )}
+                      Setujui
+                    </button>
+                  </div>
+                ) : !revisionLoading && revisionDetails?.status !== 'pending' ? (
+                  <div className="text-center">
+                    <span className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${
+                      revisionDetails?.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+                    }`}>
+                      {revisionDetails?.status === 'approved' ? '✅ Sudah Disetujui' : '❌ Sudah Ditolak'}
+                    </span>
+                    <button
+                      onClick={() => { setRevisionPopup(null); setRevisionDetails(null); }}
+                      className="block w-full mt-3 py-2.5 text-gray-500 rounded-xl text-sm font-semibold hover:bg-gray-50 transition"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-400 text-sm">Memuat...</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <style>{`
@@ -326,6 +763,10 @@ export default function NotificationCenter({ userId }) {
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
         .notif-scaleIn { animation: notifScaleIn 0.2s ease-out; }
+        @keyframes chatPopupIn {
+          from { opacity: 0; transform: scale(0.9) translateY(20px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
       `}</style>
     </>
   );
@@ -344,6 +785,7 @@ function NotificationPanelContent({
   markingAll,
   loading,
   userId,
+  onNotifClick,
 }) {
   if (loading) {
     return (
@@ -406,12 +848,13 @@ function NotificationPanelContent({
               const pStyle = PRIORITY_STYLES[notif.priority] || PRIORITY_STYLES.INFO;
               const icon = notif.title?.includes('Izin') ? '📋' : (TYPE_ICONS[notif.type] || '🔔');
               const actionLabel = ACTION_LABELS[notif.type];
+              const isParentMsg = notif.type === 'parent_message';
 
               return (
                 <div
                   key={notif.id}
-                  onClick={() => onMarkOneRead(notif)}
-                  className={`flex gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer border-l-[3px] ${pStyle.border} ${!notif.is_read ? pStyle.bg : 'bg-white'}`}
+                  onClick={() => onNotifClick(notif)}
+                  className={`flex gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer border-l-[3px] ${pStyle.border} ${!notif.is_read ? pStyle.bg : 'bg-white'} ${isParentMsg ? 'cursor-pointer' : ''}`}
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${!notif.is_read ? 'bg-white shadow-sm' : 'bg-gray-100'}`}>
                     {icon}
@@ -424,7 +867,7 @@ function NotificationPanelContent({
                     {notif.message && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>}
                     <div className="flex items-center justify-between mt-1.5">
                       <span className="text-[10px] text-gray-400">{timeAgo(notif.created_at)}</span>
-                      {actionLabel && notif.action_url && (
+                      {actionLabel && !isParentMsg && notif.action_url && (
                         <button onClick={(e) => { e.stopPropagation(); onAction(notif); }}
                           className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition">
                           {actionLabel} <ExternalLink size={9} />

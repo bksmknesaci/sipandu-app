@@ -7,6 +7,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import DashboardNotifications from '@/app/components/DashboardNotifications';
+import { getWhatsAppTodayStats } from '@/app/actions/whatsappActions';
 
 // ─── Warna ──────────────────────────────────────────────────────
 const COLORS = { hadir: '#16A34A', sakit: '#F59E0B', izin: '#1E40AF', alpha: '#DC2626' };
@@ -64,6 +65,7 @@ export default function AdminDashboard() {
   const [clock, setClock] = useState('');
   const [dateStr, setDateStr] = useState('');
   const [userData, setUserData] = useState(null);
+  const [waStats, setWaStats] = useState({ success: 0, failed: 0, pending: 0 });
 
   useEffect(() => {
     try {
@@ -85,6 +87,23 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     getAdminDashboardData().then((d) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const fetchWhatsAppStats = async () => {
+      try {
+        const stats = await getWhatsAppTodayStats();
+        setWaStats(stats);
+      } catch (error) {
+        console.error('Error fetching WhatsApp stats:', error);
+      }
+    };
+
+    fetchWhatsAppStats();
+  }, []);
+
+  useEffect(() => {
+    getWhatsAppTodayStats().then(d => { if (d) setWaStats(d); }).catch(() => {});
   }, []);
 
   if (loading) return <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[1,2,3,4,5,6,7,8,9,10,11,12].map(i=><SkeletonCard key={i} />)}</div>;
@@ -173,6 +192,21 @@ export default function AdminDashboard() {
           { label: 'Total Poin Pelanggaran', value: data.totalPelanggaran || 0, icon: '⚠️', bg: 'from-red-500 to-rose-600', shadow: 'shadow-red-200' },
           { label: 'Penanganan Aktif', value: data.penangananAktif || 0, icon: '📋', bg: 'from-orange-500 to-red-500', shadow: 'shadow-orange-200' },
           { label: 'Total Berita', value: data.totalBerita || 0, icon: '📰', bg: 'from-cyan-500 to-blue-500', shadow: 'shadow-blue-200' },
+        ].map((c) => (
+          <div key={c.label} className={`bg-gradient-to-br ${c.bg} ${c.shadow} rounded-2xl p-3.5 md:p-4 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all duration-200`}>
+            <span className="text-xl">{c.icon}</span>
+            <p className="text-xl md:text-2xl font-bold text-white mt-1"><CountUp target={c.value} /></p>
+            <p className="text-white/70 text-[11px] font-medium">{c.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── WhatsApp Hari Ini ── */}
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        {[
+          { label: 'WA Terkirim', value: waStats.success, icon: '✅', bg: 'from-green-500 to-emerald-600', shadow: 'shadow-green-200' },
+          { label: 'WA Gagal', value: waStats.failed, icon: '❌', bg: 'from-red-500 to-rose-600', shadow: 'shadow-red-200' },
+          { label: 'WA Menunggu', value: waStats.pending, icon: '⏳', bg: 'from-amber-400 to-yellow-500', shadow: 'shadow-yellow-200' },
         ].map((c) => (
           <div key={c.label} className={`bg-gradient-to-br ${c.bg} ${c.shadow} rounded-2xl p-3.5 md:p-4 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all duration-200`}>
             <span className="text-xl">{c.icon}</span>

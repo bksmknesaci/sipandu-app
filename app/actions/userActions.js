@@ -267,3 +267,39 @@ export async function updateProfileData(id, data) {
   if (error) return { error: error.message }
   return { success: true }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// FIX: Ambil data admin dari database menggunakan supabaseAdmin (bypass RLS)
+// Digunakan saat login hardcoded admin/admin123
+// ═══════════════════════════════════════════════════════════════
+export async function getAdminLoginData(username) {
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, nama, username, role, kelas, jurusan, foto_url, whatsapp, email')
+    .eq('username', username)
+    .eq('role', 'Administrator')
+    .maybeSingle();
+  if (error) {
+    console.error('[getAdminLoginData] Error:', error.message);
+    return { data: null, error: error.message };
+  }
+  console.log(`[getAdminLoginData] Admin ditemukan:`, data ? { id: data.id, nama: data.nama } : 'TIDAK DITEMUKAN');
+  return { data, error: null };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FIX: Safety net — resolve admin ID dari username
+// Digunakan di AppShell untuk memperbaiki session lama yang id-nya null
+// ═══════════════════════════════════════════════════════════════
+export async function resolveAdminUserId(username) {
+  if (!username) username = 'admin';
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('username', username)
+    .eq('role', 'Administrator')
+    .eq('status', 'Aktif')
+    .maybeSingle();
+  if (error) return { id: null, error: error.message };
+  return { id: data?.id || null, error: null };
+}

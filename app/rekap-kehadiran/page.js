@@ -160,6 +160,39 @@ const jurusanOptions = tingkatFilter
     a: attList.filter(a => a.status === 'Alpha').length
   })
 
+  // ═══════════════════════════════════════════════════════════════
+  // FIX: Hitung Alpha termasuk hari efektif yang sudah lewat tapi tidak ada record
+  // Sinkron dengan logika tab Bulanan & Harian
+  // ═══════════════════════════════════════════════════════════════
+  const getCountsWithAlpha = (siswaId, monthIndex) => {
+    const mStr = monthIndex < 10 ? `0${monthIndex}` : `${monthIndex}`;
+    const yStr = monthIndex >= 7 ? academicStartYear.toString() : (academicStartYear + 1).toString();
+    const monthStr = `${yStr}-${mStr}`;
+
+    const monthAtt = getMonthAtt(siswaId, monthIndex)
+    let h = 0, s = 0, i = 0, explicitA = 0
+    monthAtt.forEach(a => {
+      if (a.status === 'Hadir') h++
+      else if (a.status === 'Sakit') s++
+      else if (a.status === 'Izin') i++
+      else if (a.status === 'Alpha') explicitA++
+    })
+
+    // Hitung hari efektif yang SUDAH LEPAT (sampai hari ini)
+    const [year, month] = monthStr.split('-').map(Number)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    let pastEffectiveDays = 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayStr = `${monthStr}-${d < 10 ? '0' + d : d}`
+      if (dayStr <= today && !isHoliday(dayStr)) pastEffectiveDays++
+    }
+
+    // Alpha implisit = hari efektif lewat - H - S - I - Alpha eksplisit
+    const implicitA = Math.max(0, pastEffectiveDays - h - s - i - explicitA)
+
+    return { h, s, i, a: explicitA + implicitA }
+  }
+
   const isHoliday = (dateStr) => {
     const day = new Date(dateStr + 'T00:00:00').getDay()
     if (day === 0 || day === 6) return true
@@ -524,7 +557,7 @@ const jurusanOptions = tingkatFilter
     return (
       <div className="p-6 space-y-8">
         <div className="overflow-auto max-h-[70vh] border border-gray-200 rounded-xl">
-          <table className="w-full text-sm text-left border-collapse">
+          <table className="w-full text-sm text-left border-collapse [&_th]:border [&_th]:border-gray-200 [&_td]:border [&_td]:border-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
               <tr>
                 <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-0 md:bg-gray-50 md:z-30 w-[40px] md:border-r md:border-gray-200">No</th>
@@ -549,11 +582,10 @@ const jurusanOptions = tingkatFilter
                     <td className="py-3 px-4 text-gray-600 md:sticky md:left-[220px] md:bg-white md:group-hover:bg-blue-50 md:z-10">{s.jenis_kelamin}</td>
                     
                     {monthsToShow.map(m => {
-                      const monthAtt = getMonthAtt(s.id, m.m)
-                      const c = getCounts(monthAtt)
+                      const c = getCountsWithAlpha(s.id, m.m)
                       totalH += c.h; totalS += c.s; totalI += c.i; totalA += c.a;
                       return (
-                        <td key={m.m} className="py-3 px-4 text-center border-l border-gray-100">
+                        <td key={m.m} className="py-3 px-4 text-center">
                           <div className="flex flex-col text-[11px] font-semibold leading-tight">
                             <span className="text-emerald-700">{c.h > 0 ? `${c.h} H` : ''}</span>
                             <span className="text-amber-700">{c.s > 0 ? `${c.s} S` : ''}</span>
@@ -707,7 +739,7 @@ const jurusanOptions = tingkatFilter
                 {activeTab === 'bulanan' && (
                   <>
                     <div className="overflow-auto max-h-[70vh]">
-                      <table className="w-full text-sm text-left border-collapse">
+                      <table className="w-full text-sm text-left border-collapse [&_th]:border [&_th]:border-gray-200 [&_td]:border [&_td]:border-gray-200">
                         <thead className="bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
                           <tr>
                             <th className="py-3 px-4 font-bold text-xs text-gray-600 md:sticky md:left-0 md:bg-gray-50 md:z-30 w-[40px]">No</th>

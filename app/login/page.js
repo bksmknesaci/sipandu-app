@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { User, Lock, Eye, EyeOff, LogIn, GraduationCap } from 'lucide-react';
-import { loginUserAction } from '@/app/actions/userActions';
+import { loginUserAction, getAdminLoginData } from '@/app/actions/userActions';
 
 export default function Login() {
   const router = useRouter();
@@ -31,7 +31,6 @@ export default function Login() {
     try {
       // Cek login hardcoded admin
       if (username === 'admin' && password === 'admin123') {
-        // ── Ambil data lengkap admin dari database (termasuk id) ──
         let adminData = {
           id: null,
           nama: 'Administrator',
@@ -41,27 +40,27 @@ export default function Login() {
           jurusan: null,
           foto_url: null,
           whatsapp: null,
+          email: null,
         };
 
         try {
-          const { data: dbAdmin } = await supabase
-            .from('users')
-            .select('id, nama, username, role, kelas, jurusan, foto_url, whatsapp')
-            .eq('username', 'admin')
-            .eq('role', 'Administrator')
-            .maybeSingle();
-
-          if (dbAdmin) {
+          // FIX: Gunakan server action (supabaseAdmin) bukan client supabase (RLS memblokir)
+          const adminResult = await getAdminLoginData('admin');
+          if (adminResult.data) {
             adminData = {
-              id: dbAdmin.id,
-              nama: dbAdmin.nama || adminData.nama,
-              username: dbAdmin.username || adminData.username,
-              role: dbAdmin.role || adminData.role,
-              kelas: dbAdmin.kelas,
-              jurusan: dbAdmin.jurusan,
-              foto_url: dbAdmin.foto_url,
-              whatsapp: dbAdmin.whatsapp,
+              id: adminResult.data.id,
+              nama: adminResult.data.nama || adminData.nama,
+              username: adminResult.data.username || adminData.username,
+              email: adminResult.data.email || null,
+              role: adminResult.data.role || adminData.role,
+              kelas: adminResult.data.kelas,
+              jurusan: adminResult.data.jurusan,
+              foto_url: adminResult.data.foto_url,
+              whatsapp: adminResult.data.whatsapp,
             };
+            console.log('[Login] Admin ID dari database:', adminData.id);
+          } else {
+            console.warn('[Login] Admin tidak ditemukan di database, id tetap null');
           }
         } catch (dbErr) {
           console.warn('Gagal ambil data admin dari database:', dbErr);

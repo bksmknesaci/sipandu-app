@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Users, UserCog, BarChart2, FileText, ArrowRightLeft, Shield,
-  Building2, UserCheck, CalendarCheck, Newspaper
+  Building2, UserCheck, CalendarCheck, Newspaper, MessageCircle
 } from 'lucide-react';
 
 const menus = [
@@ -17,6 +17,7 @@ const menus = [
   { icon: Building2, title: 'Profil SIPANDU', href: '/setting/profil', color: 'slate', desc: 'Pengaturan aplikasi' },
   { icon: UserCheck, title: 'Penanggung Jawab', href: '/setting/penanggung-jawab', color: 'teal', desc: 'Wali kelas & sekretaris' },
   { icon: CalendarCheck, title: 'Hari Efektif', href: '/setting/hari-efektif', color: 'cyan', desc: 'Kalender & libur' },
+  { icon: MessageCircle, title: 'Konfigurasi WhatsApp', href: '/setting/konfigurasi-whatsapp', color: 'emerald', desc: 'Fonnte API & notif WA' },
   { icon: Newspaper, title: 'Pos Berita', href: '/setting/pos-berita', color: 'pink', desc: 'Kelola berita sekolah' },
 ];
 
@@ -30,6 +31,7 @@ const C = {
   slate:   { border: 'border-l-slate-500',   bg: 'bg-slate-100',  icon: 'text-slate-600' },
   teal:    { border: 'border-l-teal-500',    bg: 'bg-teal-50',    icon: 'text-teal-600' },
   cyan:    { border: 'border-l-cyan-500',    bg: 'bg-cyan-50',    icon: 'text-cyan-600' },
+  emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-50', icon: 'text-emerald-600' },
   pink:    { border: 'border-l-pink-500',    bg: 'bg-pink-50',    icon: 'text-pink-600' },
 };
 
