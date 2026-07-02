@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import {
   getAllKelas, getKelasFilters, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
-  submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest
+  submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest, getUserKelasInfo
 } from '@/app/actions/absensiActions'
 // [WA] Import fungsi WhatsApp
 import { getAlphaStudentsForWA, executeSendWA } from '@/app/actions/whatsappActions'
@@ -81,6 +81,7 @@ export default function AbsensiKehadiran() {
   const [hasPendingRequest, setHasPendingRequest] = useState(false)
   const [hasApprovedRequest, setHasApprovedRequest] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
+  const [sekretarisFullKelas, setSekretarisFullKelas] = useState('')
 
   // [WA] State untuk Finalisasi & Kirim WhatsApp
   const [waModal, setWaModal] = useState(null) // null | 'confirm' | 'sending' | 'result'
@@ -107,7 +108,39 @@ export default function AbsensiKehadiran() {
   useEffect(() => { try { const stored = localStorage.getItem('userData'); if (stored) setUserData(JSON.parse(stored)) } catch {} }, [])
   useEffect(() => { const init = async () => { setLoading(true); const kelasRes = await getAllKelas(); if (kelasRes.kelas) setKelasList(kelasRes.kelas); setLoading(false) }; init() }, [])
   useEffect(() => { const fetchFilters = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; fetchFilters() }, [])
-  useEffect(() => { if (userData && userData.role === 'Sekretaris Kelas' && userData.kelas) { const parsed = parseKelasJurusan(userData.kelas); setSelectedTingkat(parsed.tingkat); setSelectedJurusan(parsed.jurusan); setSelectedKelas(userData.kelas); setKelasNotFound(false) } }, [userData])
+  useEffect(() => {
+    if (userData && userData.role === 'Sekretaris Kelas' && userData.id) {
+      const initSekretarisKelas = async () => {
+        try {
+          const dbInfo = await getUserKelasInfo(userData.id)
+          if (dbInfo.kelas) {
+            setSelectedTingkat(dbInfo.kelas.trim())
+            setSelectedJurusan(dbInfo.jurusan ? dbInfo.jurusan.trim() : '')
+            const full = dbInfo.jurusan ? `${dbInfo.kelas.trim()} ${dbInfo.jurusan.trim()}` : dbInfo.kelas.trim()
+            setSelectedKelas(full)
+            setSekretarisFullKelas(full)
+            setKelasNotFound(false)
+          } else {
+            const parsed = parseKelasJurusan(userData.kelas)
+            setSelectedTingkat(parsed.tingkat)
+            setSelectedJurusan(parsed.jurusan)
+            setSelectedKelas(userData.kelas)
+            setSekretarisFullKelas(userData.kelas)
+            setKelasNotFound(false)
+          }
+        } catch (e) {
+          console.error('Gagal ambil kelas sekretaris dari DB:', e)
+          const parsed = parseKelasJurusan(userData.kelas)
+          setSelectedTingkat(parsed.tingkat)
+          setSelectedJurusan(parsed.jurusan)
+          setSelectedKelas(userData.kelas)
+          setSekretarisFullKelas(userData.kelas)
+          setKelasNotFound(false)
+        }
+      }
+      initSekretarisKelas()
+    }
+  }, [userData])
   useEffect(() => { if (userData?.role !== 'Administrator') return; if (selectedTingkat && selectedJurusan) { setSelectedKelas(`${selectedTingkat} ${selectedJurusan}`); setKelasNotFound(false) } else { setSelectedKelas(''); setKelasNotFound(false) } }, [selectedTingkat, selectedJurusan, userData])
 
   const handleTingkatChange = (val) => { setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
@@ -154,7 +187,7 @@ export default function AbsensiKehadiran() {
 
   useEffect(() => { if (selectedKelas) checkSubmitted() }, [selectedKelas, checkSubmitted])
 
-  const canEdit = isAdmin || (isSekretaris && withinTime && selectedKelas === userData?.kelas && (!isSubmitted || hasApprovedRequest))
+  const canEdit = isAdmin || (isSekretaris && withinTime && selectedKelas === sekretarisFullKelas && sekretarisFullKelas && (!isSubmitted || hasApprovedRequest))
 
   const handleBadgeClick = async (siswa, newStatus) => {
     if (!canEdit) return
@@ -271,7 +304,7 @@ export default function AbsensiKehadiran() {
       )}
 
       <div>
-        <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2"><CalendarDays size={28} className="text-blue-600"/> Absensi Kehadiran Harian</h1>
+        <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2"><CalendarDays size={28} className="text-blue-600"/> Absensi Kelas Harian</h1>
         <p className="text-sm text-gray-500 mt-1">{activeDateDisplay}</p>
       </div>
 
@@ -284,7 +317,7 @@ export default function AbsensiKehadiran() {
 
       {isSekretaris && !withinTime && (
         <div className={`p-5 rounded-2xl border-2 ${timeStatus === 'before' ? 'bg-amber-50 border-amber-300' : 'bg-red-50 border-red-300'}`}>
-          <div className="flex items-start gap-4"><div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${timeStatus === 'before' ? 'bg-amber-100' : 'bg-red-100'}`}>⏰</div><div><h3 className={`font-bold text-lg ${timeStatus === 'before' ? 'text-amber-800' : 'text-red-800'}`}>{timeStatus === 'before' ? 'Absensi Kehadiran Belum Dibuka' : 'Waktu Absensi Telah Berakhir'}</h3><p className={`text-sm mt-1 ${timeStatus === 'before' ? 'text-amber-700' : 'text-red-700'}`}>{timeStatus === 'before' ? 'Absensi sekretaris dapat dilakukan mulai pukul 09:05 WIB' : 'Absensi sekretaris ditutup pukul 14:40 WIB'}</p><p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Clock size={12}/> Waktu saat ini: {currentTime} WIB</p></div></div>
+          <div className="flex items-start gap-4"><div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${timeStatus === 'before' ? 'bg-amber-100' : 'bg-red-100'}`}>⏰</div><div><h3 className={`font-bold text-lg ${timeStatus === 'before' ? 'text-amber-800' : 'text-red-800'}`}>{timeStatus === 'before' ? 'Absensi Kelas Belum Dibuka' : 'Waktu Absensi Telah Berakhir'}</h3><p className={`text-sm mt-1 ${timeStatus === 'before' ? 'text-amber-700' : 'text-red-700'}`}>{timeStatus === 'before' ? 'Absensi sekretaris dapat dilakukan mulai pukul 09:05 WIB' : 'Absensi sekretaris ditutup pukul 14:40 WIB'}</p><p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Clock size={12}/> Waktu saat ini: {currentTime} WIB</p></div></div>
         </div>
       )}
 

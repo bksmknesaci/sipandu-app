@@ -14,6 +14,9 @@ SIPANDU-APP/
 │   ├── absensi/
 │   │   └── page.js
 │   │
+│   ├── absensi-pkl/
+│   │   └── page.js
+│   │
 │   ├── actions/
 │   │   ├── absensiActions.js
 │   │   ├── alumniActions.js
@@ -28,6 +31,7 @@ SIPANDU-APP/
 │   │   ├── pelanggaranActions.js
 │   │   ├── penangananActions.js
 │   │   ├── penanggungJawabActions.js
+│   │   ├── pklActions.js
 │   │   ├── qrAbsensiActions.js
 │   │   ├── rekapActions.js
 │   │   ├── rewardActions.js
@@ -157,6 +161,8 @@ SIPANDU-APP/
 │   │   ├── entri-reward/
 │   │   │   └── page.js
 │   │   ├── rekap-pelanggaran/
+│   │   │   └── page.js
+│   │   ├── rekap-pkl/
 │   │   │   └── page.js
 │   │   └── rekap-sakit-izin/
 │   │       └── page.js

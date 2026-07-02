@@ -13,7 +13,7 @@ import {
   MessageCircle, Camera, PlayCircle, Music2, ExternalLink,
   UserCheck, ArrowRightLeft, BarChart2, FileWarning, UserCog, Newspaper, CalendarCheck, Building2, ClipboardCheck,
   UserCircle, Mail, Phone, BookOpenCheck, ToggleLeft, Save, Edit3,
-  LayoutGrid
+  LayoutGrid, MapPin, BarChart3
 } from 'lucide-react';
 import { resolveAdminUserId } from '@/app/actions/userActions';
 
@@ -117,6 +117,8 @@ export default function AppShell({ children }) {
     else if (pathname.includes('/wali-kelas/entri-reward')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
     else if (pathname.includes('/wali-kelas/rekap-sakit-izin')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
     else if (pathname.includes('/rekap-kehadiran')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
+    else if (pathname.includes('/absensi-pkl')) setActiveMenu('absensi-pkl');
+    else if (pathname.includes('/wali-kelas/rekap-pkl')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
     else if (pathname.includes('/admin/users')) { setActiveMenu('setting'); setOpenMenus(prev => ({ ...prev, setting: true })); }
     else if (pathname.includes('/admin/siswa')) { setActiveMenu('admin'); setOpenMenus(prev => ({ ...prev, admin: true })); }
     else if (pathname.includes('/setting/profil')) { setActiveMenu('setting'); setOpenMenus(prev => ({ ...prev, setting: true })); }
@@ -356,11 +358,12 @@ export default function AppShell({ children }) {
           <NavLink icon={HeartPulse} title="Absen Sakit & Izin" href="/absen-sakit-izin" menuId="sakit" />
           <NavLink icon={Search} title="Cari Data Siswa" href="/cari-data-siswa" menuId="cari" />
           <NavLink icon={UserCheck} title="Absen Hadir Mandiri" href="/absen-mandiri" menuId="absen-mandiri" />
+          <NavLink icon={MapPin} title="Absensi PKL" href="/absensi-pkl" menuId="absensi-pkl" />
 
           {isLoggedIn && (isSekretaris || isAdmin) && (
             <>
               <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU SEKRETARIS</p>
-              <NavLink icon={ClipboardList} title="Absensi Kehadiran" href="/absensi" menuId="absensi" />
+              <NavLink icon={ClipboardList} title="Absensi Kelas" href="/absensi" menuId="absensi" />
             </>
           )}
           {isLoggedIn && (isOsis || isAdmin) && (
@@ -381,6 +384,7 @@ export default function AppShell({ children }) {
                 <SubLink icon={FileWarning} title="Rekap Pelanggaran" href="/wali-kelas/rekap-pelanggaran" />
                 <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
                 <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
+                <SubLink icon={BarChart3} title="Rekap Kehadiran PKL" href="/wali-kelas/rekap-pkl" />
               </DropdownMenu>
             </>
           )}

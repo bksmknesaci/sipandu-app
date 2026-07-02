@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Award, AlertTriangle, FileWarning, HeartPulse, CalendarDays, Shield } from 'lucide-react';
+import { ArrowLeft, Award, AlertTriangle, FileWarning, HeartPulse, CalendarDays, Shield, BarChart3 } from 'lucide-react';
 
 const menus = [
   { icon: Award, title: 'Entri Reward', href: '/wali-kelas/entri-reward', color: 'green', desc: 'Input poin reward siswa' },
@@ -10,6 +10,7 @@ const menus = [
   { icon: FileWarning, title: 'Rekap Pelanggaran', href: '/wali-kelas/rekap-pelanggaran', color: 'orange', desc: 'Ringkasan pelanggaran' },
   { icon: HeartPulse, title: 'Rekap Sakit & Izin', href: '/wali-kelas/rekap-sakit-izin', color: 'blue', desc: 'Verifikasi sakit/izin' },
   { icon: CalendarDays, title: 'Rekap Kehadiran', href: '/rekap-kehadiran', color: 'teal', desc: 'Rekap absensi lengkap' },
+  { icon: BarChart3, title: 'Rekap Kehadiran PKL', href: '/wali-kelas/rekap-pkl', color: 'purple', desc: 'Monitoring kehadiran siswa PKL' },
 ];
 
 const C = {
@@ -18,6 +19,7 @@ const C = {
   orange: { border: 'border-l-orange-500',  bg: 'bg-orange-50',  icon: 'text-orange-600' },
   blue:   { border: 'border-l-blue-500',   bg: 'bg-blue-50',   icon: 'text-blue-600' },
   teal:   { border: 'border-l-teal-500',   bg: 'bg-teal-50',   icon: 'text-teal-600' },
+  purple: { border: 'border-l-purple-500',  bg: 'bg-purple-50',  icon: 'text-purple-600' },
 };
 
 export default function MobileWaliKelasPage() {

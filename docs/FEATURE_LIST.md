@@ -1203,3 +1203,64 @@ Status: ACTIVE
 - Angka menggunakan komponen CountUp animasi
 
 Status: ACTIVE
+
+## Modul Absensi PKL (Siswa)
+- Halaman Absensi PKL (/absensi-pkl) — standalone page tanpa AppShell
+- Login menggunakan NISN (pencarian di tabel siswa, fallback kolom nis)
+- Profil PKL: Informasi perusahaan (nama, alamat, pembimbing industri)
+- Profil PKL: Tanggal mulai dan selesai PKL dengan auto-update status (Belum Mulai → Berjalan → Selesai)
+- Profil PKL: Pengaturan jam kerja (jam masuk, jam pulang)
+- Profil PKL: Pengaturan hari kerja (pilih hari rutin: Senin-Minggu)
+- Profil PKL: Lokasi PKL via GPS (titik koordinat, akurasi)
+- Profil PKL: Radius absensi dikunci permanen 50 meter (tidak dapat diubah siswa)
+- Tombol Atur Ulang Profil PKL — hanya muncul jika profil sudah tersimpan
+- Validasi GPS: Ambil lokasi otomatis, hitung jarak Haversine, bandingkan dengan radius 50m
+- Validasi GPS: Status terverifikasi (hijau) atau di luar area (merah) dengan detail jarak
+- Validasi waktu: Absen masuk dibuka 60 menit sebelum jam kerja, ditutup 180 menit setelah
+- Validasi waktu: Absen pulang dibuka 60 menit sebelum jam pulang, ditutup 120 menit setelah
+- Toleransi keterlambatan: 15 menit dari jam masuk
+- Jenis absensi: Hadir (dengan GPS + selfie), Sakit (selfie + koordinat + alasan), Izin (selfie + koordinat + alasan)
+- Foto selfie wajib dari kamera langsung (tidak boleh galeri), kompresi otomatis
+- Koordinat GPS Sakit/Izin: Direkam tanpa validasi radius (berbeda dengan Hadir yang harus dalam radius PKL)
+- Status otomatis: Hadir, Terlambat (>15 menit), Sakit, Izin, Alpha (tidak absen di hari kerja), Libur (hari non-kerja)
+- Alur Hadir: Pilih Jenis → Validasi GPS → Ambil Foto → Kirim
+- Alur Sakit/Izin: Pilih Jenis → Ambil Koordinat → Ambil Foto → Isi Alasan → Kirim
+- Alur Checkout: Sudah masuk → Validasi GPS → Ambil Foto → Kirim Pulang
+- Duplikasi dicegah: 1x absen masuk per hari, 1x absen pulang per hari, 1x sakit/izin per hari
+- Status PKL non-aktif menampilkan informasi tanpa tombol absensi
+
+Status: ACTIVE
+
+## Modul Rekap Kehadiran PKL (Wali Kelas & Administrator)
+- Halaman Rekap Kehadiran PKL (/wali-kelas/rekap-pkl)
+- Dashboard Ringkas: 7 stat card (Peserta PKL, Hadir, Sakit, Izin, Alpha, Terlambat, % Kehadiran) dengan CountUp animation
+- Diagram Donut: Distribusi kehadiran (6 status dengan warna berbeda + legend)
+- Tab Harian: Kolom No, NISN, Nama, L/P, Kelas, Jurusan, Perusahaan, Jam Masuk, Jam Pulang, Status, Terlambat, Aksi
+- Tab Bulanan: Kalender kehadiran per tanggal dengan kode H/S/I/A/T/L, sticky kolom Nama+L/P+Kelas+Jurusan+Perusahaan
+- Tab Semester: Rekap jumlah H/S/I/A/T/L, Total Kerja, Persentase Kehadiran
+- Tab Bulanan: Hari libur ditandai background merah pekat dengan huruf L
+- Tab Bulanan & Semester: Tidak ada kolom Hari Efektif (berbeda dengan Rekap Kehadiran reguler)
+- Status Alpha dihitung otomatis untuk hari kerja tanpa record absensi
+- Status Libur dihitung otomatis berdasarkan work_days di pkl_profiles (bukan effective_days)
+- Filter: Perusahaan, Tingkat, Jurusan, Status PKL
+- Filter dinamis: Tingkat dan Jurusan diambil dari database
+- Detail absensi: Modal popup dengan foto selfie masuk/pulang, koordinat GPS, alamat, jam, alasan
+- Export CSV: Tersedia untuk ketiga tab (Harian, Bulanan, Semester)
+- Export PDF: Tersedia untuk ketiga tab dengan auto-print
+- Reset Semua Data: 2x konfirmasi (konfirmasi + ketik "HAPUS SEMUA"), hapus semua profil + absensi + foto storage
+- Auto cleanup: Foto selfie yang sudah > 1 hari otomatis dihapus dari storage saat halaman dibuka
+- Kolom L/P tersedia di semua tab (Harian, Bulanan, Semester)
+- Kolom Kelas dan Jurusan tersedia di semua tab
+
+Status: ACTIVE
+
+## Fix Filter Sekretaris Absensi (Update)
+- Fix filter kelas Sekretaris hanya menampilkan tingkat (contoh: "XII") tanpa jurusan
+- Akar masalah: userData.kelas dari localStorage hanya berisi tingkat, bukan gabungan kelas+jurusan
+- Tambah server action getUserKelasInfo(userId): ambil kolom kelas dan jurusan terpisah dari tabel users
+- Prioritas ambil data kelas dari database, fallback ke parse userData.kelas dari localStorage
+- Tambah state sekretarisFullKelas untuk menyimpan string kelas lengkap dari DB
+- Fix canEdit: bandingkan selectedKelas dengan sekretarisFullKelas (bukan userData.kelas)
+- File diubah: app/actions/absensiActions.js, app/absensi/page.js
+
+Status: ACTIVE

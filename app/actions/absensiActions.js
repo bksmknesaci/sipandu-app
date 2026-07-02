@@ -524,6 +524,26 @@ export async function getEditRequestDetails(requestId) {
   return { data, error: null };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Ambil kelas & jurusan user dari database (kolom terpisah)
+// Digunakan agar Sekretaris mendapat filter yang tepat,
+// bukan mengandalkan userData.kelas dari localStorage yang
+// mungkin hanya berisi tingkat saja (contoh: "XII")
+// ═══════════════════════════════════════════════════════════════
+export async function getUserKelasInfo(userId) {
+  if (!userId) return { kelas: null, jurusan: null }
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('kelas, jurusan')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) {
+    console.error('[getUserKelasInfo] Error:', error.message)
+    return { kelas: null, jurusan: null }
+  }
+  return { kelas: data?.kelas || null, jurusan: data?.jurusan || null }
+}
+
 async function getRoleByUserId(userId) {
   if (!userId) return null
   const { data } = await supabaseAdmin.from('users').select('role').eq('id', userId).maybeSingle()

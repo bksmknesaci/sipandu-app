@@ -405,3 +405,74 @@ Catatan Penggunaan Nilai (Value Constraints)
 * sent_at (timestamptz) -- Waktu pengiriman
 * retry_count (int, default: 0) -- Jumlah percobaan ulang
 * created_at (timestamptz, default: now())
+
+## pkl_profiles
+* id (BIGSERIAL PRIMARY KEY)
+* student_id (BIGINT, references siswa(id) ON DELETE CASCADE)
+* company_name (TEXT)
+* company_address (TEXT)
+* industry_supervisor (TEXT)
+* start_date (DATE)
+* end_date (DATE)
+* work_start_time (TIME)
+* work_end_time (TIME)
+* work_days (JSONB, default: '["Senin","Selasa","Rabu","Kamis","Jumat"]'::jsonb)
+* latitude (NUMERIC(10,7))
+* longitude (NUMERIC(10,7))
+* radius_meter (INT, default: 50)
+* status (VARCHAR(50), default: 'Belum Mulai') -- Nilai: 'Belum Mulai', 'Berjalan', 'Selesai'
+* created_at (TIMESTAMPTZ, default: NOW())
+* updated_at (TIMESTAMPTZ, default: NOW())
+* CONSTRAINT pkl_profiles_student_unique UNIQUE(student_id)
+* Catatan Penggunaan Nilai (Value Constraints)
+
+## pkl_profiles
+* status: Menerima nilai 'Belum Mulai', 'Berjalan', 'Selesai'
+* work_days: Array string nama hari dalam bahasa Indonesia, contoh: ["Senin","Selasa","Rabu","Kamis","Jumat"]
+* radius_meter: Dikunci permanen 50 meter, tidak dapat diubah oleh siswa
+
+## pkl_attendance
+* id (BIGSERIAL PRIMARY KEY)
+* student_id (BIGINT, references siswa(id) ON DELETE CASCADE)
+* attendance_date (DATE, not null)
+* attendance_type (VARCHAR(20)) -- Nilai: 'Hadir', 'Sakit', 'Izin'
+* check_in_time (TIME)
+* check_out_time (TIME)
+* check_in_latitude (NUMERIC(10,7))
+* check_in_longitude (NUMERIC(10,7))
+* check_in_address (TEXT)
+* check_out_latitude (NUMERIC(10,7))
+* check_out_longitude (NUMERIC(10,7))
+* check_out_address (TEXT)
+* selfie_url (TEXT) -- Foto selfie absen masuk, otomatis dihapus > 1 hari
+* check_out_selfie_url (TEXT) -- Foto selfie absen pulang, otomatis dihapus > 1 hari
+* note (TEXT) -- Alasan sakit/izin
+* is_late (BOOLEAN, default: false)
+* status (VARCHAR(20), default: 'Hadir') -- Nilai: 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Terlambat', 'Libur'
+* created_at (TIMESTAMPTZ, default: NOW())
+* updated_at (TIMESTAMPTZ, default: NOW())
+* CONSTRAINT pkl_attendance_unique UNIQUE(student_id, attendance_date)
+* Catatan Penggunaan Nilai (Value Constraints)
+
+## pkl_attendance
+* attendance_type: Menerima nilai 'Hadir', 'Sakit', 'Izin'
+* status: Menerima nilai 'Hadir', 'Sakit', 'Izin', 'Alpha', 'Terlambat', 'Libur'
+* Status 'Terlambat' dihitung otomatis saat check_in_time melebihi work_start_time + 15 menit toleransi
+* Status 'Libur' dihitung otomatis di Rekap Bulanan/Semester berdasarkan work_days di pkl_profiles
+* Status 'Alpha' dihitung otomatis di Rekap Bulanan/Semester untuk hari kerja tanpa record absensi
+* Foto selfie (selfie_url, check_out_selfie_url) dihapus otomatis oleh cleanupOldPklSelfies setelah > 1 hari
+
+## Supabase Storage Buckets (Update)
+* pkl-selfies (public) -- Untuk foto selfie absensi PKL (masuk & pulang), otomatis dihapus > 1 hari
+
+## Index Tambahan
+* idx_pkl_profiles_student ON pkl_profiles(student_id)
+* idx_pkl_profiles_status ON pkl_profiles(status)
+* idx_pkl_attendance_student ON pkl_attendance(student_id)
+* idx_pkl_attendance_date ON pkl_attendance(attendance_date)
+* idx_pkl_attendance_status ON pkl_attendance(status)
+
+## RLS Policy Tambahan
+* pkl_profiles: "srv_pkl_profiles" — FOR ALL USING (true) WITH CHECK (true)
+* pkl_attendance: "srv_pkl_attendance" — FOR ALL USING (true) WITH CHECK (true)
+* pkl-selfies (storage): "srv_pkl_selfies" — FOR ALL USING (bucket_id = 'pkl-selfies') WITH CHECK (bucket_id = 'pkl-selfies')

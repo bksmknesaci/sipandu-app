@@ -1,5 +1,43 @@
 # Changelog SIPANDU
 
+## 2026-07-09
+- Fitur baru: Modul Absensi PKL (/absensi-pkl) untuk siswa yang sedang melaksanakan Praktik Kerja Lapangan
+- Fitur baru: Modul Rekap Kehadiran PKL (/wali-kelas/rekap-pkl) untuk Wali Kelas & Administrator
+- Modul PKL terpisah dari Absensi Kehadiran reguler (tidak mencampur data)
+- Profil PKL: Informasi perusahaan, pembimbing industri, tanggal mulai/selesai
+- Profil PKL: Pengaturan jam kerja (jam masuk, jam pulang)
+- Profil PKL: Pengaturan hari kerja (pilih hari rutin)
+- Profil PKL: Lokasi PKL via GPS dengan radius absensi dikunci permanen 50 meter
+- Profil PKL: Auto-update status (Belum Mulai → Berjalan → Selesai) berdasarkan tanggal
+- Tombol Atur Ulang Profil PKL — hanya muncul jika profil sudah tersimpan, pre-fill form dengan data lama
+- Absensi Hadir: Validasi GPS (Haversine, radius 50m) → Foto selfie → Kirim
+- Absensi Sakit/Izin: Ambil koordinat (tanpa validasi radius) → Foto selfie → Alasan → Kirim
+- Absensi Pulang: Validasi GPS → Foto selfie → Kirim
+- Validasi waktu: Toleransi 60 menit sebelum / 180 menit setelah jam masuk; 60 menit sebelum / 120 menit setelah jam pulang
+- Toleransi keterlambatan: 15 menit dari jam masuk → status otomatis "Terlambat"
+- Status absensi: Hadir, Sakit, Izin, Alpha, Terlambat, Libur
+- Status Alpha: Otomatis dihitung untuk hari kerja tanpa record absensi (di rekap)
+- Status Libur: Otomatis dihitung berdasarkan work_days per siswa (di rekap), bukan effective_days global
+- Foto selfie wajib dari kamera langsung, kompresi otomatis, upload ke Supabase Storage (bucket: pkl-selfies)
+- Auto cleanup foto selfie > 1 hari (dihapus dari storage, kolom URL di-set null)
+- Rekap PKL Tab Harian: Kolom No, NISN, Nama, L/P, Kelas, Jurusan, Perusahaan, Jam Masuk, Jam Pulang, Status, Terlambat, Aksi
+- Rekap PKL Tab Bulanan: Kalender kehadiran per tanggal (H/S/I/A/T/L), sticky kolom Nama+L/P+Kelas+Jurusan+Perusahaan, hari libur background merah
+- Rekap PKL Tab Semester: Rekap H/S/I/A/T/L, Total Kerja, Persentase Kehadiran
+- Rekap PKL: Tidak ada kolom Hari Efektif (setiap siswa memiliki jadwal kerja berbeda)
+- Rekap PKL: Dashboard 7 stat card + Donut Chart distribusi kehadiran
+- Rekap PKL: Filter Perusahaan, Tingkat, Jurusan, Status PKL
+- Rekap PKL: Modal detail absensi (foto selfie, koordinat GPS, alamat, jam, alasan)
+- Rekap PKL: Export CSV dan Export PDF untuk ketiga tab
+- Rekap PKL: Tombol Reset Semua Data (2x konfirmasi ketik "HAPUS SEMUA", hapus profil + absensi + foto storage)
+- Tabel baru di database: pkl_profiles, pkl_attendance
+- Storage bucket baru: pkl-selfies (public)
+- File baru: app/actions/pklActions.js, app/absensi-pkl/page.js, app/wali-kelas/rekap-pkl/page.js
+- File diubah: app/components/AppShell.js, app/mobile/siswa/page.js, app/mobile/wali-kelas/page.js
+- Fix kritis getPklStudents: Pisah query PostgREST join menjadi 2 query terpisah (profiles + siswa) lalu merge di JavaScript — sebelumnya data selalu kosong
+- Fix tab bulanan Rekap PKL: Safety (s.days || []).map() mencegah error saat pindah tab
+- Fix filter Sekretaris Absensi: Tambah getUserKelasInfo() ambil kelas+jurusan dari DB, prioritas DB bukan localStorage
+- Fix canEdit Sekretaris: Bandingkan selectedKelas dengan sekretarisFullKelas bukan userData.kelas
+
 ## 2026-07-08
 - Fitur baru: Konfigurasi WhatsApp (Fonnte API) di menu Setting/Pengaturan
 - Halaman Konfigurasi WhatsApp dengan 3 tab: Konfigurasi API, Pengaturan Pengaturan Pengiriman, Riwayat Pengiriman

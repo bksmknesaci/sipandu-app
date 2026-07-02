@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Users, HeartPulse, Search, UserCheck, Award, Newspaper } from 'lucide-react';
+import { ArrowLeft, Users, HeartPulse, Search, UserCheck, Award, Newspaper, MapPin } from 'lucide-react';
 
 const menus = [
   { icon: Users, title: 'Portal Orang Tua', href: '/portal-ortu', color: 'blue', desc: 'Monitoring siswa oleh orang tua' },
   { icon: HeartPulse, title: 'Absen Sakit & Izin', href: '/absen-sakit-izin', color: 'amber', desc: 'Pengajuan ketidakhadiran' },
   { icon: Search, title: 'Cari Data Siswa', href: '/cari-data-siswa', color: 'indigo', desc: 'Pencarian data lengkap siswa' },
   { icon: UserCheck, title: 'Absen Hadir Mandiri', href: '/absen-mandiri', color: 'emerald', desc: 'Scan QR untuk hadir' },
+  { icon: MapPin, title: 'Absensi PKL', href: '/absensi-pkl', color: 'sky', desc: 'Absensi Praktik Kerja Lapangan' },
   { icon: Award, title: 'Siswa Berprestasi', href: '/siswa-berprestasi', color: 'green', desc: 'Daftar siswa berprestasi' },
   { icon: Newspaper, title: 'Seputar Sekolah', href: '/berita-sekolah', color: 'violet', desc: 'Berita dan informasi sekolah' },
 ];
@@ -19,7 +20,8 @@ const C = {
   indigo:  { border: 'border-l-indigo-500',  bg: 'bg-indigo-50',  icon: 'text-indigo-600' },
   emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-50', icon: 'text-emerald-600' },
   green:   { border: 'border-l-green-500',   bg: 'bg-green-50',   icon: 'text-green-600' },
-  violet:  { border: 'border-l-violet-500',  bg: 'bg-violet-50',  icon: 'text-violet-600' },
+  violet: { border: 'border-l-violet-500',  bg: 'bg-violet-50',  icon: 'text-violet-600' },
+  sky:    { border: 'border-l-sky-500',     bg: 'bg-sky-50',     icon: 'text-sky-600' },
 };
 
 export default function MobileSiswaPage() {
