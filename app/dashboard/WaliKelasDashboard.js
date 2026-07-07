@@ -64,9 +64,9 @@ export default function WaliKelasDashboard({ kelas }) {
 
   useEffect(() => {
     if (kelas) {
-      getWaliKelasDashboardFull(kelas).then((d) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+      getWaliKelasDashboardFull(kelas, userData?.id).then((d) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
     }
-  }, [kelas]);
+  }, [kelas, userData?.id]);
 
   if (loading) return <div className="px-4 md:px-8 py-6 max-w-[1400px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i} />)}</div>;
   if (!data) return <div className="px-4 md:px-8 py-6 max-w-[1400px] mx-auto"><p className="text-red-500">Gagal memuat data. Pastikan kelas sudah diatur di profil Anda.</p></div>;
@@ -90,7 +90,7 @@ export default function WaliKelasDashboard({ kelas }) {
             <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center text-2xl">👩‍🏫</div>
             <div>
               <h1 className="text-xl font-bold">Dashboard Wali Kelas</h1>
-              <p className="text-blue-200 text-sm">Kelas Binaan: <span className="font-semibold text-white">{kelas}</span></p>
+              <p className="text-blue-200 text-sm">Kelas Binaan: <span className="font-semibold text-white">{kelas}{userData?.jurusan ? ' ' + userData.jurusan : ''}</span></p>
             </div>
           </div>
           <div className="bg-white/10 backdrop-blur rounded-xl px-4 py-2 text-center shrink-0 sm:self-center">

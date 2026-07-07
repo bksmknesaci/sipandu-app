@@ -1,5 +1,10 @@
 'use server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getCached, invalidateCache, TTL } from '@/lib/cacheHelpers'
+
+// ─── Cache Keys ────────────────────────────────────────────────
+const CACHE_WA_CONFIG = 'whatsapp_config'
+const CACHE_WA_SETTINGS = 'wa_school_settings'
 
 // ─── Helper: format nomor HP Indonesia ──────────────────────────
 function normalizePhone(phone) {
@@ -21,53 +26,72 @@ function maskToken(token) {
   return token.substring(0, 4) + '••••••••' + token.substring(token.length - 4)
 }
 
-// ─── GET CONFIG (token dimask) ─────────────────────────────────
-export async function getWhatsAppConfig() {
+// ─── Helper: get school settings (cached via getCached) ────────
+async function getSchoolSettings() {
+  return getCached(CACHE_WA_SETTINGS, async () => {
+    const { data } = await supabaseAdmin
+      .from('app_settings')
+      .select('nama_sekolah, alamat')
+      .eq('id', 1)
+      .maybeSingle()
+
+    return {
+      nama_sekolah: data?.nama_sekolah || 'SMK Negeri 1 Cikedung',
+      alamat: data?.alamat || '',
+    }
+  }, TTL.SETTINGS)
+}
+
+// ─── Helper: get raw config (tanpa mask, untuk internal use) ───
+async function getRawWhatsAppConfig() {
   const { data } = await supabaseAdmin
     .from('whatsapp_config')
     .select('*')
     .eq('id', 1)
     .maybeSingle()
+  return data
+}
 
-  if (!data) {
-    return {
-      api_token_masked: '',
-      device_id: '',
-      sender_name: '',
-      mode: 'testing',
-      is_connected: false,
-      gateway_phone: '',
-      device_name: '',
-      last_sync_at: null,
-      send_alpha: true,
-      send_terlambat: false,
-      send_pulang_awal: false,
+// ─── GET CONFIG (token dimask, cached 10 min) ──────────────────
+export async function getWhatsAppConfig() {
+  return getCached(CACHE_WA_CONFIG, async () => {
+    const data = await getRawWhatsAppConfig()
+
+    if (!data) {
+      return {
+        api_token_masked: '',
+        device_id: '',
+        sender_name: '',
+        mode: 'testing',
+        is_connected: false,
+        gateway_phone: '',
+        device_name: '',
+        last_sync_at: null,
+        send_alpha: true,
+        send_terlambat: false,
+        send_pulang_awal: false,
+      }
     }
-  }
 
-  return {
-    api_token_masked: maskToken(data.api_token),
-    device_id: data.device_id || '',
-    sender_name: data.sender_name || '',
-    mode: data.mode || 'testing',
-    is_connected: data.is_connected || false,
-    gateway_phone: data.gateway_phone || '',
-    device_name: data.device_name || '',
-    last_sync_at: data.last_sync_at,
-    send_alpha: data.send_alpha !== false,
-    send_terlambat: data.send_terlambat || false,
-    send_pulang_awal: data.send_pulang_awal || false,
-  }
+    return {
+      api_token_masked: maskToken(data.api_token),
+      device_id: data.device_id || '',
+      sender_name: data.sender_name || '',
+      mode: data.mode || 'testing',
+      is_connected: data.is_connected || false,
+      gateway_phone: data.gateway_phone || '',
+      device_name: data.device_name || '',
+      last_sync_at: data.last_sync_at,
+      send_alpha: data.send_alpha !== false,
+      send_terlambat: data.send_terlambat || false,
+      send_pulang_awal: data.send_pulang_awal || false,
+    }
+  }, TTL.WHATSAPP_CONFIG)
 }
 
 // ─── SAVE CONFIG ────────────────────────────────────────────────
 export async function saveWhatsAppConfig(formData) {
-  const { data: existing } = await supabaseAdmin
-    .from('whatsapp_config')
-    .select('api_token')
-    .eq('id', 1)
-    .maybeSingle()
-
+  const existing = await getRawWhatsAppConfig()
   let token = existing?.api_token || ''
 
   // Jika field token tidak di-mask (berarti user mengisi baru), gunakan yang baru
@@ -92,16 +116,14 @@ export async function saveWhatsAppConfig(formData) {
     .upsert(upsertData, { onConflict: 'id' })
 
   if (error) return { error: error.message }
+
+  invalidateCache(CACHE_WA_CONFIG)
   return { success: true }
 }
 
 // ─── TEST CONNECTION ────────────────────────────────────────────
 export async function testWhatsAppConnection() {
-  const { data: config } = await supabaseAdmin
-    .from('whatsapp_config')
-    .select('api_token, device_id, sender_name')
-    .eq('id', 1)
-    .maybeSingle()
+  const config = await getRawWhatsAppConfig()
 
   // Diagnostic 1: Cek apakah token ada di database
   if (!config?.api_token) {
@@ -160,6 +182,7 @@ export async function testWhatsAppConnection() {
       await supabaseAdmin.from('whatsapp_config').update({
         is_connected: false, updated_at: new Date().toISOString()
       }).eq('id', 1)
+      invalidateCache(CACHE_WA_CONFIG)
 
       let detail = ''
       if (result?.reason) detail = result.reason
@@ -223,6 +246,7 @@ export async function testWhatsAppConnection() {
     if (result?.device?.phone) updateData.gateway_phone = result.device.phone
 
     await supabaseAdmin.from('whatsapp_config').update(updateData).eq('id', 1)
+    invalidateCache(CACHE_WA_CONFIG)
 
     return {
       success: true,
@@ -247,77 +271,59 @@ export async function testWhatsAppConnection() {
   }
 }
 
-// ─── GET ALPHA STUDENTS WITH PARENT WA ──────────────────────────
+// ─── GET ALPHA STUDENTS WITH PARENT WA (1 query join) ──────────
 export async function getAlphaStudentsForWA(date, tingkat, jurusan) {
-  // 1. Ambil data absensi Alpha di tanggal & kelas tersebut
-  const { data: absensiData } = await supabaseAdmin
+  // Single query: INNER JOIN absensi → siswa, filter Alpha + parent_whatsapp not null
+  // Filter tingkat/jurusan di DB level (bukan di JS) — lebih efisien untuk dataset besar
+  let query = supabaseAdmin
     .from('absensi')
-    .select('siswa_id, status')
+    .select('siswa_id, siswa!inner(id, nisn, nama, kelas, jurusan, parent_whatsapp)')
     .eq('tanggal', date)
     .eq('status', 'Alpha')
+    .not('siswa.parent_whatsapp', 'is', null)
 
-  if (!absensiData || absensiData.length === 0) {
-    return { students: [], total: 0 }
-  }
-
-  const siswaIds = absensiData.map(a => a.siswa_id)
-
-  // 2. Ambil data siswa dengan parent_whatsapp
-  const { data: siswaData } = await supabaseAdmin
-    .from('siswa')
-    .select('id, nisn, nama, kelas, jurusan, parent_whatsapp')
-    .in('id', siswaIds)
-    .not('parent_whatsapp', 'is', null)
-
-  if (!siswaData || siswaData.length === 0) {
-    return { students: [], total: 0 }
-  }
-
-  // 3. Filter berdasarkan kelas/jurusan jika ada
-  let students = siswaData
   if (tingkat) {
-    students = students.filter(s => s.kelas === tingkat)
+    query = query.eq('siswa.kelas', tingkat)
   }
   if (jurusan) {
-    students = students.filter(s => s.jurusan === jurusan)
+    query = query.eq('siswa.jurusan', jurusan)
   }
 
-  // 4. Validasi nomor & format
-  students = students.map(s => ({
-    id: s.id,
-    nisn: s.nisn,
-    nama: s.nama,
-    kelas: s.kelas,
-    jurusan: s.jurusan,
-    phone: normalizePhone(s.parent_whatsapp),
-    phoneValid: isValidPhone(s.parent_whatsapp),
-  }))
+  const { data } = await query
+
+  if (!data || data.length === 0) {
+    return { students: [], total: 0 }
+  }
+
+  const students = data.map(a => {
+    const s = a.siswa
+    return {
+      id: s.id,
+      nisn: s.nisn,
+      nama: s.nama,
+      kelas: s.kelas,
+      jurusan: s.jurusan,
+      phone: normalizePhone(s.parent_whatsapp),
+      phoneValid: isValidPhone(s.parent_whatsapp),
+    }
+  })
 
   return { students, total: students.length }
 }
 
-// ─── EXECUTE SEND WA ───────────────────────────────────────────
+// ─── EXECUTE SEND WA (batch log insert) ────────────────────────
 export async function executeSendWA(students, date, senderId) {
-  // 1. Ambil config
-  const { data: config } = await supabaseAdmin
-    .from('whatsapp_config')
-    .select('*')
-    .eq('id', 1)
-    .maybeSingle()
+  // 1. Ambil config (raw, tanpa cache — perlu token asli)
+  const config = await getRawWhatsAppConfig()
 
   if (!config?.api_token) {
     return { error: 'API Token WhatsApp belum diatur. Buka Konfigurasi WhatsApp di Pengaturan.' }
   }
 
-  // 2. Ambil info sekolah
-  const { data: settings } = await supabaseAdmin
-    .from('app_settings')
-    .select('nama_sekolah, alamat')
-    .eq('id', 1)
-    .maybeSingle()
-
-  const schoolName = settings?.nama_sekolah || 'SMK Negeri 1 Cikedung'
-  const schoolAddr = settings?.alamat || ''
+  // 2. Ambil info sekolah (cached via getCached)
+  const settings = await getSchoolSettings()
+  const schoolName = settings.nama_sekolah
+  const schoolAddr = settings.alamat
 
   // 3. Format tanggal
   const tanggalDisplay = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', {
@@ -327,10 +333,17 @@ export async function executeSendWA(students, date, senderId) {
   const results = []
   let successCount = 0
   let failCount = 0
+  const logEntries = [] // Kumpulkan, lalu insert 1x di akhir
 
   for (const student of students) {
     if (!student.phoneValid) {
-      const logEntry = {
+      results.push({
+        ...student,
+        status: 'failed',
+        error: 'Nomor tidak valid',
+        logId: null,
+      })
+      logEntries.push({
         student_id: student.id,
         phone: student.phone,
         message: '',
@@ -339,18 +352,6 @@ export async function executeSendWA(students, date, senderId) {
         sent_by: senderId,
         sent_at: new Date().toISOString(),
         retry_count: 0,
-      }
-      const { data: log } = await supabaseAdmin
-        .from('whatsapp_logs')
-        .insert(logEntry)
-        .select('id')
-        .single()
-
-      results.push({
-        ...student,
-        status: 'failed',
-        error: 'Nomor tidak valid',
-        logId: log?.id,
       })
       failCount++
       continue
@@ -401,7 +402,14 @@ _(Sistem Informasi dan Penanganan Siswa Terpadu)_`
       const result = await res.json()
       const isSuccess = result?.status === true
 
-      const logEntry = {
+      results.push({
+        ...student,
+        status: isSuccess ? 'success' : 'failed',
+        error: isSuccess ? null : (result?.reason || 'Gagal mengirim'),
+        logId: null, // Diisi setelah batch insert
+      })
+
+      logEntries.push({
         student_id: student.id,
         phone: student.phone,
         message,
@@ -410,25 +418,18 @@ _(Sistem Informasi dan Penanganan Siswa Terpadu)_`
         sent_by: senderId,
         sent_at: new Date().toISOString(),
         retry_count: 0,
-      }
-
-      const { data: log } = await supabaseAdmin
-        .from('whatsapp_logs')
-        .insert(logEntry)
-        .select('id')
-        .single()
-
-      results.push({
-        ...student,
-        status: isSuccess ? 'success' : 'failed',
-        error: isSuccess ? null : (result?.reason || 'Gagal mengirim'),
-        logId: log?.id,
       })
 
       if (isSuccess) successCount++
       else failCount++
     } catch (err) {
-      const logEntry = {
+      results.push({
+        ...student,
+        status: 'failed',
+        error: err.message,
+        logId: null,
+      })
+      logEntries.push({
         student_id: student.id,
         phone: student.phone,
         message,
@@ -437,20 +438,23 @@ _(Sistem Informasi dan Penanganan Siswa Terpadu)_`
         sent_by: senderId,
         sent_at: new Date().toISOString(),
         retry_count: 0,
-      }
-      const { data: log } = await supabaseAdmin
-        .from('whatsapp_logs')
-        .insert(logEntry)
-        .select('id')
-        .single()
-
-      results.push({
-        ...student,
-        status: 'failed',
-        error: err.message,
-        logId: log?.id,
       })
       failCount++
+    }
+  }
+
+  // Batch insert semua log dalam 1 query (sebelumnya: N query terpisah)
+  if (logEntries.length > 0) {
+    const { data: insertedLogs } = await supabaseAdmin
+      .from('whatsapp_logs')
+      .insert(logEntries)
+      .select('id')
+
+    // Map log ID kembali ke results (order preserved oleh Supabase insert)
+    if (insertedLogs) {
+      for (let i = 0; i < results.length; i++) {
+        results[i].logId = insertedLogs[i]?.id || null
+      }
     }
   }
 
@@ -476,7 +480,9 @@ export async function getWhatsAppLogs({ page = 1, limit = 20, status, search, da
     query = query.eq('status', status)
   }
   if (search) {
-    query = query.or(`phone.ilike.%${search}%,siswa.nama.ilike.%${search}%`)
+    // Escape wildcard ILIKE (%) dan (_) untuk mencegah pattern injection
+    const safeSearch = search.replace(/[%_]/g, '\\$&')
+    query = query.or(`phone.ilike.%${safeSearch}%,siswa.nama.ilike.%${safeSearch}%`)
   }
   if (dateFrom) {
     query = query.gte('created_at', dateFrom + 'T00:00:00')
@@ -504,25 +510,19 @@ export async function getWhatsAppLogs({ page = 1, limit = 20, status, search, da
   }
 }
 
-// ─── RETRY FAILED LOG ───────────────────────────────────────────
+// ─── RETRY FAILED LOG (parallel queries) ───────────────────────
 export async function retryWhatsAppLog(logId) {
-  // 1. Ambil log
-  const { data: log } = await supabaseAdmin
-    .from('whatsapp_logs')
-    .select('*')
-    .eq('id', logId)
-    .single()
+  // Ambil log + config secara paralel (sebelumnya 2 query sequential)
+  const [logResult, configResult] = await safeParallel([
+    supabaseAdmin.from('whatsapp_logs').select('*').eq('id', logId).single(),
+    supabaseAdmin.from('whatsapp_config').select('*').eq('id', 1).maybeSingle(),
+  ])
+
+  const log = logResult?.data
+  const config = configResult?.data
 
   if (!log) return { error: 'Log tidak ditemukan' }
   if (log.status === 'success') return { error: 'Log sudah berhasil, tidak perlu retry' }
-
-  // 2. Ambil config
-  const { data: config } = await supabaseAdmin
-    .from('whatsapp_config')
-    .select('*')
-    .eq('id', 1)
-    .maybeSingle()
-
   if (!config?.api_token) return { error: 'API Token belum diatur' }
 
   try {
@@ -571,34 +571,34 @@ export async function deleteAllWALogs() {
   return { success: true }
 }
 
-// ─── GET TODAY STATS (Dashboard) ───────────────────────────────
+// ─── GET TODAY STATS (parallel head:true) ──────────────────────
 export async function getWhatsAppTodayStats() {
   const today = new Date().toLocaleDateString('sv-SE')
+  const startOfDay = today + 'T00:00:00'
+  const endOfDay = today + 'T23:59:59'
 
-  const { count: successCount } = await supabaseAdmin
-    .from('whatsapp_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'success')
-    .gte('created_at', today + 'T00:00:00')
-    .lte('created_at', today + 'T23:59:59')
-
-  const { count: failedCount } = await supabaseAdmin
-    .from('whatsapp_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'failed')
-    .gte('created_at', today + 'T00:00:00')
-    .lte('created_at', today + 'T23:59:59')
-
-  const { count: pendingCount } = await supabaseAdmin
-    .from('whatsapp_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'pending')
-    .gte('created_at', today + 'T00:00:00')
-    .lte('created_at', today + 'T23:59:59')
+  // 3 count query paralel (sebelumnya 3 sequential, sekarang sama waktu)
+  const [successRes, failedRes, pendingRes] = await Promise.all([
+    supabaseAdmin.from('whatsapp_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'success')
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay),
+    supabaseAdmin.from('whatsapp_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'failed')
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay),
+    supabaseAdmin.from('whatsapp_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay),
+  ])
 
   return {
-    success: successCount || 0,
-    failed: failedCount || 0,
-    pending: pendingCount || 0,
+    success: successRes?.count || 0,
+    failed: failedRes?.count || 0,
+    pending: pendingRes?.count || 0,
   }
 }

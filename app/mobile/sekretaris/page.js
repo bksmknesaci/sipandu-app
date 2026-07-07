@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ClipboardList, Shield } from 'lucide-react';
 
 const menus = [
-  { icon: ClipboardList, title: 'Absensi Kehadiran', href: '/absensi', color: 'blue', desc: 'Input absensi harian siswa' },
+  { icon: ClipboardList, title: 'Absensi Kelas', href: '/absensi', color: 'blue', desc: 'Input absensi harian siswa' },
 ];
 
 const C = {
-  blue: { border: 'border-l-blue-500', bg: 'bg-blue-50', icon: 'text-blue-600' },
+  blue: { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)', shadow: '0 10px 15px -3px rgba(59,130,246,0.3)' },
 };
 
 export default function MobileSekretarisPage() {
@@ -55,13 +55,14 @@ export default function MobileSekretarisPage() {
             const c = C[menu.color] || C.blue;
             return (
               <button key={menu.href} onClick={() => router.push(menu.href)}
-                className="mc bg-white rounded-2xl border-t-gray-100 border-r-gray-100 border-b-gray-100 border-l-4 shadow-sm p-4 active:scale-95 transition-all duration-200 hover:shadow-md text-left"
-                style={{ animationDelay: `${i * 80}ms` }}>
-                <div className={`w-12 h-12 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
-                  <menu.icon size={24} className={c.icon} />
+                className="mc rounded-2xl p-4 active:scale-95 transition-all duration-200 text-left relative overflow-hidden"
+                style={{ animationDelay: `${i * 80}ms`, background: c.bg, boxShadow: c.shadow }}>
+                <div className="absolute -right-3 -bottom-3 w-20 h-20 rounded-full bg-white/10" />
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center mb-3 mc-bounce" style={{ animationDelay: `${i * 150}ms` }}>
+                  <menu.icon size={22} className="text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-800 text-[13px] leading-tight">{menu.title}</h3>
-                <p className="text-[10px] text-gray-400 mt-1 leading-snug">{menu.desc}</p>
+                <h3 className="font-semibold text-white text-[13px] leading-tight relative z-10">{menu.title}</h3>
+                <p className="text-[10px] text-white/70 mt-1 leading-snug relative z-10">{menu.desc}</p>
               </button>
             );
           })}
@@ -74,6 +75,11 @@ export default function MobileSekretarisPage() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .mc { opacity: 0; animation: mcSlideUp 0.4s ease-out forwards; }
+        @keyframes mcBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .mc-bounce { animation: mcBounce 2s ease-in-out infinite; }
       `}</style>
     </div>
   );

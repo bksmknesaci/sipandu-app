@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { BarChart3, Filter, Download, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, HeartPulse, AlertTriangle, Clock, Printer, FileSpreadsheet, RotateCcw } from 'lucide-react'
 import { getPklFilters, getPklStats, getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklAttendanceDetail, resetAllPklData, cleanupOldPklSelfies } from '@/app/actions/pklActions'
+import { getWKKelasAssignment, getUserKelasInfo } from '@/app/actions/absensiActions'
+import { getKopSuratSettings } from '@/app/actions/siswaActions'
+import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
+import PJInfoCard from '@/app/components/PJInfoCard'
 
 const SC = {
   Hadir: { label: 'H', color: '#10B981', bg: '#D1FAE5' },
@@ -67,35 +71,64 @@ export default function RekapPKL() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
-  // Harian
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('sv-SE'))
 
-  // Bulanan
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
 
-  // Semester
   const [semesterInfo, setSemesterInfo] = useState(null)
-
-  // Bulanan extra
   const [daysInMonth, setDaysInMonth] = useState(0)
   const [monthName, setMonthName] = useState('')
 
-  // Detail modal
   const [detailModal, setDetailModal] = useState(null)
   const [detailData, setDetailData] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // Reset
+  const [userData, setUserData] = useState(null)
+  useEffect(() => { try { const s = localStorage.getItem('userData'); if (s) setUserData(JSON.parse(s)) } catch {} }, [])
+  const userRole = userData?.role || ''
+  const isWK = userRole === 'Wali Kelas'
+  const isAdmin = userRole === 'Administrator'
+
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetStep, setResetStep] = useState(1)
   const [resetText, setResetText] = useState('')
   const [resetting, setResetting] = useState(false)
+  const [wkNeedsJurusanSelection, setWkNeedsJurusanSelection] = useState(false)
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t) } }, [toast])
 
-  // Load filters
+  useEffect(() => {
+    if (isWK && userData?.id && !filters.kelas) {
+      const initWKFilter = async () => {
+        try {
+          const assignment = await getWKKelasAssignment(userData.id)
+          if (assignment && assignment.kelas) {
+            setFilters(f => ({ ...f, kelas: assignment.kelas, jurusan: assignment.jurusan || '' }))
+            setWkNeedsJurusanSelection(assignment.needsSelection || false)
+            return
+          }
+        } catch (e) {
+          console.error('[RekapPKL] Gagal ambil kelas assignment:', e)
+        }
+        try {
+          const dbInfo = await getUserKelasInfo(userData.id)
+          if (dbInfo.kelas) {
+            setFilters(f => ({ ...f, kelas: dbInfo.kelas, jurusan: dbInfo.jurusan || '' }))
+            setWkNeedsJurusanSelection(!dbInfo.jurusan)
+            return
+          }
+        } catch (e2) {
+          console.error('[RekapPKL] Gagal ambil kelas info dari DB:', e2)
+        }
+        setFilters(f => ({ ...f, kelas: userData.kelas || '', jurusan: userData.jurusan || '' }))
+        setWkNeedsJurusanSelection(!userData.jurusan)
+      }
+      initWKFilter()
+    }
+  }, [isWK, userData?.id])
+
   useEffect(() => {
     const load = async () => {
       const res = await getPklFilters()
@@ -104,10 +137,8 @@ export default function RekapPKL() {
     load()
   }, [])
 
-  // Auto cleanup old selfies
   useEffect(() => { cleanupOldPklSelfies() }, [])
 
-  // Load data based on tab
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -132,13 +163,17 @@ export default function RekapPKL() {
     setLoading(false)
   }, [activeTab, selectedDate, selectedMonth, selectedYear, filters])
 
-  useEffect(() => { loadData() }, [loadData])
-
-  // Reset on filter change
   useEffect(() => {
-    setActiveTab('harian')
-    setSelectedDate(new Date().toLocaleDateString('sv-SE'))
-  }, [filters])
+    if (isWK && !filters.jurusan) return
+    loadData()
+  }, [loadData, isWK, filters.jurusan])
+
+  useEffect(() => {
+    if (!isWK) {
+      setActiveTab('harian')
+      setSelectedDate(new Date().toLocaleDateString('sv-SE'))
+    }
+  }, [filters, isWK])
 
   const handleFilterChange = (key, val) => {
     setFilters(f => ({ ...f, [key]: val }))
@@ -180,12 +215,12 @@ export default function RekapPKL() {
     if (data.length === 0) { showToast('Tidak ada data untuk diekspor', 'error'); return }
     let csv = ''
     if (activeTab === 'harian') {
-      csv = 'No,NISN,Nama,L/P,Kelas,Jurusan,Perusahaan,Jam Masuk,Jam Pulang,Status,Keterlambatan\n'
+      csv = 'No,NISN,Nama,L/P,Kelas,Jurusan,Pembimbing Industri,Guru Pembimbing,Perusahaan,Jam Masuk,Jam Pulang,Status,Keterlambatan\n'
       data.forEach((s, i) => {
-        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.company_name || ''}",${s.Hadir || 0},${s.Sakit || 0},${s.Izin || 0},${s.Alpha || 0},${s.Terlambat || 0},${s.Libur || 0},${s.totalKerja || 0},"${s.persentase || '0.0'}%"\n`
+        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.industry_supervisor || ''}","${s.guru_pembimbing || ''}","${s.company_name || ''}","${s.attendance?.check_in_time || ''}","${s.attendance?.check_out_time || ''}","${s.computedStatus || ''}","${s.attendance?.is_late ? 'Ya' : 'Tidak'}"\n`
       })
     } else if (activeTab === 'bulanan') {
-      const header = 'No,NISN,Nama,L/P,Kelas,Jurusan,Perusahaan'
+      const header = 'No,NISN,Nama,L/P,Kelas,Jurusan,Pembimbing Industri,Guru Pembimbing,Perusahaan'
       const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => `Tgl ${i + 1}`).join(',')
       csv = header + ',' + dayHeaders + ',Total H,Total S,Total I,Total A,Total T,Total L\n'
       data.forEach((s, i) => {
@@ -195,12 +230,12 @@ export default function RekapPKL() {
           counts[d.status] = (counts[d.status] || 0) + 1
           return SC[d.status]?.label || d.status
         }).join(',')
-        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.kelas || ''}","${s.jurusan || ''}","${s.company_name || ''}",${dayVals},${counts.Hadir},${counts.Sakit},${counts.Izin},${counts.Alpha},${counts.Terlambat},${counts.Libur}\n`
+        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.industry_supervisor || ''}","${s.guru_pembimbing || ''}","${s.company_name || ''}",${dayVals},${counts.Hadir},${counts.Sakit},${counts.Izin},${counts.Alpha},${counts.Terlambat},${counts.Libur}\n`
       })
     } else if (activeTab === 'semester') {
-      csv = 'No,NISN,Nama,L/P,Kelas,Jurusan,Perusahaan,Hadir,Sakit,Izin,Alpha,Terlambat,Libur,Total Kerja,Persentase\n'
+      csv = 'No,NISN,Nama,L/P,Kelas,Jurusan,Pembimbing Industri,Guru Pembimbing,Perusahaan,Hadir,Sakit,Izin,Alpha,Terlambat,Libur,Total Kerja,Persentase\n'
       data.forEach((s, i) => {
-        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.company_name || ''}",${s.Hadir || 0},${s.Sakit || 0},${s.Izin || 0},${s.Alpha || 0},${s.Terlambat || 0},${s.Libur || 0},${s.totalKerja || 0},"${s.persentase || '0.0'}%"\n`
+        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.industry_supervisor || ''}","${s.guru_pembimbing || ''}","${s.company_name || ''}",${s.Hadir || 0},${s.Sakit || 0},${s.Izin || 0},${s.Alpha || 0},${s.Terlambat || 0},${s.Libur || 0},${s.totalKerja || 0},"${s.persentase || '0.0'}%"\n`
       })
     }
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -209,31 +244,46 @@ export default function RekapPKL() {
     link.click()
   }
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (data.length === 0) { showToast('Tidak ada data', 'error'); return }
     const w = window.open('', '_blank')
     if (!w) { showToast('Popup diblokir', 'error'); return }
-    let title = 'Rekap Kehadiran PKL'
-    if (activeTab === 'harian') title += ` — Harian (${selectedDate})`
-    else if (activeTab === 'bulanan') title += ` — Bulanan (${monthName} ${selectedYear})`
-    else title += ` — ${semesterInfo?.label || 'Semester'}`
+
+    const kopSettings = await getKopSuratSettings()
+    const kopHTML = await generateKopSuratHTML(kopSettings)
+
+    let title = 'REKAP KEHADIRAN PKL'
+    let subtitle = ''
+    if (activeTab === 'harian') {
+      subtitle = `Harian (${new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })})`
+    } else if (activeTab === 'bulanan') {
+      subtitle = `Bulanan (${monthName} ${selectedYear})`
+    } else {
+      subtitle = semesterInfo?.label || 'Semester'
+    }
+    const kelasLabel = filters.kelas && filters.jurusan ? `Kelas: ${filters.kelas} ${filters.jurusan}` : (filters.kelas ? `Tingkat: ${filters.kelas}` : '')
+    const companyLabel = filters.company ? `Perusahaan: ${filters.company}` : ''
+
     let tableHTML = ''
+    let pageCss = ''
+
     if (activeTab === 'harian') {
       tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Perusahaan</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th></tr></thead><tbody>`
+        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th></tr></thead><tbody>`
       data.forEach((s, i) => {
-        tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.company_name || ''}</td><td>${s.attendance?.check_in_time || '-'}</td><td>${s.attendance?.check_out_time || '-'}</td><td>${s.computedStatus || '-'}</td></tr>`
+        tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.industry_supervisor || ''}</td><td>${s.guru_pembimbing || ''}</td><td>${s.company_name || ''}</td><td>${s.attendance?.check_in_time || '-'}</td><td>${s.attendance?.check_out_time || '-'}</td><td>${s.computedStatus || '-'}</td></tr>`
       })
       tableHTML += '</tbody></table>'
     } else if (activeTab === 'bulanan') {
-      let hdr = '<th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Perusahaan</th>'
+      pageCss = '@page{size:landscape}'
+      let hdr = '<th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th>'
       for (let d = 1; d <= daysInMonth; d++) hdr += `<th style="font-size:9px;padding:3px">${d}</th>`
       hdr += '<th>H</th><th>S</th><th>I</th><th>A</th><th>T</th><th>L</th>'
       tableHTML = `<table border="1" cellpadding="4" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10px">
         <thead><tr style="background:#f0f0f0">${hdr}</tr></thead><tbody>`
       data.forEach((s, i) => {
         const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
-        let row = `<td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td style="font-size:9px">${s.company_name || ''}</td>`
+        let row = `<td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td style="font-size:9px">${s.industry_supervisor || ''}</td><td style="font-size:9px">${s.guru_pembimbing || ''}</td><td style="font-size:9px">${s.company_name || ''}</td>`
         s.days.forEach(d => {
           if (!d.status) { row += '<td style="background:#f9fafb">-</td>'; return }
           counts[d.status] = (counts[d.status] || 0) + 1
@@ -248,13 +298,14 @@ export default function RekapPKL() {
       tableHTML += '</tbody></table>'
     } else {
       tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Perusahaan</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>Terlambat</th><th>Libur</th><th>Total Kerja</th><th>%</th></tr></thead><tbody>`
+        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>Terlambat</th><th>Libur</th><th>Total Kerja</th><th>%</th></tr></thead><tbody>`
       data.forEach((s, i) => {
-        tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.company_name || ''}</td><td>${s.Hadir || 0}</td><td>${s.Sakit || 0}</td><td>${s.Izin || 0}</td><td>${s.Alpha || 0}</td><td>${s.Terlambat || 0}</td><td>${s.Libur || 0}</td><td>${s.totalKerja || 0}</td><td>${s.persentase || '0.0'}%</td></tr>`
+        tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.industry_supervisor || ''}</td><td>${s.guru_pembimbing || ''}</td><td>${s.company_name || ''}</td><td>${s.Hadir || 0}</td><td>${s.Sakit || 0}</td><td>${s.Izin || 0}</td><td>${s.Alpha || 0}</td><td>${s.Terlambat || 0}</td><td>${s.Libur || 0}</td><td>${s.totalKerja || 0}</td><td>${s.persentase || '0.0'}%</td></tr>`
       })
       tableHTML += '</tbody></table>'
     }
-    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:20px}h2{text-align:center;margin-bottom:4px}p.sub{text-align:center;color:#666;font-size:12px;margin-bottom:16px}@media print{body{padding:0}}</style></head><body><h2>${title}</h2><p class="sub">Dicetak: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>${tableHTML}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
+
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>${pageCss}body{font-family:Arial,sans-serif;padding:20px}h3{text-align:center;margin:0;font-size:14px;text-transform:uppercase}p.sub{text-align:center;color:#666;font-size:12px;margin:2px 0 16px}@media print{body{margin:0}}</style></head><body>${kopHTML}<div style="text-align:center"><h3>${title}</h3><p class="sub">${subtitle}</p>${kelasLabel ? `<p class="sub">${kelasLabel}</p>` : ''}${companyLabel ? `<p class="sub">${companyLabel}</p>` : ''}<p class="sub">Dicetak: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p></div>${tableHTML}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     w.document.close()
   }
 
@@ -272,13 +323,11 @@ export default function RekapPKL() {
         </div>
       )}
 
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2"><BarChart3 size={28} className="text-blue-600" /> Rekap Kehadiran PKL</h1>
         <p className="text-sm text-gray-500 mt-1">Monitoring kehadiran siswa Praktik Kerja Lapangan</p>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
           { label: 'Peserta PKL', value: stats.total, emoji: '👥', gradient: 'from-slate-500 to-slate-600' },
@@ -297,7 +346,6 @@ export default function RekapPKL() {
         ))}
       </div>
 
-      {/* Donut + Legend */}
       <div className="bg-white rounded-2xl shadow-sm border p-5">
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <DonutChart data={[
@@ -327,7 +375,8 @@ export default function RekapPKL() {
         </div>
       </div>
 
-      {/* Filters */}
+      {filters.kelas && filters.jurusan && <PJInfoCard kelas={filters.kelas} jurusan={filters.jurusan} />}
+
       <div className="bg-white p-4 rounded-2xl shadow-sm border">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-1.5"><Filter size={16} className="text-gray-500" /><span className="text-sm font-semibold text-gray-700">Filter:</span></div>
@@ -335,11 +384,11 @@ export default function RekapPKL() {
             <option value="">Semua Perusahaan</option>
             {filterOptions.companies.map((c, i) => <option key={i} value={c}>{c}</option>)}
           </select>
-          <select value={filters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[100px]">
+          <select value={filters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} disabled={isWK} className={`px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[100px] ${isWK ? 'opacity-60 cursor-not-allowed' : ''}`}>
             <option value="">Semua Tingkat</option>
             {tingkatOptions.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={filters.jurusan} onChange={e => handleFilterChange('jurusan', e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px]">
+          <select value={filters.jurusan} onChange={e => handleFilterChange('jurusan', e.target.value)} disabled={isWK && !wkNeedsJurusanSelection} className={`px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[120px] ${isWK && !wkNeedsJurusanSelection ? 'opacity-60 cursor-not-allowed' : ''}`}>
             <option value="">Semua Jurusan</option>
             {jurusanOptions.map(j => <option key={j} value={j}>{j}</option>)}
           </select>
@@ -347,18 +396,26 @@ export default function RekapPKL() {
             <option value="">Semua Status</option>
             {filterOptions.statuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {filterActive && (
+          {filterActive && !isWK && (
             <button onClick={() => setFilters({ company: '', kelas: '', jurusan: '', status: '' })} className="px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition flex items-center gap-1"><RotateCcw size={12} /> Reset</button>
+          )}
+          {isWK && (
+            <span className={`px-3 py-2 text-xs font-semibold rounded-lg ${wkNeedsJurusanSelection && !filters.jurusan ? 'text-amber-700 bg-amber-50' : 'text-purple-700 bg-purple-50'}`}>
+              {wkNeedsJurusanSelection && !filters.jurusan
+                ? `⚠️ Kelas Binaan: ${filters.kelas} — Pilih Jurusan ↓`
+                : `📋 Kelas Binaan: ${filters.kelas} ${filters.jurusan || ''}`}
+            </span>
           )}
           <div className="ml-auto flex gap-2">
             <button onClick={exportCSV} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-semibold hover:bg-emerald-100 transition flex items-center gap-1"><FileSpreadsheet size={14} /> CSV</button>
             <button onClick={exportPDF} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-xl text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1"><Printer size={14} /> PDF</button>
-            <button onClick={() => { setShowResetModal(true); setResetStep(1); setResetText('') }} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1"><Trash2 size={14} /> Reset Semua</button>
+            {isAdmin && (
+              <button onClick={() => { setShowResetModal(true); setResetStep(1); setResetText('') }} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1"><Trash2 size={14} /> Reset Semua</button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="flex border-b border-gray-100">
           {['harian', 'bulanan', 'semester'].map(tab => (
@@ -369,7 +426,6 @@ export default function RekapPKL() {
           ))}
         </div>
 
-        {/* Tab-specific controls */}
         <div className="p-4 border-b border-gray-50">
           {activeTab === 'harian' && (
             <div className="flex items-center gap-2">
@@ -398,53 +454,56 @@ export default function RekapPKL() {
           )}
         </div>
 
-        {/* Data Table */}
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-8 space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="animate-pulse flex gap-3"><div className="h-4 bg-gray-100 rounded w-8" /><div className="h-4 bg-gray-100 rounded w-24" /><div className="h-4 bg-gray-100 rounded flex-1" /><div className="h-4 bg-gray-100 rounded w-16" /></div>)}</div>
           ) : data.length === 0 ? (
             <div className="text-center py-16"><Users size={48} className="mx-auto text-gray-200 mb-3" /><p className="text-gray-500 font-semibold">Tidak ada data siswa PKL</p><p className="text-gray-400 text-xs mt-1">{filterActive ? 'Coba ubah filter' : 'Pastikan ada siswa yang memiliki profil PKL'}</p></div>
-          ) : activeTab === 'harian' ? (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100 border-b border-gray-200">
-                <tr>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase w-10">No</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">NISN</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Nama</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-10">L/P</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Kelas</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Jurusan</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Perusahaan</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Masuk</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Pulang</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Status</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Terlambat</th>
-                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-12">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {data.map((s, i) => (
-                  <tr key={s.student_id} className="hover:bg-blue-50/30 transition">
-                    <td className="py-3 px-3 text-gray-500 text-xs">{i + 1}</td>
-                    <td className="py-3 px-3 text-gray-600 font-mono text-xs">{s.nisn || '-'}</td>
-                    <td className="py-3 px-3 font-semibold text-gray-800">{s.nama}</td>
-                    <td className="py-3 px-3 text-center text-xs text-gray-600">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
-                    <td className="py-3 px-3 text-xs text-gray-600">{s.kelas || '-'}</td>
-                    <td className="py-3 px-3 text-xs text-gray-600">{s.jurusan || '-'}</td>
-                    <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
-                    <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_in_time || '-'}</td>
-                    <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_out_time || '-'}</td>
-                    <td className="py-3 px-3 text-center">{statusBadge(s.computedStatus)}</td>
-                    <td className="py-3 px-3 text-center text-xs">{s.attendance?.is_late ? <span className="text-orange-600 font-bold">Ya</span> : <span className="text-gray-400">-</span>}</td>
-                    <td className="py-3 px-3 text-center">
-                      {s.attendance?.id && (
-                        <button onClick={() => openDetail(s.attendance.id)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center mx-auto transition" title="Lihat Detail"><Eye size={14} /></button>
-                      )}
-                    </td>
+            ) : activeTab === 'harian' ? (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase w-10">No</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">NISN</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Nama</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-10">L/P</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Kelas</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Jurusan</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Pembimbing Industri</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Guru Pembimbing</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Perusahaan</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Masuk</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Pulang</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Status</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Terlambat</th>
+                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-12">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.map((s, i) => (
+                    <tr key={s.student_id} className="hover:bg-blue-50/30 transition">
+                      <td className="py-3 px-3 text-gray-500 text-xs">{i + 1}</td>
+                      <td className="py-3 px-3 text-gray-600 font-mono text-xs">{s.nisn || '-'}</td>
+                      <td className="py-3 px-3 font-semibold text-gray-800">{s.nama}</td>
+                      <td className="py-3 px-3 text-center text-xs text-gray-600">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
+                      <td className="py-3 px-3 text-xs text-gray-600">{s.kelas || '-'}</td>
+                      <td className="py-3 px-3 text-xs text-gray-600">{s.jurusan || '-'}</td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">{s.industry_supervisor || '-'}</td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">{s.guru_pembimbing || '-'}</td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
+                      <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_in_time || '-'}</td>
+                      <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_out_time || '-'}</td>
+                      <td className="py-3 px-3 text-center">{statusBadge(s.computedStatus)}</td>
+                      <td className="py-3 px-3 text-center text-xs">{s.attendance?.is_late ? <span className="text-orange-600 font-bold">Ya</span> : <span className="text-gray-400">-</span>}</td>
+                      <td className="py-3 px-3 text-center">
+                        {s.attendance?.id && (
+                          <button onClick={() => openDetail(s.attendance.id)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center mx-auto transition" title="Lihat Detail"><Eye size={14} /></button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
           ) : activeTab === 'bulanan' ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs" style={{ minWidth: daysInMonth * 28 + 300 }}>
@@ -494,7 +553,6 @@ export default function RekapPKL() {
               </table>
             </div>
           ) : (
-            /* Semester */
             <table className="w-full text-sm">
               <thead className="bg-gray-100 border-b border-gray-200">
                 <tr>
@@ -504,6 +562,8 @@ export default function RekapPKL() {
                   <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-10">L/P</th>
                   <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Kelas</th>
                   <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Jurusan</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Pembimbing Industri</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Guru Pembimbing</th>
                   <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Perusahaan</th>
                   <th className="py-3 px-3 font-bold text-emerald-600 text-xs uppercase text-center">H</th>
                   <th className="py-3 px-3 font-bold text-amber-600 text-xs uppercase text-center">S</th>
@@ -527,6 +587,8 @@ export default function RekapPKL() {
                       <td className="py-3 px-3 text-center text-xs text-gray-600">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
                       <td className="py-3 px-3 text-xs text-gray-600">{s.kelas || '-'}</td>
                       <td className="py-3 px-3 text-xs text-gray-600">{s.jurusan || '-'}</td>
+                      <td className="py-3 px-3 text-xs text-gray-600">{s.industry_supervisor || '-'}</td>
+                      <td className="py-3 px-3 text-xs text-gray-600">{s.guru_pembimbing || '-'}</td>
                       <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
                       <td className="py-3 px-3 text-center font-bold text-emerald-700">{s.Hadir || 0}</td>
                       <td className="py-3 px-3 text-center font-bold text-amber-700">{s.Sakit || 0}</td>
@@ -545,7 +607,6 @@ export default function RekapPKL() {
         </div>
       </div>
 
-      {/* Detail Modal */}
       {detailModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scaleIn" onClick={e => e.stopPropagation()}>
@@ -557,7 +618,6 @@ export default function RekapPKL() {
               <div className="p-8 flex justify-center"><Loader2 size={32} className="animate-spin text-blue-500" /></div>
             ) : detailData ? (
               <div className="p-5 space-y-4">
-                {/* Student Info */}
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">{detailData.siswa?.nama?.[0]}</div>
                   <div>
@@ -565,8 +625,6 @@ export default function RekapPKL() {
                     <p className="text-xs text-gray-500">{detailData.siswa?.nisn} · {detailData.siswa?.kelas} {detailData.siswa?.jurusan}</p>
                   </div>
                 </div>
-
-                {/* Status */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gray-50 rounded-xl p-3"><p className="text-[10px] text-gray-500 uppercase font-semibold">Tanggal</p><p className="font-bold text-gray-800 text-sm">{detailData.attendance_date}</p></div>
                   <div className="bg-gray-50 rounded-xl p-3"><p className="text-[10px] text-gray-500 uppercase font-semibold">Status</p><div className="mt-0.5">{statusBadge(detailData.status)}</div></div>
@@ -575,8 +633,6 @@ export default function RekapPKL() {
                   <div className="bg-gray-50 rounded-xl p-3"><p className="text-[10px] text-gray-500 uppercase font-semibold">Terlambat</p><p className="font-bold text-sm">{detailData.is_late ? <span className="text-orange-600">Ya</span> : <span className="text-gray-400">Tidak</span>}</p></div>
                   <div className="bg-gray-50 rounded-xl p-3"><p className="text-[10px] text-gray-500 uppercase font-semibold">Jenis</p><p className="font-bold text-gray-800 text-sm">{detailData.attendance_type || '-'}</p></div>
                 </div>
-
-                {/* Photos */}
                 {detailData.selfie_url && (
                   <div>
                     <p className="text-xs font-semibold text-gray-500 mb-2">Foto Selfie Masuk</p>
@@ -589,24 +645,28 @@ export default function RekapPKL() {
                     <img src={detailData.check_out_selfie_url} alt="Selfie Pulang" className="w-full max-w-[200px] rounded-xl border" referrerPolicy="no-referrer" />
                   </div>
                 )}
-
-                {/* Location */}
                 {(detailData.check_in_latitude || detailData.check_in_address) && (
                   <div className="bg-blue-50 rounded-xl p-4">
                     <p className="text-xs font-semibold text-blue-700 mb-2">📍 Lokasi Masuk</p>
-                    {detailData.check_in_latitude && <p className="text-xs text-blue-600 font-mono">Lat: {detailData.check_in_latitude}, Lng: {detailData.check_in_longitude}</p>}
+                    {detailData.check_in_latitude && (
+                      <a href={`https://www.google.com/maps?q=${detailData.check_in_latitude},${detailData.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 font-mono hover:text-blue-800 hover:underline block">
+                        Lat: {detailData.check_in_latitude}, Lng: {detailData.check_in_longitude} — Klik untuk lihat di Google Maps ↗
+                      </a>
+                    )}
                     {detailData.check_in_address && <p className="text-xs text-blue-600 mt-1">{detailData.check_in_address}</p>}
                   </div>
                 )}
                 {(detailData.check_out_latitude || detailData.check_out_address) && (
                   <div className="bg-indigo-50 rounded-xl p-4">
                     <p className="text-xs font-semibold text-indigo-700 mb-2">📍 Lokasi Pulang</p>
-                    {detailData.check_out_latitude && <p className="text-xs text-indigo-600 font-mono">Lat: {detailData.check_out_latitude}, Lng: {detailData.check_out_longitude}</p>}
+                    {detailData.check_out_latitude && (
+                      <a href={`https://www.google.com/maps?q=${detailData.check_out_latitude},${detailData.check_out_longitude}`} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 font-mono hover:text-indigo-800 hover:underline block">
+                        Lat: {detailData.check_out_latitude}, Lng: {detailData.check_out_longitude} — Klik untuk lihat di Google Maps ↗
+                      </a>
+                    )}
                     {detailData.check_out_address && <p className="text-xs text-indigo-600 mt-1">{detailData.check_out_address}</p>}
                   </div>
                 )}
-
-                {/* Note */}
                 {detailData.note && (
                   <div className="bg-amber-50 rounded-xl p-4">
                     <p className="text-xs font-semibold text-amber-700 mb-1">📝 Keterangan</p>
@@ -621,7 +681,6 @@ export default function RekapPKL() {
         </div>
       )}
 
-      {/* Reset Modal */}
       {showResetModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !resetting && setShowResetModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn" onClick={e => e.stopPropagation()}>
@@ -656,13 +715,6 @@ export default function RekapPKL() {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        .animate-slideDown { animation: slideDown 0.3s ease-out; }
-        .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
-      `}</style>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createClient } from '@supabase/supabase-js'
+import { getCached, TTL } from '@/lib/cacheHelpers'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -13,37 +14,45 @@ async function logActivity(adminId, activity, detail) {
   })
 }
 
+// ── OPTIMASI: Cache 10 menit — stats jarang berubah ──
 export async function getEffectiveDaysStats() {
-  const { data: holidays } = await supabaseAdmin.from('effective_days').select('category, date')
-  
-  // Perbaikan: Gunakan maybeSingle() agar tidak error jika tabel kosong
-  const { data: calendar } = await supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
+  return getCached('effective_days_stats', async () => {
+    const { data: holidays } = await supabaseAdmin.from('effective_days').select('category, date')
+    const { data: calendar } = await supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
 
-  const totalLiburNasional = holidays?.filter(h => h.category === 'Nasional').length || 0
-  const totalLiburSekolah = holidays?.filter(h => h.category !== 'Nasional').length || 0
-  const totalNonEfektif = totalLiburNasional + totalLiburSekolah
+    const totalLiburNasional = holidays?.filter(h => h.category === 'Nasional').length || 0
+    const totalLiburSekolah = holidays?.filter(h => h.category !== 'Nasional').length || 0
+    const totalNonEfektif = totalLiburNasional + totalLiburSekolah
 
-  let totalEfektif = 0
-  if (calendar?.start_date && calendar?.end_date) {
-    const start = new Date(calendar.start_date)
-    const end = new Date(calendar.end_date)
-    const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1
-    totalEfektif = days - totalNonEfektif
-  }
+    let totalEfektif = 0
+    if (calendar?.start_date && calendar?.end_date) {
+      const start = new Date(calendar.start_date)
+      const end = new Date(calendar.end_date)
+      const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1
+      totalEfektif = days - totalNonEfektif
+    }
 
-  return { totalEfektif, totalLiburNasional, totalLiburSekolah, totalNonEfektif, calendar }
+    return { totalEfektif, totalLiburNasional, totalLiburSekolah, totalNonEfektif, calendar }
+  }, TTL.HARI_EFEKTIF);
 }
 
+// ── OPTIMASI: Cache per bulan — data libur jarang berubah ──
 export async function getHolidays() {
-  const { data, error } = await supabaseAdmin
-    .from('effective_days')
-    .select('*')
-    .order('date', { ascending: true })
-  
-  if (error) return []
-  return data
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  return getCached(`holidays_${monthKey}`, async () => {
+    const { data, error } = await supabaseAdmin
+      .from('effective_days')
+      .select('*')
+      .order('date', { ascending: true })
+
+    if (error) return []
+    return data
+  }, TTL.HARI_EFEKTIF);
 }
 
+// Write operations — TIDAK di-cache
 export async function saveHoliday(formData) {
   const supabase = createClient(supabaseUrl, supabaseAnonKey)
   const { data: { user } } = await supabase.auth.getUser()
@@ -56,6 +65,12 @@ export async function saveHoliday(formData) {
   const description = formData.get('description')
 
   if (id) {
+    // Invalidate cache saat ada perubahan
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const { invalidateCache } = await import('@/lib/cacheHelpers');
+    invalidateCache(`holidays_${monthKey}`);
+
     const { data, error } = await supabaseAdmin.from('effective_days').update({ date, holiday_name, category, description, updated_at: new Date() }).eq('id', id).select().single()
     if (error) return { error: error.message }
     await logActivity(adminId, 'Edit Hari Libur', { id, date, holiday_name })
@@ -72,10 +87,16 @@ export async function deleteHoliday(id) {
   const { data: { user } } = await supabase.auth.getUser()
   const adminId = user?.id || 1
 
+  // Invalidate cache saat ada penghapusan
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const { invalidateCache } = await import('@/lib/cacheHelpers');
+  invalidateCache(`holidays_${monthKey}`);
+
   const { data: oldData } = await supabaseAdmin.from('effective_days').select('*').eq('id', id).maybeSingle()
   const { error } = await supabaseAdmin.from('effective_days').delete().eq('id', id)
   if (error) return { error: error.message }
-  
+
   await logActivity(adminId, 'Hapus Hari Libur', { oldData })
   return { success: true }
 }
@@ -107,6 +128,10 @@ export async function saveAcademicCalendar(formData) {
     await supabaseAdmin.from('academic_calendar').update({ is_active: false }).neq('id', id || 0)
   }
 
+  // Invalidate stats cache saat kalender berubah
+  const { invalidateCache } = await import('@/lib/cacheHelpers');
+  invalidateCache('effective_days_stats');
+
   if (id) {
     const { error } = await supabaseAdmin.from('academic_calendar').update({ school_year, semester, start_date, end_date, pas_date, pat_date, pkl_date, mpls_date, semester_break_date, is_active }).eq('id', id)
     if (error) return { error: error.message }
@@ -120,13 +145,12 @@ export async function saveAcademicCalendar(formData) {
 }
 
 export async function getActivityLogs() {
-  // Hapus join ke tabel users karena tidak ada Foreign Key bawaan
   const { data, error } = await supabaseAdmin
     .from('effective_day_logs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(20)
-  
+
   if (error) {
     console.error("Error fetching logs:", error.message)
     return []
@@ -139,10 +163,14 @@ export async function resetAllEffectiveDays() {
   const { data: { user } } = await supabase.auth.getUser()
   const adminId = user?.id || 1
 
-  // Hapus semua data di tabel effective_days
+  // Invalidate semua cache libur
+  const { invalidateCacheByPrefix } = await import('@/lib/cacheHelpers');
+  invalidateCacheByPrefix('holidays_');
+  invalidateCache('effective_days_stats');
+
   const { error } = await supabaseAdmin.from('effective_days').delete().neq('id', 0)
   if (error) return { error: error.message }
-  
+
   await logActivity(adminId, 'Hapus Semua Hari Libur', { message: 'Seluruh data hari libur dihapus permanen' })
   return { success: true }
 }

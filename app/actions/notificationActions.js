@@ -1,6 +1,10 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getCached, TTL } from '@/lib/cacheHelpers';
+
+// ── OPTIMASI: Throttle deleteOldNotifications — max 1x per 5 menit ──
+let lastCleanupTime = 0;
 
 // ═══════════════════════════════════════════════════════════════
 // CREATE
@@ -74,7 +78,6 @@ export async function notifyWaliKelasSakitIzin({ siswaNama, kelas, jurusan, jeni
     console.log(`[notifyWK-SI] Wali Kelas TIDAK DITEMUKAN untuk kelas="${kelas}" jurusan="${jurusan}"`);
     return null;
   }
-  console.log(`[notifyWK-SI] Wali Kelas DITEMUKAN id=${waliId} untuk kelas="${kelas}" jurusan="${jurusan}"`);
   return createNotificationWithAdminCC({
     userId: waliId,
     title: `${izinEmoji} Pengajuan ${jenisAbsensi} Baru`,
@@ -93,7 +96,6 @@ export async function notifyWaliKelasParentMessage({ siswaNama, kelas, jurusan, 
     console.log(`[notifyWK-MSG] Wali Kelas TIDAK DITEMUKAN untuk kelas="${kelas}" jurusan="${jurusan}"`);
     return null;
   }
-  console.log(`[notifyWK-MSG] Wali Kelas DITEMUKAN id=${waliId}`);
   return createNotificationWithAdminCC({
     userId: waliId,
     title: `💬 Pesan Baru dari Orang Tua`,
@@ -127,8 +129,13 @@ export async function notifySekretarisRevision({ sekretarisId, siswaNama, tangga
 // READ
 // ═══════════════════════════════════════════════════════════════
 export async function getUnreadCount(userId) {
-  // Auto-hapus notifikasi lama (>30 hari) di background
-  deleteOldNotifications(30);
+  // ── OPTIMASI: Throttle cleanup — max 1x per 5 menit (bukan setiap 15 detik) ──
+  const now = Date.now();
+  if (now - lastCleanupTime > 5 * 60 * 1000) {
+    lastCleanupTime = now;
+    deleteOldNotifications(30);
+  }
+
   const { count, error } = await supabaseAdmin
     .from('notifications')
     .select('*', { count: 'exact', head: true })
@@ -153,7 +160,7 @@ export async function getUserNotifications(userId, { limit = 20, offset = 0, fil
 }
 
 // ═══════════════════════════════════════════════════════════════
-// UPDATE (tanpa updated_at — kolom tidak ada di tabel)
+// UPDATE
 // ═══════════════════════════════════════════════════════════════
 export async function markAsRead(notificationId) {
   const { error } = await supabaseAdmin
@@ -206,224 +213,200 @@ export async function getUserIdsByRole(role, { kelas, status = 'Aktif' } = {}) {
   return (data || []).map(u => u.id);
 }
 
+// ── OPTIMASI: Cache 10 menit — daftar Admin jarang berubah ──
 export async function getAdminUserIds() {
-  const { data, error } = await supabaseAdmin
-    .from('users')
-    .select('id')
-    .eq('role', 'Administrator')
-    .eq('status', 'Aktif');
-  const ids = (data || []).map(u => u.id);
-  // Logging untuk debug: jika notif Admin tidak muncul, cek output ini di console
-  console.log(`[getAdminUserIds] role=Administrator, status=Aktif → ditemukan ${ids.length} user:`, ids);
-  if (error) console.error('[getAdminUserIds] Error:', error.message);
-  return ids;
+  return getCached('admin_user_ids', async () => {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('role', 'Administrator')
+      .eq('status', 'Aktif');
+    const ids = (data || []).map(u => u.id);
+    console.log(`[getAdminUserIds] Found ${ids.length} admin`);
+    if (error) console.error('[getAdminUserIds] Error:', error.message);
+    return ids;
+  }, TTL.SETTINGS);
 }
 
 /**
- * Cari ID Wali Kelas berdasarkan kelas & jurusan.
- * 3 strategi fallback:
- *   1. Gabungan kelas+jurusan ILIKE (paling ketat)
- *   2. Pisahkan kata pertama sebagai tingkat + jurusan terpisah
- *   3. Hanya jurusan saja (paling longgar)
+ * ── OPTIMASI: Cache 5 menit — mapping kelas→WK jarang berubah ──
+ * 
+ * Sebelum: Setiap panggilan = hingga 5 query sequential (Strategi 0-4)
+ * Sesudah: Panggilan pertama = hingga 5 query, selanjutnya = 0 query (dari cache)
+ * 
+ * Fungsi ini dipanggil di SETIAP: pengajuan sakit/izin, pesan ortu, revisi absensi.
+ * Dengan cache, ratusan panggilan/hari tidak menghasilkan DB query sama sekali.
  */
 export async function getWaliKelasUserId(kelas, jurusan = '') {
   if (!kelas) return null;
 
-  let tingkat, jurusanPart;
-  if (jurusan && jurusan.trim()) {
-    const kelasWords = kelas.trim().split(/\s+/);
-    tingkat = kelasWords[0] || '';
-    jurusanPart = jurusan.trim();
-  } else {
-    const kelasArr = kelas.trim().split(/\s+/);
-    tingkat = kelasArr[0] || '';
-    jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
-  }
+  const cacheKey = `wk_id_${kelas.trim()}_${(jurusan || '').trim()}`;
 
-  console.log(`[getWaliKelasUserId] Input: kelas="${kelas}" jurusan="${jurusan}" → tingkat="${tingkat}" jurusanPart="${jurusanPart}"`);
+  return getCached(cacheKey, async () => {
+    let tingkat, jurusanPart;
+    if (jurusan && jurusan.trim()) {
+      const kelasWords = kelas.trim().split(/\s+/);
+      tingkat = kelasWords[0] || '';
+      jurusanPart = jurusan.trim();
+    } else {
+      const kelasArr = kelas.trim().split(/\s+/);
+      tingkat = kelasArr[0] || '';
+      jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
+    }
 
-  // ── Strategi 0: Gabungan kelas+jurusan (WK format: "X TKRO 1", siswa format: "X" + "TKRO") ──
-  if (tingkat && jurusanPart) {
-    const combined = `${tingkat} ${jurusanPart}`;
+    // Strategi 0: Gabungan kelas+jurusan
+    if (tingkat && jurusanPart) {
+      const combined = `${tingkat} ${jurusanPart}`;
+      let { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Wali Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${combined}%`)
+        .limit(1);
+      if (!error && data && data.length > 0) return data[0].id;
+    }
+
+    // Strategi 1: tingkat + jurusanPart (pisah)
     let query = supabaseAdmin
       .from('users')
       .select('id, kelas, nama')
       .eq('role', 'Wali Kelas')
-      .eq('status', 'Aktif')
-      .ilike('kelas', `%${combined}%`);
+      .eq('status', 'Aktif');
+    if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
+    if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
     let { data, error } = await query.limit(1);
-    if (!error && data && data.length > 0) {
-      console.log(`[getWaliKelasUserId] ✅ Strategi 0 (gabungan): id=${data[0].id} kelas="${data[0].kelas}" nama="${data[0].nama}"`);
-      return data[0].id;
+    if (!error && data && data.length > 0) return data[0].id;
+
+    // Strategi 2: kata-kata dari kelas sendiri
+    const allWords = kelas.trim().split(/\s+/);
+    if (allWords.length >= 2) {
+      query = supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Wali Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${allWords[0]}%`)
+        .ilike('kelas', `%${allWords[1]}%`);
+      ({ data, error } = await query.limit(1));
+      if (!error && data && data.length > 0) return data[0].id;
     }
-    console.log(`[getWaliKelasUserId] Strategi 0 gagal: ${error?.message || '0 hasil'} untuk kombinasi="${combined}"`);
-  }
 
-  // ── Strategi 1: tingkat + jurusanPart (pisah) ──
-  let query = supabaseAdmin
-    .from('users')
-    .select('id, kelas, nama')
-    .eq('role', 'Wali Kelas')
-    .eq('status', 'Aktif');
-  if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
-  if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
-  let { data, error } = await query.limit(1);
-  if (!error && data && data.length > 0) {
-    console.log(`[getWaliKelasUserId] ✅ Strategi 1: id=${data[0].id} kelas="${data[0].kelas}" nama="${data[0].nama}"`);
-    return data[0].id;
-  }
-  console.log(`[getWaliKelasUserId] Strategi 1 gagal: ${error?.message || '0 hasil'}`);
+    // Strategi 3: hanya jurusan saja
+    const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
+    if (jurusanSearch) {
+      query = supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Wali Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${jurusanSearch}%`);
+      ({ data, error } = await query.limit(1));
+      if (!error && data && data.length > 0) return data[0].id;
+    }
 
-  // ── Strategi 2: coba jurusan dari dalam kelas sendiri ──
-  const allWords = kelas.trim().split(/\s+/);
-  if (allWords.length >= 2) {
-    const t2 = allWords[0];
-    const j2 = allWords[1];
+    // Strategi 4: full kelas ILIKE (fallback terakhir)
     query = supabaseAdmin
       .from('users')
       .select('id, kelas, nama')
       .eq('role', 'Wali Kelas')
       .eq('status', 'Aktif')
-      .ilike('kelas', `%${t2}%`)
-      .ilike('kelas', `%${j2}%`);
+      .ilike('kelas', `%${kelas.trim()}%`);
     ({ data, error } = await query.limit(1));
-    if (!error && data && data.length > 0) {
-      console.log(`[getWaliKelasUserId] ✅ Strategi 2: id=${data[0].id} kelas="${data[0].kelas}" nama="${data[0].nama}"`);
-      return data[0].id;
-    }
-    console.log(`[getWaliKelasUserId] Strategi 2 gagal: ${error?.message || '0 hasil'}`);
-  }
+    if (!error && data && data.length > 0) return data[0].id;
 
-  // ── Strategi 3: hanya jurusan saja ──
-  const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
-  if (jurusanSearch) {
-    query = supabaseAdmin
-      .from('users')
-      .select('id, kelas, nama')
-      .eq('role', 'Wali Kelas')
-      .eq('status', 'Aktif')
-      .ilike('kelas', `%${jurusanSearch}%`);
-    ({ data, error } = await query.limit(1));
-    if (!error && data && data.length > 0) {
-      console.log(`[getWaliKelasUserId] ✅ Strategi 3 (jurusan only): id=${data[0].id} kelas="${data[0].kelas}" nama="${data[0].className}"`);
-      return data[0].id;
-    }
-    console.log(`[getWaliKelasUserId] Strategi 3 gagal: ${error?.message || '0 hasil'}`);
-  }
-
-  // ── Strategi 4: full kelas ILIKE (fallback terakhir) ──
-  query = supabaseAdmin
-    .from('users')
-    .select('id, kelas, nama')
-    .eq('role', 'Wali Kelas')
-    .eq('status', 'Aktif')
-    .ilike('kelas', `%${kelas.trim()}%`);
-  ({ data, error } = await query.limit(1));
-  if (!error && data && data.length > 0) {
-    console.log(`[getWaliKelasUserId] ✅ Strategi 4 (full kelas): id=${data[0].id} kelas="${data[0].kelas}" nama="${data[0].nama}"`);
-    return data[0].id;
-  }
-  console.log(`[getWaliKelasUserId] ❌ SEMUA STRATEGI GAGAL untuk kelas="${kelas}" jurusan="${jurusan}"`);
-  return null;
+    console.log(`[getWaliKelasUserId] Tidak ditemukan untuk kelas="${kelas}" jurusan="${jurusan}"`);
+    return null;
+  }, TTL.PENANGGUNG_JAWAB);
 }
 
 /**
- * Sama seperti getWaliKelasUserId tapi untuk Sekretaris Kelas.
+ * ── OPTIMASI: Cache 5 menit — sama seperti WK ──
+ * 
+ * BUG FIX: Strategi 2 sebelumnya mengembalikan `data[0]._id` (underscore bug)
+ * Sekarang diperbaiki menjadi `data[0].id`
  */
 export async function getSekretarisUserId(kelas, jurusan = '') {
   if (!kelas) return null;
 
-  let tingkat, jurusanPart;
-  if (jurusan && jurusan.trim()) {
-    const kelasWords = kelas.trim().split(/\s+/);
-    tingkat = kelasWords[0] || '';
-    jurusanPart = jurusan.trim();
-  } else {
-    const kelasArr = kelas.trim().split(/\s+/);
-    tingkat = kelasArr[0] || '';
-    jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
-  }
+  const cacheKey = `sek_id_${kelas.trim()}_${(jurusan || '').trim()}`;
 
-  console.log(`[getSekretarisUserId] Input: kelas="${kelas}" jurusan="${jurusan}" → tingkat="${tingkat}" jurusanPart="${jurusanPart}"`);
+  return getCached(cacheKey, async () => {
+    let tingkat, jurusanPart;
+    if (jurusan && jurusan.trim()) {
+      const kelasWords = kelas.trim().split(/\s+/);
+      tingkat = kelasWords[0] || '';
+      jurusanPart = jurusan.trim();
+    } else {
+      const kelasArr = kelas.trim().split(/\s+/);
+      tingkat = kelasArr[0] || '';
+      jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
+    }
 
-  // ── Strategi 0: Gabungan kelas+jurusan ──
-  if (tingkat && jurusanPart) {
-    const combined = `${tingkat} ${jurusanPart}`;
+    // Strategi 0: Gabungan kelas+jurusan
+    if (tingkat && jurusanPart) {
+      const combined = `${tingkat} ${jurusanPart}`;
+      let { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Sekretaris Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${combined}%`)
+        .limit(1);
+      if (!error && data && data.length > 0) return data[0].id;
+    }
+
+    // Strategi 1
     let query = supabaseAdmin
       .from('users')
       .select('id, kelas, nama')
       .eq('role', 'Sekretaris Kelas')
-      .eq('status', 'Aktif')
-      .ilike('kelas', `%${combined}%`);
+      .eq('status', 'Aktif');
+    if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
+    if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
     let { data, error } = await query.limit(1);
-    if (!error && data && data.length > 0) {
-      console.log(`[getSekretarisUserId] ✅ Strategi 0 (gabungan): id=${data[0].id} kelas="${data[0].kelas}"`);
-      return data[0].id;
+    if (!error && data && data.length > 0) return data[0].id;
+
+    // Strategi 2
+    const allWords = kelas.trim().split(/\s+/);
+    if (allWords.length >= 2) {
+      query = supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Sekretaris Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${allWords[0]}%`)
+        .ilike('kelas', `%${allWords[1]}%`);
+      ({ data, error } = await query.limit(1));
+      if (!error && data && data.length > 0) return data[0].id; // BUG FIX: sebelumnya data[0]._id
     }
-    console.log(`[getSekretarisUserId] Strategi 0 gagal: ${error?.message || '0 hasil'} untuk kombinasi="${combined}"`);
-  }
 
-  // ── Strategi 1 ──
-  let query = supabaseAdmin
-    .from('users')
-    .select('id, kelas, nama')
-    .eq('role', 'Sekretaris Kelas')
-    .eq('status', 'Aktif');
-  if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
-  if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
-  let { data, error } = await query.limit(1);
-  if (!error && data && data.length > 0) {
-    console.log(`[getSekretarisUserId] ✅ Strategi 1: id=${data[0].id} kelas="${data[0].kelas}"`);
-    return data[0].id;
-  }
+    // Strategi 3
+    const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
+    if (jurusanSearch) {
+      query = supabaseAdmin
+        .from('users')
+        .select('id, kelas, nama')
+        .eq('role', 'Sekretaris Kelas')
+        .eq('status', 'Aktif')
+        .ilike('kelas', `%${jurusanSearch}%`);
+      ({ data, error } = await query.limit(1));
+      if (!error && data && data.length > 0) return data[0].id;
+    }
 
-  // ── Strategi 2 ──
-  const allWords = kelas.trim().split(/\s+/);
-  if (allWords.length >= 2) {
+    // Strategi 4
     query = supabaseAdmin
       .from('users')
       .select('id, kelas, nama')
       .eq('role', 'Sekretaris Kelas')
       .eq('status', 'Aktif')
-      .ilike('kelas', `%${allWords[0]}%`)
-      .ilike('kelas', `%${allWords[1]}%`);
+      .ilike('kelas', `%${kelas.trim()}%`);
     ({ data, error } = await query.limit(1));
-    if (!error && data && data.length > 0) {
-      console.log(`[getSekretarisUserId] ✅ Strategi 2: id=${data[0].id} kelas="${data[0].kelas}"`);
-      return data[0]._id;
-    }
-  }
+    if (!error && data && data.length > 0) return data[0].id;
 
-  // ── Strategi 3 ──
-  const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
-  if (jurusanSearch) {
-    query = supabaseAdmin
-      .from('users')
-      .select('id, kelas, nama')
-      .eq('role', 'Sekretaris Kelas')
-      .eq('status', 'Aktif')
-      .ilike('kelas', `%${jurusanSearch}%`);
-    ({ data, error } = await query.limit(1));
-    if (!error && data && data.length > 0) {
-      console.log(`[getSekretarisUserId] ✅ Strategi 3: id=${data[0].id} kelas="${data[0].kelas}"`);
-      return data[0].id;
-    }
-  }
-
-  // ── Strategi 4 ──
-  query = supabaseAdmin
-    .from('users')
-    .select('id, kelas, nama')
-    .eq('role', 'Sekretaris Kelas')
-    .eq('status', 'Aktif')
-    .ilike('kelas', `%${kelas.trim()}%`);
-  ({ data, error } = await query.limit(1));
-  if (!error && data && data.length > 0) {
-    console.log(`[getSekretarisUserId] ✅ Strategi 4: id=${data[0].id} kelas="${data[0].kelas}"`);
-    return data[0].id;
-  }
-  console.log(`[getSekretarisUserId] ❌ SEMUA STRATEGI GAGAL untuk kelas="${kelas}" jurusan="${jurusan}"`);
-  return null;
+    console.log(`[getSekretarisUserId] Tidak ditemukan untuk kelas="${kelas}" jurusan="${jurusan}"`);
+    return null;
+  }, TTL.PENANGGUNG_JAWAB);
 }
 
 // ═══════════════════════════════════════════════════════════════

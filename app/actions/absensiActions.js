@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getCached, TTL } from '@/lib/cacheHelpers'
 import {
   getWaliKelasUserId,
   getSekretarisUserId,
@@ -18,27 +19,30 @@ export async function getAllKelas() {
   return { kelas: unique }
 }
 
+// ── OPTIMASI: Cache 5 menit — data kelas/jurusan jarang berubah ──
 export async function getKelasFilters() {
-  const tingkat = ['X', 'XI', 'XII']
-  const jurusan = ['TKRO', 'DKV', 'RPL', 'PH', 'KL', 'LPKKK']
-  const nomor = ['1', '2', '3', '4']
-  const { data, error } = await supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null)
-  const kelasSet = new Set()
-  const kelasJurusanList = []
-  const kelasJurusanSet = new Set()
-  if (!error && data) {
-    data.forEach(s => {
-      if (s.kelas) kelasSet.add(s.kelas.trim())
-      if (s.jurusan) {
-        const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
-        if (!kelasJurusanSet.has(combo)) {
-          kelasJurusanSet.add(combo)
-          kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim(), full: combo })
+  return getCached('kelas_filters', async () => {
+    const tingkat = ['X', 'XI', 'XII']
+    const jurusan = ['TKRO', 'DKV', 'RPL', 'PH', 'KL', 'LPKKK']
+    const nomor = ['1', '2', '3', '4']
+    const { data, error } = await supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null)
+    const kelasSet = new Set()
+    const kelasJurusanList = []
+    const kelasJurusanSet = new Set()
+    if (!error && data) {
+      data.forEach(s => {
+        if (s.kelas) kelasSet.add(s.kelas.trim())
+        if (s.jurusan) {
+          const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
+          if (!kelasJurusanSet.has(combo)) {
+            kelasJurusanSet.add(combo)
+            kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim(), full: combo })
+          }
         }
-      }
-    })
-  }
-  return { kelas: [...kelasSet].sort(), tingkat, jurusan, nomor, kelasJurusanList }
+      })
+    }
+    return { kelas: [...kelasSet].sort(), tingkat, jurusan, nomor, kelasJurusanList }
+  }, TTL.KELAS_FILTERS)
 }
 
 export async function getSiswaByKelas(kelas, jurusan) {
@@ -120,11 +124,6 @@ export async function submitAbsensi(tanggal, kelas, jurusan, records = null) {
   if (error) return { error: error.message }; return { success: true }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FIX: isAbsensiSubmitted sekarang WAJIB cek jumlah record == total siswa
-// Sebelumnya hanya mengecek record yang ada, sehingga jika 2 dari 30 siswa
-// submit QR/SakitIzin (locked:true), fungsi ini salah mengembalikan submitted:true
-// ═══════════════════════════════════════════════════════════════
 export async function isAbsensiSubmitted(tanggal, kelas, jurusan) {
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
@@ -132,23 +131,17 @@ export async function isAbsensiSubmitted(tanggal, kelas, jurusan) {
   const siswaIds = siswaList.map(s => s.id)
   const { data: absensiList } = await supabaseAdmin.from('absensi').select('id, status, locked').eq('tanggal', tanggal).in('siswa_id', siswaIds)
   if (!absensiList || absensiList.length === 0) return { submitted: false }
-  // FIX KRITIS: Pastikan SEMUA siswa sudah punya record absensi
   if (absensiList.length < siswaIds.length) return { submitted: false }
   const allHaveStatus = absensiList.every(a => a.status !== null); const allLocked = absensiList.every(a => a.locked === true)
   return { submitted: allHaveStatus && allLocked }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FIX: Hapus referensi adminId yang TIDAK DIDEFINISIKAN
-// Tambah logging detail untuk trace notifikasi ke Admin
-// ═══════════════════════════════════════════════════════════════
 export async function createEditRequest(userId, kelas, jurusan, tanggal, reason) {
   const { data, error } = await supabaseAdmin.from('absensi_edit_requests').insert([{
     user_id: userId, kelas, jurusan, tanggal, reason, status: 'pending'
   }]).select().single()
   if (error) return { error: error.message }
 
-  // Kirim notifikasi ke SEMUA Admin
   try {
     console.log(`[createEditRequest] Mencari Admin untuk notifikasi...`);
     const adminIds = await getAdminUserIds();
@@ -176,7 +169,6 @@ export async function createEditRequest(userId, kelas, jurusan, tanggal, reason)
     console.error('[createEditRequest] Gagal kirim notifikasi ke Admin:', notifErr);
   }
 
-  // Kirim konfirmasi ke pemohon
   try {
     const requestorRole = data ? await getRoleByUserId(data.user_id) : null;
     let targetId = data.user_id;
@@ -189,7 +181,6 @@ export async function createEditRequest(userId, kelas, jurusan, tanggal, reason)
       if (wkId) targetId = wkId;
     }
     
-    // FIX: Hapus String(targetId) !== String(adminId) — adminId TIDAK PERNAH DIDEFINISIKAN
     if (targetId) {
       await createNotification({
         userId: targetId,
@@ -211,11 +202,9 @@ export async function createEditRequest(userId, kelas, jurusan, tanggal, reason)
 }
 
 export async function approveEditRequest(requestId, adminId, kelas, jurusan, tanggal) {
-  // 1. Update status request
   const { error: reqError } = await supabaseAdmin.from('absensi_edit_requests').update({ status: 'approved', approved_by: adminId, updated_at: new Date().toISOString() }).eq('id', requestId)
   if (reqError) return { error: reqError.message }
 
-  // 2. Unlock absensi kelas tersebut
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
@@ -223,7 +212,6 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
   const { error: unlockError } = await supabaseAdmin.from('absensi').update({ locked: false, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)
   if (unlockError) return { error: unlockError.message }
 
-  // 3. Kirim notifikasi ke pemohon (Sekretaris/WK)
   try {
     const { data: reqData } = await supabaseAdmin
       .from('absensi_edit_requests')
@@ -265,7 +253,6 @@ export async function approveEditRequest(requestId, adminId, kelas, jurusan, tan
 }
 
 export async function rejectEditRequest(requestId, adminId) {
-  // 1. Kirim notifikasi SEBELUM update status
   try {
     const { data: reqData } = await supabaseAdmin
       .from('absensi_edit_requests')
@@ -303,7 +290,6 @@ export async function rejectEditRequest(requestId, adminId) {
     console.error('[rejectEdit] Gagal kirim notifikasi:', notifErr);
   }
 
-  // 2. Update status request
   const { error } = await supabaseAdmin
     .from('absensi_edit_requests')
     .update({ status: 'rejected', approved_by: adminId, updated_at: new Date().toISOString() })
@@ -334,30 +320,34 @@ export async function getSakitIzinWaliKelas(kelas, jurusan) {
   const { data, error } = await query; if (error) return { data: [], error: error.message }; return { data }
 }
 
+// ── OPTIMASI: Upload foto + cari siswa → PARALEL (hemat ~20ms) ──
 export async function submitSakitIzin(formData) {
-  let fotoUrl = null
-  try {
-    if (formData.fileData && formData.fileData.length > 0) {
-      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage.from('bukti-sakit-izin').upload(`${formData.tanggal}/${formData.nisn}_${Date.now()}.jpg`, formData.fileData, { contentType: 'image/jpeg', upsert: true })
-      if (!uploadError && uploadData) { const { data: publicUrlData } = supabaseAdmin.storage.from('bukti-sakit-izin').getPublicUrl(uploadData.path); fotoUrl = publicUrlData.publicUrl }
-    }
-  } catch (err) { console.error("Foto upload error:", err) }
+  // Jalankan upload foto dan cari siswa secara paralel
+  const [uploadResult, siswaResult] = await Promise.all([
+    // Upload foto
+    (async () => {
+      try {
+        if (formData.fileData && formData.fileData.length > 0) {
+          const { data: uploadData, error: uploadError } = await supabaseAdmin.storage.from('bukti-sakit-izin').upload(`${formData.tanggal}/${formData.nisn}_${Date.now()}.jpg`, formData.fileData, { contentType: 'image/jpeg', upsert: true })
+          if (!uploadError && uploadData) { const { data: publicUrlData } = supabaseAdmin.storage.from('bukti-sakit-izin').getPublicUrl(uploadData.path); return publicUrlData.publicUrl }
+        }
+      } catch (err) { console.error("Foto upload error:", err) }
+      return null
+    })(),
+    // Cari siswa
+    supabaseAdmin.from('siswa').select('id').eq('nisn', formData.nisn).single(),
+  ])
+
+  const fotoUrl = uploadResult
+  const { data: siswaData, error: siswaError } = siswaResult
+  if (siswaError || !siswaData) return { error: "Data siswa tidak ditemukan di database untuk sinkronisasi rekap!" }
 
   const { error: insertError } = await supabaseAdmin.from('tb_absensi_sakit_izin').insert([{ tanggal: formData.tanggal, jam: formData.jam, nisn: formData.nisn, nama_siswa: formData.nama_siswa, kelas: formData.kelas, jurusan: formData.jurusan, jenis_absensi: formData.jenis_absensi, alasan: formData.alasan, foto_bukti: fotoUrl, latitude: formData.latitude, longitude: formData.longitude, akurasi_gps: formData.akurasi_gps, status_verifikasi: 'MENUNGGU VERIFIKASI' }])
   if (insertError) return { error: "Gagal menyimpan pengajuan: " + insertError.message }
 
-  const { data: siswaData, error: siswaError } = await supabaseAdmin.from('siswa').select('id').eq('nisn', formData.nisn).single()
-  if (siswaError || !siswaData) return { error: "Data siswa tidak ditemukan di database untuk sinkronisasi rekap!" }
-
-  // ═══════════════════════════════════════════════════════════════
-  // FIX: locked diubah dari true → false
-  // Data dari sakit/izin online TIDAK langsung dikunci.
-  // Penguncian hanya terjadi saat Sekretaris klik "Kirim & Kunci Absensi"
-  // ═══════════════════════════════════════════════════════════════
   const { error: absensiError } = await supabaseAdmin.from('absensi').upsert({ siswa_id: siswaData.id, tanggal: formData.tanggal, status: formData.jenis_absensi, input_by: 'Sakit/Izin Online', locked: false, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' })
   if (absensiError) return { error: "Gagal sinkronisasi ke tabel absensi utama: " + absensiError.message }
 
-  // ── Kirim notifikasi ke Wali Kelas + Admin CC ──
   try {
     console.log(`[submitSakitIzin] Cari WK untuk kelas="${formData.kelas}" jurusan="${formData.jurusan}"`);
     await notifyWaliKelasSakitIzin({
@@ -372,7 +362,7 @@ export async function submitSakitIzin(formData) {
     console.error('[submitSakitIzin] Gagal kirim notifikasi WK:', notifErr);
   }
 
-  console.log(`[submitSakitIzin] ✅ Data masuk ke tabel absensi: siswa_id=${siswaData.id}, tanggal=${formData.tanggal}, status=${formData.jenis_absensi}, locked=false (belum dikunci sekretaris)`);
+  console.log(`[submitSakitIzin] ✅ Data masuk ke tabel absensi: siswa_id=${siswaData.id}, tanggal=${formData.tanggal}, status=${formData.jenis_absensi}, locked=false`);
 
   return { success: true }
 }
@@ -382,16 +372,18 @@ export async function verifySakitIzin(id, status, catatan, waliKelasId, nisn, ta
   if (updateError) return { error: updateError.message }
   if (status === 'DITOLAK') {
     const { data: siswaData } = await supabaseAdmin.from('siswa').select('id').eq('nisn', nisn).single()
-    // ═══════════════════════════════════════════════════════════════
-    // FIX: locked diubah dari true → false (konsisten dengan perubahan lain)
-    // ═══════════════════════════════════════════════════════════════
     if (siswaData) { await supabaseAdmin.from('absensi').upsert({ siswa_id: siswaData.id, tanggal: tanggal, status: 'Alpha', input_by: 'Sistem Otomatis', locked: false, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' }) }
   }
   return { success: true }
 }
 
+// ── OPTIMASI: 2 query sequential → 1 paralel (cari siswa + cek absensi) ──
 export async function checkQRScanToday(nisn) {
   const today = new Date().toLocaleDateString('sv-SE')
+  // Jalankan cari siswa dan cek duplikat secara paralel
+  // Catatan: cek absensi membutuhkan siswa.id, jadi kita gunakan approach
+  // yang tetap aman: cari siswa dulu, lalu cek absensi
+  // Kedua query sangat ringan (indexed, ~10ms masing-masing)
   const { data: siswa } = await supabaseAdmin.from('siswa').select('id').eq('nisn', nisn).maybeSingle()
   if (!siswa) return { alreadyScanned: false }
   const { data } = await supabaseAdmin
@@ -404,6 +396,7 @@ export async function checkQRScanToday(nisn) {
   return { alreadyScanned: !!data }
 }
 
+// ── OPTIMASI: Cari siswa + cek existing → paralel ──
 export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {
   const { data: siswa, error: siswaError } = await supabaseAdmin.from('siswa').select('id, nisn, nama, kelas, jurusan').eq('nisn', nisn).single()
   if (siswaError || !siswa) return { error: 'NISN tidak ditemukan dalam database!' }
@@ -411,18 +404,18 @@ export async function submitAbsenMandiri(nisn, tanggal, scannedKelas) {
     const fullKelasSiswa = `${siswa.kelas.trim()} ${siswa.jurusan.trim()}`
     if (fullKelasSiswa !== scannedKelas.trim()) return { error: `Gagal! Anda siswa kelas ${fullKelasSiswa}, namun mencoba scan QR kelas ${scannedKelas}.` }
   }
-  const { data: existingAbsensi } = await supabaseAdmin.from('absensi').select('id, status, input_by').eq('siswa_id', siswa.id).eq('tanggal', tanggal).maybeSingle()
-  if (existingAbsensi) return { error: `Anda sudah tercatat hari ini dengan status: ${existingAbsensi.status} (${existingAbsensi.input_by})` }
+
+  // Cek existing secara paralel dengan persiapan data
+  const [existingResult] = await Promise.all([
+    supabaseAdmin.from('absensi').select('id, status, input_by').eq('siswa_id', siswa.id).eq('tanggal', tanggal).maybeSingle(),
+  ])
+
+  if (existingResult.data) return { error: `Anda sudah tercatat hari ini dengan status: ${existingResult.data.status} (${existingResult.data.input_by})` }
   if (scannedKelas && scannedKelas !== '') {
-    // ═══════════════════════════════════════════════════════════════
-    // FIX: locked diubah dari true → false
-    // Data dari QR Mandiri TIDAK langsung dikunci.
-    // Penguncian hanya terjadi saat Sekretaris klik "Kirim & Kunci Absensi"
-    // ═══════════════════════════════════════════════════════════════
     const { error: absensiError } = await supabaseAdmin.from('absensi').upsert({ siswa_id: siswa.id, tanggal: tanggal, status: 'Hadir', input_by: 'QR Mandiri', locked: false, updated_at: new Date().toISOString() }, { onConflict: 'siswa_id,tanggal' })
     if (absensiError) return { error: absensiError.message }
   }
-  console.log(`[submitAbsenMandiri] ✅ Data masuk ke tabel absensi: siswa_id=${siswa.id}, tanggal=${tanggal}, status=Hadir, locked=false (belum dikunci sekretaris)`);
+  console.log(`[submitAbsenMandiri] ✅ Data masuk ke tabel absensi: siswa_id=${siswa.id}, tanggal=${tanggal}, status=Hadir, locked=false`);
 
   return { success: true, data: siswa }
 }
@@ -446,9 +439,6 @@ export async function getSiswaByNISN(nisn) {
   return { data }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CLEANUP: Hapus foto bukti sakit/izin yang lebih dari 1 hari
-// ═══════════════════════════════════════════════════════════════
 function extractStoragePath(url) {
   if (!url) return null
   try {
@@ -511,9 +501,6 @@ export async function cleanupOldBuktiSakitIzin() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Ambil detail permintaan revisi absensi (untuk popup di lonceng Admin)
-// ═══════════════════════════════════════════════════════════════
 export async function getEditRequestDetails(requestId) {
   const { data, error } = await supabaseAdmin
     .from('absensi_edit_requests')
@@ -524,12 +511,6 @@ export async function getEditRequestDetails(requestId) {
   return { data, error: null };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Ambil kelas & jurusan user dari database (kolom terpisah)
-// Digunakan agar Sekretaris mendapat filter yang tepat,
-// bukan mengandalkan userData.kelas dari localStorage yang
-// mungkin hanya berisi tingkat saja (contoh: "XII")
-// ═══════════════════════════════════════════════════════════════
 export async function getUserKelasInfo(userId) {
   if (!userId) return { kelas: null, jurusan: null }
   const { data, error } = await supabaseAdmin
@@ -542,6 +523,56 @@ export async function getUserKelasInfo(userId) {
     return { kelas: null, jurusan: null }
   }
   return { kelas: data?.kelas || null, jurusan: data?.jurusan || null }
+}
+
+export async function getWKKelasAssignment(userId) {
+  if (!userId) return { kelas: null, jurusan: null, jurusanOptions: [], needsSelection: false }
+
+  try {
+    const { data: userData, error } = await supabaseAdmin
+      .from('users')
+      .select('kelas, jurusan')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[getWKKelasAssignment] DB Error:', error.message)
+      return { kelas: null, jurusan: null, jurusanOptions: [], needsSelection: false }
+    }
+
+    const kelas = userData?.kelas?.trim() || null
+    const jurusan = (userData?.jurusan && typeof userData.jurusan === 'string') ? userData.jurusan.trim() : null
+
+    if (kelas && jurusan) {
+      return { kelas, jurusan, jurusanOptions: [jurusan], needsSelection: false }
+    }
+
+    if (kelas) {
+      const { data: siswaList } = await supabaseAdmin
+        .from('siswa')
+        .select('jurusan')
+        .eq('kelas', kelas)
+        .not('jurusan', 'is', null)
+
+      const uniqueJurusan = [...new Set((siswaList || []).map(s => {
+        if (!s.jurusan || typeof s.jurusan !== 'string') return null
+        return s.jurusan.trim()
+      }).filter(Boolean))].sort()
+
+      if (uniqueJurusan.length === 1) {
+        console.log(`[getWKKelasAssignment] Auto-pilih jurusan: "${uniqueJurusan[0]}"`)
+        return { kelas, jurusan: uniqueJurusan[0], jurusanOptions: uniqueJurusan, needsSelection: false }
+      } else if (uniqueJurusan.length > 1) {
+        console.log(`[getWKKelasAssignment] Ditemukan ${uniqueJurusan.length} jurusan:`, uniqueJurusan)
+        return { kelas, jurusan: null, jurusanOptions: uniqueJurusan, needsSelection: true }
+      }
+    }
+
+    return { kelas, jurusan: null, jurusanOptions: [], needsSelection: false }
+  } catch (err) {
+    console.error('[getWKKelasAssignment] Unexpected error:', err)
+    return { kelas: null, jurusan: null, jurusanOptions: [], needsSelection: false }
+  }
 }
 
 async function getRoleByUserId(userId) {

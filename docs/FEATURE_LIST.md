@@ -722,21 +722,33 @@ Status: ACTIVE
 - Akses control: halaman menampilkan "Akses Ditolak" jika role tidak sesuai
 - Tap feedback: active:scale-95 pada setiap kartu
 - Tombol navigasi bawah hanya muncul sesuai role (Sekretaris/OSIS/Wali/Admin)
+- Desain kartu menu diubah: dari kartu putih dengan border kiri warna menjadi kartu full gradient warna
+- Ikon kartu berwarna putih transparan (bg-white/20) dengan animasi bounce naik-turun (2 detik per siklus)
+- Setiap kartu memiliki delay bounce berbeda (150ms per indeks) agar gerakan tidak serempak
+- Dekorasi lingkaran putih transparan (bg-white/10) di pojok kanan bawah setiap kartu
+- Teks judul putih, deskripsi putih transparan (white/70)
+- Gradient dan shadow menggunakan inline style (bukan class Tailwind dinamis) untuk menghindari masalah JIT purge
+- Mobile Admin: Tambah kartu menu "QR Absensi" dengan ikon QrCode, warna amber, mengarah ke /setting/qr-absensi
 
 Status: ACTIVE
 
 ---
 
-## Rekap Kehadiran (Update)
-- Fix teks "Semester $2 Tahun Ajaran $2025/$2026" (template literal salah di JSX, sekarang menggunakan backtick + curly braces)
-- Tab Bulanan, Semester, Tahunan: Kolom No/Nama/L/P tidak dibekukan (sticky) di tampilan HP agar scroll horizontal tidak terblokir
-- Tab Bulanan, Semester, Tahunan: Kolom sticky hanya aktif di desktop (md:sticky) dengan background solid saat hover (menghilangkan efek transparan /30 yang menyebabkan teks tembus)
-- Tab Bulanan: Tambah section "Siswa Kritis — Alpha > 5 Kali" di bawah tabel
-- Section Siswa Kritis: Banner merah gradient dengan ikon pulse
-- Section Siswa Kritis: 5 kartu statistik (Siswa Kritis, Alpha Tertinggi, Rata-rata, Sangat Kritis ≥15, Donut Rasio Kritis)
-- Section Siswa Kritis: Legend severity 3 tingkat (Sangat Kritis/Kritis/Perlu Perhatian)
-- Section Siswa Kritis: Horizontal bar chart Top 10 siswa alpha tertinggi dengan gradient warna berbeda per level
-- Section Siswa Kritis: Tabel detail lengkap dengan badge severity, baris berwarna merah untuk sangat kritis
+## Rekap Kehadiran (Update — 2026-07-10)
+- Tab Bulanan: Header "BULAN" diganti menjadi nama bulan aktual sesuai dateFilter (contoh: "Juli", "Agustus")
+- Tab Bulanan: Kolom "E" diganti menjadi "Hari Efektif" (tampil 2 baris: "Hari" + "Efektif")
+- Tab Bulanan: Kolom L/P garis kiri kembali muncul (semua kolom pakai border-b border-r secara konsisten)
+- Tab Bulanan, Semester, Tahunan: Header tabel berwarna abu-abu (`bg-gray-100`, border `border-gray-300`) agar kontras dengan baris data
+- Tab Bulanan, Semester, Tahunan: Kolom No, Nama Siswa, L/P hanya dibekukan sticky di desktop (`md:sticky`), di HP bebas digeser left-right
+- Tab Harian: Kolom L/P, Kelas, Jurusan, Status, Waktu, Sumber beserta isinya dirata tengah (`text-center`)
+- Tab Bulanan: Section "Siswa Kritis — Alpha > 3 Kali" dipulihkan di bawah tabel bulanan
+- Siswa Kritis: Data dihitung via `useMemo` dengan logika inline (tidak memanggil fungsi eksternal `isHoliday`/`getEffectiveDaysInquiry` untuk menghindari masalah dependency)
+- Siswa Kritis: Banner merah gradient dengan ikon pulse
+- Siswa Kritis: 5 kartu statistik (Siswa Kritis, Alpha Tertinggi, Rata-rata, Sangat Kritis ≥10, Donut Rasio Kritis)
+- Siswa Kritis: Legend severity 3 tingkat (Sangat Kritis/Kritis/Perlu Perhatian) dengan jumlah per tingkat
+- Siswa Kritis: Horizontal bar chart Top 10 siswa alpha tertinggi dengan gradient warna berbeda per level (merah tua/merah/oranye muda)
+- Siswa Kritis: Tabel detail lengkap dengan badge severity, baris berwarna merah untuk sangat kritis
+- Siswa Kritis: Jika tidak ada siswa alpha > 3, tampil pesan hijau "Tidak Ada Siswa Kritis Bulan Ini" sebagai indikator visual
 
 Status: ACTIVE
 
@@ -1251,6 +1263,16 @@ Status: ACTIVE
 - Auto cleanup: Foto selfie yang sudah > 1 hari otomatis dihapus dari storage saat halaman dibuka
 - Kolom L/P tersedia di semua tab (Harian, Bulanan, Semester)
 - Kolom Kelas dan Jurusan tersedia di semua tab
+- Fix stats card Sakit/Izin selalu nol: Case sensitivity bug — database menyimpan "Sakit" tapi stats object menggunakan key "sakit" (lowercase)
+- Solusi: Normalisasi key ke lowercase sebelum increment: stats[a.status?.toLowerCase()]
+- Kolom L/P, Kelas, Jurusan tersedia di semua tab (Harian, Bulanan, Semester) dan di Export CSV/PDF
+- Tampilan nama Wali Kelas dan nama Sekretaris di halaman via komponen PJInfoCard (sama seperti di Rekap Kehadiran reguler)
+- PJInfoCard hanya muncul ketika filter tingkat dan jurusan sudah dipilih
+- Export PDF: Kop surat dinamis dengan logo dinas dan logo sekolah (menggunakan generateKopSuratHTML dari kopSuratHelper)
+- Export PDF: Judul uppercase, subtitle mencantumkan tab/periode, kelas, perusahaan, dan tanggal cetak
+- Export PDF: Tab Bulanan otomatis menggunakan layout landscape (@page{size:landscape})
+- Tombol "Reset Semua" disembunyikan untuk role Wali Kelas, hanya muncul untuk Administrator
+- Import baru: getKopSuratSettings, generateKopSuratHTML, PJInfoCard
 
 Status: ACTIVE
 
@@ -1262,5 +1284,61 @@ Status: ACTIVE
 - Tambah state sekretarisFullKelas untuk menyimpan string kelas lengkap dari DB
 - Fix canEdit: bandingkan selectedKelas dengan sekretarisFullKelas (bukan userData.kelas)
 - File diubah: app/actions/absensiActions.js, app/absensi/page.js
+
+Status: ACTIVE
+
+## Fix Filter Sekretaris & Wali Kelas (Update)
+- Penyebab: Kolom kelas di tabel users hanya berisi tingkat (contoh: "XII"), bukan gabungan kelas+jurusan
+- Akibat: Filter hanya memfilter tingkat tanpa jurusan, sehingga semua kelas XII muncul untuk WK XII RPL 2
+- Tambah server action getUserKelasInfo(userId): ambil kolom kelas dan jurusan terpisah dari tabel users
+- Prioritas ambil data dari database, fallback ke parse userData.kelas dari localStorage
+- Absensi: state sekretarisFullKelas menyimpan string kelas lengkap dari DB, canEdit membandingkan dengan nilai ini
+- Rekap Kehadiran PKL (Wali Kelas): Auto-filter dari userData.kelas + userData.jurusan saat halaman dibuka
+- Rekap Kehadiran PKL (Wali Kelas): Dropdown Tingkat & Jurusan di-disabled, muncul badge "Kelas Binaan: XII RPL 2"
+- Rekap Kehadiran PKL (Wali Kelas): Tombol Reset filter disembunyikan, tab tidak reset saat auto-filter
+- File diubah: app/actions/absensiActions.js, app/absensi/page.js, app/wali-kelas/rekap-pkl/page.js
+
+Status: ACTIVE
+
+## Modul Absensi PKL (Update)
+- Fix kamera tidak bisa dibuka: Elemen
+- Fix tombol Cari terpotong di HP: Tambah min-w-0 pada input, shrink-0 pada button, sembunyi teks "Cari" di layar kecil
+- Tambah info jadwal absensi di step GPS Hadir: Jam Masuk (buka/tutup), Jam Pulang (buka/tutup), Toleransi Terlambat 15 menit
+- Tambah helper formatMinToTime() untuk menghindari ekspresi inline kompleks di JSX yang menyebabkan VS Code error
+- Tambah kolom Guru Pembimbing di profil PKL (input, pre-fill edit, simpan ke database)
+- Tambah kolom Pembimbing Industri & Guru Pembimbing di Rekap PKL (Harian, Bulanan sticky, Semester)
+- Koordinat GPS di detail modal Rekap PKL menjadi link Google Maps (klik langsung buka lokasi)
+- Export CSV & PDF: Tambah kolom Pembimbing Industri dan Guru Pembimbing di ketiga tab
+- Fix console error "uncontrolled to controlled input": Tambah guru_pembimbing di deklarasi state awal
+
+Status: ACTIVE
+
+---
+
+## Optimasi Performa Server
+- Singleton Supabase Client: `lib/supabase-admin.js` dan `lib/supabase.js` menggunakan 1 instance per serverless warm instance — mengurangi 50-70% koneksi DB baru
+- In-Memory Cache (`lib/cacheHelpers.js`): Menyimpan data semi-static agar tidak query ulang setiap request, dengan deduplikasi request paralel yang identik
+- Database Helper (`lib/dbOptimize.js`): fastCount (hitung row tanpa fetch data), fetchPaginated, parallelQueries, safeParallel
+- Cache data semi-static: Kelas filters (5 menit), Effective days per bulan (10 menit), Penanggung Jawab (5 menit), Academic calendar aktif (10 menit), PKL filters (5 menit)
+- Query paralel di semua Dashboard: Admin (2 batch → 1 batch), Wali Kelas (6 sequential → 1 Promise.all), Sekretaris (2 query digabung menjadi 1), OSIS (2 blok digabung menjadi 1)
+- Query paralel di Absensi: Upload foto + cari siswa berjalan bersamaan (submitSakitIzin)
+- Query paralel di PKL: Upload selfie + cek existing record berjalan bersamaan (checkIn, checkOut, sakitIzin)
+- Hapus query duplikat di Portal Orang Tua: effectiveRes dan calendarRes yang identical dijadikan 1 query
+
+Status: ACTIVE
+
+---
+
+## Cache & Performance Optimization
+- In-Memory Cache (`lib/cacheHelpers.js`): Menyimpan data semi-static di memory serverless instance dengan TTL per key, deduplikasi request paralel identik, invalidate by key/prefix
+- Database Helper (`lib/dbOptimize.js`): fastCount (hitung row tanpa fetch data), fetchPaginated (count+data 1 query), parallelQueries, safeParallel (toleransi error parsial)
+- Cache Penanggung Jawab: PJ stats (5 menit), PJ by class per kelas+jurusan combo (5 menit), derived full list (5 menit)
+- Cache Hari Efektif: Stats (10 menit), holidays per bulan (10 menit), invalidate otomatis saat ada penambahan/penghapusan/edit kalender
+- Cache QR Absensi: Pengaturan GPS & Waktu (5 menit), invalidate saat ada perubahan
+- Cache KOP Surat: Logo dinas & sekolah (30 menit) — digunakan bersama oleh Rekap Kehadiran, Rekap Reward, Rekap Pelanggaran, Rekap Pindah & Keluar, Rekap Formulir
+- Cache Notifikasi: Admin user IDs (10 menit), Wali Kelas ID per kelas (5 menit), Sekretaris ID per kelas (5 menit)
+- Throttle deleteOldNotifications: Dari setiap 15 detik menjadi max 1x per 5 menit
+- Invalidate otomatis: Setiap operasi write (save, delete, reset) secara otomatis meng-invalidate cache terkait agar data selalu konsisten
+- Singleton Supabase Client: lib/supabase-admin.js dan lib/supabase.js menggunakan 1 instance per warm instance — mengurangi 50-70% koneksi DB baru
 
 Status: ACTIVE

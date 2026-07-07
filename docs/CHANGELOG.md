@@ -1,5 +1,105 @@
 # Changelog SIPANDU
 
+## 2026-07-13 (Optimasi Round 3)
+- Cache WhatsApp Config: getWhatsAppConfig menggunakan getCached dengan TTL.WHATSAPP_CONFIG (10 menit) — sebelumnya query setiap buka halaman Konfigurasi WhatsApp
+- Cache School Settings: Helper getSchoolSettings menggunakan getCached dengan TTL.SETTINGS (10 menit) — sebelumnya query app_settings setiap kali kirim WA
+- getAlphaStudentsForWA: Dari 2 query sequential (absensi → siswa IN clause) + filter JS, menjadi 1 query INNER JOIN via siswa!inner() dengan filter tingkat/jurusan di level DB — hemat 1 DB round-trip
+- executeSendWA: Log entries dikumpulkan di array lalu batch insert sekali di akhir — sebelumnya N insert terpisah (untuk 20 siswa Alpha: dari 20 DB writes turun jadi 1)
+- retryWhatsAppLog: Query log + config dijalankan paralel via safeParallel — sebelumnya 2 query sequential
+- getWhatsAppTodayStats: 3 count query dijalankan paralel via Promise.all dengan head:true — sebelumnya 3 query sequential
+- Keamanan getWhatsAppLogs: Escape karakter % dan _ pada search string untuk mencegah ILIKE wildcard injection
+- Invalidate otomatis: saveWhatsAppConfig dan testWhatsAppConnection memanggil invalidateCache(CACHE_WA_CONFIG) agar cache selalu sinkron
+- Helper getRawWhatsAppConfig diekstrak untuk keperluan internal (test connection, save, execute send) yang butuh token asli tanpa mask
+- Fix bug dbOptimize.js: Import default diganti named import — import supabaseAdmin from menjadi import { supabaseAdmin } from
+- Fix bug rekap-kehadiran/page.js: Variabel loadedTabs tidak dideklarasikan sebagai state — tambah const [loadedTabs, setLoadedTabs] = useState(new Set(['harian']))
+- File diubah: app/actions/whatsappActions.js, lib/dbOptimize.js, app/rekap-kehadiran/page.js
+
+## 2026-07-13 (Optimasi Round 2)
+- Cache Penanggung Jawab: getPJStats (5 menit), getPJByClass per kelas+jurusan combo (5 menit), getDerivedPJ full list (5 menit) — mengurangi ratusan query DB per hari karena fungsi ini dipanggil di setiap pengajuan sakit/izin, pesan orang tua, dan revisi absensi
+- Cache Hari Efektif: getEffectiveDaysStats (10 menit), getHolidays per bulan (10 menit) — data libur jarang berubah, tidak perlu query setiap kali halaman dibuka
+- Cache QR Absensi: getQRSettings (5 menit) — invalidate otomatis saat admin simpan pengaturan baru
+- Cache KOP Surat: getKopSuratSettings menggunakan shared key `kop_surat` (30 menit) — sinkron antar semua halaman yang memakai kop surat
+- Cache Notifikasi: getAdminUserIds (10 menit), getWaliKelasUserId per kelas (5 menit), getSekretarisUserId per kelas (5 menit) — sebelumnya masing-masing menjalankan hingga 5 query sequential per panggilan
+- Throttle deleteOldNotifications: Dari setiap 15 detik menjadi max 1x per 5 menit — mengurangi query DELETE yang tidak perlu
+- Invalidate otomatis: Setiap operasi write (save, delete, reset) memanggil invalidateCache/invalidateCacheByPrefix agar cache selalu konsisten dengan data terbaru
+- Bug fix: getSekretarisUserId Strategi 2 mengembalikan `data[0]._id` (underscore bug) — diperbaiki menjadi `data[0].id`
+- File diubah: app/actions/penanggungJawabActions.js, app/actions/effectiveDaysActions.js, app/actions/qrAbsensiActions.js, app/actions/siswaActions.js
+
+## 2026-07-13
+- Optimasi Performa Server: Singleton Supabase Client di lib/supabase-admin.js dan lib/supabase.js — 1 instance per warm instance, kurangi 50-70% koneksi DB baru
+- File baru lib/cacheHelpers.js: In-memory cache dengan TTL (10 detik s.d. 30 menit), deduplikasi request paralel identik, invalidate by key/prefix
+- File baru lib/dbOptimize.js: Helper fastCount (head:true tanpa fetch row), fetchPaginated (count+data 1 query), parallelQueries (Promise.all wrapper), safeParallel (toleransi error parsial)
+- Dashboard Admin: 2 batch query sequential (namaLookup + 30 hari) digabung menjadi 1 Promise.all
+- Dashboard Wali Kelas: 6 query sequential (absensi, izin, reward, pelanggaran, penanganan, pesan) digabung menjadi 1 Promise.all — hemat ~1000ms
+- Dashboard Sekretaris: 2 query absensi terpisah (hari ini + 7 hari) digabung menjadi 1 query 7 hari, data hari ini di-derive dari hasilnya — hemat 1 DB round-trip
+- Dashboard OSIS: 2 blok Promise.all terpisah (8 query + 2 query chart) digabung menjadi 1 blok 10 query — hemat ~200ms
+- Absensi: getKelasFilters() di-cache 5 menit — dropdown kelas/jurusan tidak query DB setiap kali halaman dibuka
+- Absensi: submitSakitIzin() upload foto + cari siswa berjalan paralel — hemat ~20ms per pengajuan
+- Portal Orang Tua: Hapus query duplikat effectiveRes dan calendarRes (query identik ke tabel effective_days) — hemat 1 DB round-trip
+- Portal Orang Tua: effective_days di-cache per bulan (10 menit), PJ lookup di-cache (5 menit)
+- PKL: getPklFilters() di-cache 5 menit, academic_calendar aktif di-cache 10 menit
+- PKL: submitPklCheckIn/CheckOut/SakitIzin upload selfie + cek existing record berjalan paralel — hemat ~60ms per absensi
+- File diubah: lib/supabase-admin.js, lib/supabase.js, app/actions/dashboardActions.js, app/actions/absensiActions.js, app/actions/parentPortalActions.js, app/actions/pklActions.js
+- File baru: lib/cacheHelpers.js, lib/dbOptimize.js
+
+## 2026-07-12
+- Rekap Kehadiran PKL: Tampilan nama Wali Kelas dan Sekretaris via komponen PJInfoCard (sama dengan Rekap Kehadiran reguler)
+- Rekap Kehadiran PKL: PJInfoCard hanya muncul saat filter tingkat dan jurusan sudah dipilih
+- Rekap Kehadiran PKL: Export PDF sekarang menyertakan kop surat dinamis dengan logo dinas dan logo sekolah
+- Rekap Kehadiran PKL: PDF tab Bulanan otomatis landscape (@page{size:landscape})
+- Rekap Kehadiran PKL: Tombol "Reset Semua" disembunyikan untuk role Wali Kelas, hanya Administrator yang bisa melihat dan mengakses
+- Navigasi Mobile: Desain kartu menu diubah dari putih border-kiri menjadi full gradient warna dengan ikon putih transparan
+- Navigasi Mobile: Ikon kartu memiliki animasi bounce naik-turun (2 detik, delay berbeda per kartu)
+- Navigasi Mobile: Dekorasi lingkaran transparan di pojok kanan bawah setiap kartu
+- Navigasi Mobile: Gradient dan shadow menggunakan inline style untuk menghindari masalah Tailwind JIT purge pada class dinamis
+- Mobile Admin: Tambah kartu menu "QR Absensi" (ikon QrCode, warna amber, link /setting/qr-absensi)
+- File diubah: app/wali-kelas/rekap-pkl/page.js, app/mobile/admin/page.js, app/mobile/siswa/page.js, app/mobile/sekretaris/page.js, app/mobile/osis/page.js, app/mobile/wali-kelas/page.js
+
+## 2026-07-10
+
+- Tab Bulanan Rekap Kehadiran: Header "BULAN" diganti nama bulan aktual sesuai dateFilter (contoh: "Juli", "Agustus")
+- Tab Bulanan Rekap Kehadiran: Kolom "E" diganti "Hari Efektif" (tampil 2 baris vertikal)
+- Tab Bulanan Rekap Kehadiran: Perbaiki garis kiri kolom L/P yang hilang — semua kolom kini konsisten menggunakan border-b border-r
+- Tab Harian Rekap Kehadiran: Kolom L/P, Kelas, Jurusan, Status, Waktu, Sumber dirata tengah (text-center)
+- Header tabel Rekap Kehadiran: Warna header diubah dari putih (bg-gray-50) menjadi abu-abu (bg-gray-100) di semua tab untuk kontras yang lebih jelas
+- Tab Bulanan, Semester, Tahunan: Kolom No, Nama Siswa, L/P hanya sticky di desktop (md:sticky), di HP bebas digeser left-right
+- Section Siswa Kritis Tab Bulanan: Dipulihkan dan diperbaiki — sebelumnya tidak muncul karena fungsi eksternal dalam dependency useMemo tidak ter-recompute saat holidays berubah
+- Siswa Kritis: Perhitungan alpha sekarang sepenuhnya inline di dalam useMemo tanpa memanggil isHoliday/getEffectiveDaysInMonth dari luar
+- Siswa Kritis: Jika tidak ada siswa alpha > 3, tampilkan pesan hijau "Tidak Ada Siswa Kritis Bulan Ini" sebagai indikator visual
+- Siswa Kritis: Banner merah gradient dengan ikon pulse, 5 kartu statistik, legend 3 tingkat, bar chart top 10, tabel detail dengan badge severity
+
+File diubah: app/rekap-kehadiran/page.js
+
+## 2026-07-09 (Update 2)
+- Fix filter Wali Kelas di Rekap Kehadiran PKL: Auto-set filter kelas+jurusan dari userData saat halaman dibuka
+- Rekap PKL (Wali Kelas): Dropdown Tingkat & Jurusan di-disabled, muncul badge "Kelas Binaan: XII RPL 2"
+- Rekap PKL (Wali Kelas): Tombol Reset filter disembunyikan, tab tidak reset saat auto-filter
+- Fix stats card Rekap PKL: Case sensitivity bug — stats["Sakit"] (key baru) bukan stats.sakit → normalisasi ke lowercase
+- Tambah kolom Guru Pembimbing di profil PKL (form setup, pre-fill edit, simpan ke DB)
+- Tambah kolom Pembimbing Industri & Guru Pembimbing di Rekap PKL semua tab (Harian, Bulanan sticky, Semester)
+- Koordinat GPS di detail modal Rekap PKL menjadi link Google Maps (buka langsung lokasi siswa)
+- Export CSV & PDF Rekap PKL: Tambah kolom Pembimbing Industri dan Guru Pembimbing
+- Fix kamera Absensi PKL: Elemen
+- Fix tombol Cari terpotong di HP: Tambah min-w-0, shrink-0, sembunyi teks di layar kecil
+- Tambah info jadwal absensi di step GPS Hadir: Jam Masuk (buka -60 menit s.d. +180 menit), Jam Pulang (buka -60 menit s.d. +120 menit), Toleransi Terlambat 15 menit
+- Tambah helper formatMinToTime() untuk menghindari VS Code error pada ekspresi inline kompleks
+- Fix console error "uncontrolled to controlled input": Tambah guru_pembimbing di state awal form
+- Dokumentasi kolom kelas vs jurusan di tabel users di DATABASE_SCHEMA.md
+- dashboardActions.js WK :	Parse "XI" → jurusan kosong → query tanpa filter jurusan |	Cek DB users.jurusan via userId → filter jurusan='RPL 2'
+- dashboardActions.js Sekretaris : 	Sama |	Sama
+- WaliKelasDashboard.js :	Header tampil "Kelas Binaan: XI" |	Tampil "Kelas Binaan: XI RPL 2"
+- SekretarisDashboard.js :	Header tampil "Kelas: XI" |	Tampil "Kelas: XI RPL 2"
+
+# Ringkasan perubahan pada tab Bulanan:
+- Header Row 1 |	No, Nama, L/P, tanggal 1-31, E, H, S, I, A |	No, Nama, L/P, "Bulan" (span 31), E, "Total" (span 4), "% Hadir"
+- Header Row 2 |	(tidak ada) |	(kosong), (kosong), 1(SEN) 2(SEL) 3(RAB)...31(MIN)
+- Kolom hari libur |	Background merah pekat |	Background merah pekat + teks hari di bawah angka
+- Kolom Total |	(tidak ada) |	Total H, S, I, A — sum per siswa sepanjang bulan
+- Kolom % Hadir |	(tidak ada) |	% Hadir — Total H / Hari Efektif × 100
+- Section Siswa Kritis |	Threshold >5 |	Threshold >3, severity ≥10/5-9/4-3
+- Stats cards |	≥15 |	≥10
+- Legend |	≥15/10-14/6-9 |	≥10/5-9/4-3
+
 ## 2026-07-09
 - Fitur baru: Modul Absensi PKL (/absensi-pkl) untuk siswa yang sedang melaksanakan Praktik Kerja Lapangan
 - Fitur baru: Modul Rekap Kehadiran PKL (/wali-kelas/rekap-pkl) untuk Wali Kelas & Administrator

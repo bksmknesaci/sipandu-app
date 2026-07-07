@@ -1,5 +1,6 @@
 'use server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getCached, TTL } from '@/lib/cacheHelpers'
 import { notifyWaliKelasParentMessage } from '@/app/actions/notificationActions';
 import { getPJByClass } from '@/app/actions/penanggungJawabActions';
 
@@ -51,6 +52,8 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const jurusan = studentJurusan
   const nisValue = studentNisn || ''
 
+  // ── OPTIMASI: Hapus 1 query duplikat (effectiveRes === calendarRes, keduanya query tabel sama) ──
+  // ── OPTIMASI: Cache effective_days per bulan & PJ lookup ──
   const [
     todayRes,
     attMonthRes,
@@ -59,8 +62,7 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     pelanggaranRes,
     msgRes,
     notifRes,
-    effectiveRes,
-    calendarRes,
+    effectiveRes,  // Hanya 1 query untuk effective_days (sebelumnya 2)
     academicRes,
     pjRes,
     rankAllRes,
@@ -73,10 +75,17 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     supabaseAdmin.from('tb_pelanggaran_siswa').select('*').eq('nisn', nisValue).order('tanggal', { ascending: false }),
     supabaseAdmin.from('parent_messages').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(50),
     supabaseAdmin.from('parent_notifications').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(20),
-    supabaseAdmin.from('effective_days').select('*').gte('date', startDate).lte('date', endDate),
-    supabaseAdmin.from('effective_days').select('*').gte('date', startDate).lte('date', endDate),
+    // Cache effective_days per bulan — data libur jarang berubah
+    getCached(`effective_${currentYear}_${monthStr}`, () =>
+      supabaseAdmin.from('effective_days').select('*').gte('date', startDate).lte('date', endDate).then(r => r.data || []),
+      TTL.HARI_EFEKTIF
+    ),
     supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).single(),
-    getPJByClass(kelas, jurusan),
+    // Cache PJ lookup — data penanggung jawab jarang berubah
+    getCached(`pj_${kelas}_${jurusan}`, () =>
+      getPJByClass(kelas, jurusan),
+      TTL.PENANGGUNG_JAWAB
+    ),
     supabaseAdmin.from('tb_reward_siswa').select('nisn, reward_poin'),
     supabaseAdmin.from('tb_penanganan_siswa').select('*').eq('siswa_id', studentId).single(),
   ]);
@@ -88,7 +97,8 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const sakit = attData.filter(a => a.status === 'Sakit').length
   const alpha = attData.filter(a => a.status === 'Alpha').length
 
-  const holidays = (effectiveRes.data || []).map(d => d.date)
+  // ── OPTIMASI: Gunakan effectiveRes langsung (bukan calendarRes yang dihapus) ──
+  const holidays = (effectiveRes || []).map(d => d.date)
   let effectiveCount = 0
   for (let d = 1; d <= lastDay; d++) {
     const dt = new Date(currentYear, currentMonth - 1, d)
@@ -125,11 +135,11 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
 
   const penanganan = penangananRes.data || null
 
-  // ── WK & Sekretaris: langsung dari getPJByClass (sumber data sama dengan halaman Penanggung Jawab) ──
   const waliKelas = pjRes?.wali || null
   const sekretaris = pjRes?.sekretaris || null
 
-  const calEvents = calendarRes.data || []
+  // ── Gunakan effectiveRes untuk kalender (sebelumnya pakai calendarRes) ──
+  const calEvents = effectiveRes || []
   const calendarDays = []
   for (let d = 1; d <= lastDay; d++) {
     const dt = new Date(currentYear, currentMonth - 1, d)
@@ -193,7 +203,6 @@ export async function sendParentMessage(studentId, message) {
   })
   if (error) return { error: error.message }
 
-  // ── Kirim notifikasi ke Wali Kelas ──
   try {
     const { data: studentInfo } = await supabaseAdmin
       .from('siswa')
@@ -217,7 +226,6 @@ export async function sendParentMessage(studentId, message) {
   return { success: true }
 }
 
-// ── Hapus pesan (hanya pesan dari Orang Tua) ──
 export async function deleteParentMessage(messageId) {
   const { data: msg, error: fetchErr } = await supabaseAdmin
     .from('parent_messages')
@@ -242,7 +250,6 @@ export async function markNotificationRead(id) {
   await supabaseAdmin.from('parent_notifications').update({ is_read: true }).eq('id', id)
 }
 
-// ── Ambil riwayat chat antara Orang Tua & WK ──
 export async function deleteOldParentMessages(days = 10) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
@@ -253,7 +260,6 @@ export async function deleteOldParentMessages(days = 10) {
 }
 
 export async function getParentMessages(studentId) {
-  // Auto-hapus pesan lama (>10 hari) di background
   deleteOldParentMessages(10);
   const { data, error } = await supabaseAdmin
     .from('parent_messages')
@@ -265,7 +271,6 @@ export async function getParentMessages(studentId) {
   return { data: data || [], error: null }
 }
 
-// ── WK kirim balasan pesan ke Orang Tua ──
 export async function sendWKReplyMessage(studentId, message, senderId) {
   const { error } = await supabaseAdmin.from('parent_messages').insert({
     student_id: studentId,

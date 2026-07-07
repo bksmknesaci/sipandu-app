@@ -4,16 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Users, UserCog, BarChart2, FileText, ArrowRightLeft, Shield,
-  Building2, UserCheck, CalendarCheck, Newspaper, MessageCircle
+  Building2, UserCheck, CalendarCheck, Newspaper, MessageCircle, QrCode
 } from 'lucide-react';
 
 const menus = [
   { icon: Users, title: 'Daftar Siswa', href: '/admin/siswa', color: 'blue', desc: 'Kelola data siswa' },
-  { icon: UserCog, title: 'Penanganan Siswa', href: '/admin/siswa/penanganan', color: 'red', desc: 'BK & surat peringatan' },
+  { icon: UserCog, title: 'Penanganan Siswa', href: '/admin/siswa/penanganan', color: 'red', desc: 'Pembinaan & surat pernyataan' },
   { icon: BarChart2, title: 'Rekap Reward', href: '/admin/rekap-reward', color: 'green', desc: 'Statistik & data reward' },
   { icon: FileText, title: 'Rekap Formulir', href: '/admin/rekap-formulir', color: 'violet', desc: 'Tracer, karir, SNBP' },
   { icon: ArrowRightLeft, title: 'Rekap Pindah & Keluar', href: '/admin/siswa/pindah-keluar', color: 'orange', desc: 'Siswa pindah/keluar' },
   { icon: UserCog, title: 'Manajemen User', href: '/admin/users', color: 'indigo', desc: 'Kelola akun pengguna' },
+  { icon: QrCode, title: 'QR Absensi', href: '/setting/qr-absensi', color: 'amber', desc: 'Generate & pengaturan QR' },
   { icon: Building2, title: 'Profil SIPANDU', href: '/setting/profil', color: 'slate', desc: 'Pengaturan aplikasi' },
   { icon: UserCheck, title: 'Penanggung Jawab', href: '/setting/penanggung-jawab', color: 'teal', desc: 'Wali kelas & sekretaris' },
   { icon: CalendarCheck, title: 'Hari Efektif', href: '/setting/hari-efektif', color: 'cyan', desc: 'Kalender & libur' },
@@ -22,17 +23,18 @@ const menus = [
 ];
 
 const C = {
-  blue:    { border: 'border-l-blue-500',    bg: 'bg-blue-50',    icon: 'text-blue-600' },
-  red:     { border: 'border-l-red-500',     bg: 'bg-red-50',     icon: 'text-red-600' },
-  green:   { border: 'border-l-green-500',   bg: 'bg-green-50',   icon: 'text-green-600' },
-  violet:  { border: 'border-l-violet-500',  bg: 'bg-violet-50',  icon: 'text-violet-600' },
-  orange:  { border: 'border-l-orange-500',  bg: 'bg-orange-50',  icon: 'text-orange-600' },
-  indigo:  { border: 'border-l-indigo-500',  bg: 'bg-indigo-50',  icon: 'text-indigo-600' },
-  slate:   { border: 'border-l-slate-500',   bg: 'bg-slate-100',  icon: 'text-slate-600' },
-  teal:    { border: 'border-l-teal-500',    bg: 'bg-teal-50',    icon: 'text-teal-600' },
-  cyan:    { border: 'border-l-cyan-500',    bg: 'bg-cyan-50',    icon: 'text-cyan-600' },
-  emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-50', icon: 'text-emerald-600' },
-  pink:    { border: 'border-l-pink-500',    bg: 'bg-pink-50',    icon: 'text-pink-600' },
+  blue:    { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)',    shadow: '0 10px 15px -3px rgba(59,130,246,0.3)' },
+  red:     { bg: 'linear-gradient(135deg,#ef4444,#dc2626)',     shadow: '0 10px 15px -3px rgba(239,68,68,0.3)' },
+  green:   { bg: 'linear-gradient(135deg,#22c55e,#16a34a)',   shadow: '0 10px 15px -3px rgba(34,197,94,0.3)' },
+  violet:  { bg: 'linear-gradient(135deg,#8b5cf6,#7c3aed)',  shadow: '0 10px 15px -3px rgba(139,92,246,0.3)' },
+  orange:  { bg: 'linear-gradient(135deg,#f97316,#ea580c)',  shadow: '0 10px 15px -3px rgba(249,115,22,0.3)' },
+  indigo:  { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)',  shadow: '0 10px 15px -3px rgba(99,102,241,0.3)' },
+  amber:   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)',   shadow: '0 10px 15px -3px rgba(245,158,11,0.3)' },
+  slate:   { bg: 'linear-gradient(135deg,#64748b,#475569)',   shadow: '0 10px 15px -3px rgba(100,116,139,0.3)' },
+  teal:    { bg: 'linear-gradient(135deg,#14b8a6,#0d9488)',    shadow: '0 10px 15px -3px rgba(20,184,166,0.3)' },
+  cyan:    { bg: 'linear-gradient(135deg,#06b6d4,#0891b2)',    shadow: '0 10px 15px -3px rgba(6,182,212,0.3)' },
+  emerald: { bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: '0 10px 15px -3px rgba(16,185,129,0.3)' },
+  pink:    { bg: 'linear-gradient(135deg,#ec4899,#db2777)',    shadow: '0 10px 15px -3px rgba(236,72,153,0.3)' },
 };
 
 export default function MobileAdminPage() {
@@ -78,13 +80,14 @@ export default function MobileAdminPage() {
             const c = C[menu.color] || C.blue;
             return (
               <button key={menu.href} onClick={() => router.push(menu.href)}
-                className="mc bg-white rounded-2xl border-t-gray-100 border-r-gray-100 border-b-gray-100 border-l-4 shadow-sm p-4 active:scale-95 transition-all duration-200 hover:shadow-md text-left"
-                style={{ animationDelay: `${i * 80}ms` }}>
-                <div className={`w-12 h-12 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
-                  <menu.icon size={24} className={c.icon} />
+                className="mc rounded-2xl p-4 active:scale-95 transition-all duration-200 text-left relative overflow-hidden"
+                style={{ animationDelay: `${i * 80}ms`, background: c.bg, boxShadow: c.shadow }}>
+                <div className="absolute -right-3 -bottom-3 w-20 h-20 rounded-full bg-white/10" />
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center mb-3 mc-bounce" style={{ animationDelay: `${i * 150}ms` }}>
+                  <menu.icon size={22} className="text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-800 text-[13px] leading-tight">{menu.title}</h3>
-                <p className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2">{menu.desc}</p>
+                <h3 className="font-semibold text-white text-[13px] leading-tight relative z-10">{menu.title}</h3>
+                <p className="text-[10px] text-white/70 mt-1 leading-snug line-clamp-2 relative z-10">{menu.desc}</p>
               </button>
             );
           })}
@@ -97,6 +100,11 @@ export default function MobileAdminPage() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .mc { opacity: 0; animation: mcSlideUp 0.4s ease-out forwards; }
+        @keyframes mcBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .mc-bounce { animation: mcBounce 2s ease-in-out infinite; }
       `}</style>
     </div>
   );

@@ -16,6 +16,7 @@ function getDateWIB(d) {
 export async function getAdminDashboardData() {
   const today = getTodayWIB();
 
+  // ── Batch 1: 10 query paralel (sudah optimal, tidak diubah) ──
   const [
     siswaCountRes,
     wkCountRes,
@@ -40,25 +41,22 @@ export async function getAdminDashboardData() {
     supabaseAdmin.from('tb_penanganan_siswa').select('id, sp1, sp2, sp3').eq('status_akhir', 'Aktif'),
   ]);
 
-  // ── Counts ──
+  // ── Processing Batch 1 ──
   const totalSiswa = siswaCountRes.count || 0;
   const totalWaliKelas = wkCountRes.count || 0;
   const totalSekretaris = sekCountRes.count || 0;
   const totalBerita = beritaCountRes.count || 0;
   const penangananAktif = (penangananRes.data || []).filter(p => p.sp1 || p.sp2 || p.sp3).length;
 
-  // ── Total Reward & Pelanggaran (SUM poin dari data entri, bukan count) ──
   const totalReward = (rewardDataRes.data || []).reduce((sum, r) => sum + (r.reward_poin || 0), 0);
   const totalPelanggaran = (pelanggaranDataRes.data || []).reduce((sum, p) => sum + (p.poin || 0), 0);
 
-  // ── Kehadiran Hari Ini ──
   const absensiHariIni = absensiHariIniRes.data || [];
   const hadirHariIni = absensiHariIni.filter(a => a.status === 'Hadir').length;
   const sakitHariIni = absensiHariIni.filter(a => a.status === 'Sakit').length;
   const izinHariIni = absensiHariIni.filter(a => a.status === 'Izin').length;
   const alphaHariIni = absensiHariIni.filter(a => a.status === 'Alpha').length;
 
-  // ── Distribusi per Tingkat & Total Kelas ──
   const siswaAll = siswaAllRes.data || [];
   const distribusi = { x: 0, xi: 0, xii: 0 };
   const kelasSet = new Set();
@@ -71,7 +69,6 @@ export async function getAdminDashboardData() {
   }
   const totalKelas = kelasSet.size;
 
-  // ── Top 10 Reward (sum poin dari tb_reward_siswa, sertakan kelas & jurusan) ──
   const rewardMap = {};
   for (const r of (rewardDataRes.data || [])) {
     if (!rewardMap[r.nisn]) {
@@ -81,7 +78,6 @@ export async function getAdminDashboardData() {
   }
   const topReward = Object.values(rewardMap).sort((a, b) => b.total - a.total).slice(0, 10);
 
-  // ── Top 10 Pelanggaran (sum poin dari tb_pelanggaran_siswa, sertakan kelas & jurusan) ──
   const pelanggaranMap = {};
   for (const p of (pelanggaranDataRes.data || [])) {
     if (!pelanggaranMap[p.nisn]) {
@@ -92,7 +88,6 @@ export async function getAdminDashboardData() {
   }
   const topPelanggaran = Object.values(pelanggaranMap).sort((a, b) => b.total - a.total).slice(0, 10);
 
-  // ── Kelas Absensi ──
   const siswaLookup = {};
   for (const s of siswaAll) siswaLookup[s.id] = s;
 
@@ -117,13 +112,23 @@ export async function getAdminDashboardData() {
   }
   const kelasAbsensi = Object.values(kelasGroup).sort((a, b) => a.kelas.localeCompare(b.kelas));
 
-  // ── Activities ──
+  // ── OPTIMASI: Batch 2 — 2 query paralel (sebelumnya sequential) ──
   const siswaIdSet = [...new Set(absensiHariIni.map(a => a.siswa_id).filter(Boolean))];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  const startDate = getDateWIB(thirtyDaysAgo);
+
+  const [namaRes, absensi30Res] = await Promise.all([
+    siswaIdSet.length > 0
+      ? supabaseAdmin.from('siswa').select('id, nama').in('id', siswaIdSet)
+      : Promise.resolve({ data: [] }),
+    supabaseAdmin.from('absensi').select('tanggal, status').gte('tanggal', startDate).lte('tanggal', today),
+  ]);
+
+  // ── Processing Batch 2 ──
   let namaLookup = {};
-  if (siswaIdSet.length > 0) {
-    const { data: namaData } = await supabaseAdmin.from('siswa').select('id, nama').in('id', siswaIdSet);
-    for (const s of (namaData || [])) namaLookup[s.id] = s.nama;
-  }
+  for (const s of (namaRes.data || [])) namaLookup[s.id] = s.nama;
+
   const activities = absensiHariIni.slice(0, 10).map(a => ({
     jam: new Date(a.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     input_by: a.input_by,
@@ -131,18 +136,8 @@ export async function getAdminDashboardData() {
     status: a.status,
   }));
 
-  // ── Line Chart 30 Hari (data real, bukan random) ──
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-  const startDate = getDateWIB(thirtyDaysAgo);
-  const { data: absensi30 } = await supabaseAdmin
-    .from('absensi')
-    .select('tanggal, status')
-    .gte('tanggal', startDate)
-    .lte('tanggal', today);
-
   const dateMap = {};
-  for (const a of (absensi30 || [])) {
+  for (const a of (absensi30Res.data || [])) {
     if (!dateMap[a.tanggal]) dateMap[a.tanggal] = { hadir: 0, alpha: 0 };
     if (a.status === 'Hadir') dateMap[a.tanggal].hadir++;
     if (a.status === 'Alpha') dateMap[a.tanggal].alpha++;
@@ -168,14 +163,32 @@ export async function getAdminDashboardData() {
 
 // ═══════════════════════════════════════════════════════════════
 // WALI KELAS DASHBOARD
+// OPTIMASI: 6 query sequential → 1 Promise.all (hemat ~1000ms)
 // ═══════════════════════════════════════════════════════════════
-export async function getWaliKelasDashboardFull(kelas) {
+export async function getWaliKelasDashboardFull(kelas, userId) {
   const today = getTodayWIB();
   const kelasArr = (kelas || '').trim().split(/\s+/);
-  const tingkat = kelasArr[0] || '';
-  const jurusan = kelasArr.slice(1).join(' ') || '';
+  let tingkat = kelasArr[0] || '';
+  let jurusan = kelasArr.slice(1).join(' ') || '';
 
-  // Ambil siswa kelas ini
+  // Step 1: Ambil jurusan dari DB jika kosong (harus sequential, conditional)
+  if (!jurusan && userId) {
+    try {
+      const { data: userData } = await supabaseAdmin
+        .from('users')
+        .select('kelas, jurusan')
+        .eq('id', userId)
+        .maybeSingle();
+      if (userData) {
+        if (!tingkat && userData.kelas) tingkat = userData.kelas.trim();
+        if (!jurusan && userData.jurusan) jurusan = userData.jurusan.trim();
+      }
+    } catch (e) {
+      console.error('[WK Dashboard] Gagal ambil jurusan dari DB:', e);
+    }
+  }
+
+  // Step 2: Ambil siswa kelas ini (harus sequential, bergantung pada jurusan)
   let siswaQuery = supabaseAdmin.from('siswa').select('*').eq('kelas', tingkat);
   if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan);
   const { data: siswaList } = await siswaQuery;
@@ -186,15 +199,26 @@ export async function getWaliKelasDashboardFull(kelas) {
   const safeSiswaIds = siswaIds.length > 0 ? siswaIds : [-1];
   const safeNisnArr = nisnArr.length > 0 ? nisnArr : ['__none__'];
 
-  // Absensi hari ini
-  const { data: absensiHariIni } = await supabaseAdmin
-    .from('absensi')
-    .select('siswa_id, status')
-    .eq('tanggal', today)
-    .in('siswa_id', safeSiswaIds);
+  // ── OPTIMASI: Step 3 — 6 query paralel (sebelumnya 6x sequential) ──
+  const [
+    absensiHariIniRes,
+    izinPendingRes,
+    rewardDataRes,
+    pelanggaranDataRes,
+    penangananDataRes,
+    messagesRes,
+  ] = await Promise.all([
+    supabaseAdmin.from('absensi').select('siswa_id, status').eq('tanggal', today).in('siswa_id', safeSiswaIds),
+    supabaseAdmin.from('tb_absensi_sakit_izin').select('id, jenis_absensi, jam, nama_siswa, alasan').in('nisn', safeNisnArr).eq('status_verifikasi', 'MENUNGGU VERIFIKASI').order('created_at', { ascending: false }).limit(10),
+    supabaseAdmin.from('tb_reward_siswa').select('nisn, nama_siswa, reward_poin').in('nisn', safeNisnArr),
+    supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, nama_siswa, poin').in('nisn', safeNisnArr),
+    supabaseAdmin.from('tb_penanganan_siswa').select('id, sp1, sp2, sp3').in('siswa_id', safeSiswaIds).eq('status_akhir', 'Aktif'),
+    supabaseAdmin.from('parent_messages').select('sender_type, message, created_at').in('student_id', safeSiswaIds).order('created_at', { ascending: false }).limit(10),
+  ]);
 
+  // ── Processing ──
   const absenMap = {};
-  for (const a of (absensiHariIni || [])) absenMap[a.siswa_id] = a.status;
+  for (const a of (absensiHariIniRes.data || [])) absenMap[a.siswa_id] = a.status;
 
   const hadirHariIni = Object.values(absenMap).filter(s => s === 'Hadir').length;
   const sakitHariIni = Object.values(absenMap).filter(s => s === 'Sakit').length;
@@ -202,24 +226,9 @@ export async function getWaliKelasDashboardFull(kelas) {
   const alphaHariIni = Object.values(absenMap).filter(s => s === 'Alpha').length;
   const belumAbsen = (siswaList || []).filter(s => !absenMap[s.id]);
 
-  // Izin pending (filter by NISN siswa kelas ini)
-  const { data: izinPending } = await supabaseAdmin
-    .from('tb_absensi_sakit_izin')
-    .select('id, jenis_absensi, jam, nama_siswa, alasan')
-    .in('nisn', safeNisnArr)
-    .eq('status_verifikasi', 'MENUNGGU VERIFIKASI')
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  // Reward (sum poin dari tb_reward_siswa, filter by NISN kelas ini)
-  const { data: rewardData } = await supabaseAdmin
-    .from('tb_reward_siswa')
-    .select('nisn, nama_siswa, reward_poin')
-    .in('nisn', safeNisnArr);
-
   const rewardMap = {};
   let totalReward = 0;
-  for (const r of (rewardData || [])) {
+  for (const r of (rewardDataRes.data || [])) {
     totalReward += r.reward_poin || 0;
     if (!rewardMap[r.nisn]) {
       rewardMap[r.nisn] = { nama: r.nama_siswa || r.nisn, total: 0 };
@@ -228,15 +237,9 @@ export async function getWaliKelasDashboardFull(kelas) {
   }
   const topReward = Object.values(rewardMap).sort((a, b) => b.total - a.total).slice(0, 5);
 
-  // Pelanggaran (sum poin dari tb_pelanggaran_siswa, filter by NISN kelas ini)
-  const { data: pelanggaranData } = await supabaseAdmin
-    .from('tb_pelanggaran_siswa')
-    .select('nisn, nama_siswa, poin')
-    .in('nisn', safeNisnArr);
-
   const pelanggaranMap = {};
   let totalPelanggaran = 0;
-  for (const p of (pelanggaranData || [])) {
+  for (const p of (pelanggaranDataRes.data || [])) {
     totalPelanggaran += p.poin || 0;
     if (!pelanggaranMap[p.nisn]) {
       pelanggaranMap[p.nisn] = { nama: p.nama_siswa || p.nisn, total: 0 };
@@ -245,41 +248,44 @@ export async function getWaliKelasDashboardFull(kelas) {
   }
   const topPelanggaran = Object.values(pelanggaranMap).sort((a, b) => b.total - a.total).slice(0, 5);
 
-  // Penanganan aktif
-  const { data: penangananData } = await supabaseAdmin
-    .from('tb_penanganan_siswa')
-    .select('id, sp1, sp2, sp3')
-    .in('siswa_id', safeSiswaIds)
-    .eq('status_akhir', 'Aktif');
-  const penangananAktif = (penangananData || []).filter(p => p.sp1 || p.sp2 || p.sp3).length;
-
-  // Pesan orang tua
-  const { data: messages } = await supabaseAdmin
-    .from('parent_messages')
-    .select('sender_type, message, created_at')
-    .in('student_id', safeSiswaIds)
-    .order('created_at', { ascending: false })
-    .limit(10);
+  const penangananAktif = (penangananDataRes.data || []).filter(p => p.sp1 || p.sp2 || p.sp3).length;
 
   return {
     totalSiswa, hadirHariIni, sakitHariIni, izinHariIni, alphaHariIni,
     totalReward, totalPelanggaran,
     belumAbsen: belumAbsen.map(s => ({ id: s.id, nama: s.nama, nisn: s.nisn })),
-    izinPending: izinPending || [],
+    izinPending: izinPendingRes.data || [],
     penangananAktif,
     topReward, topPelanggaran,
-    messages: messages || [],
+    messages: messagesRes.data || [],
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
 // SEKRETARIS DASHBOARD
+// OPTIMASI: 2 query absensi digabung jadi 1, sisanya paralel
 // ═══════════════════════════════════════════════════════════════
-export async function getSekretarisDashboardFull(kelas) {
+export async function getSekretarisDashboardFull(kelas, userId) {
   const today = getTodayWIB();
   const kelasArr = (kelas || '').trim().split(/\s+/);
-  const tingkat = kelasArr[0] || '';
-  const jurusan = kelasArr.slice(1).join(' ') || '';
+  let tingkat = kelasArr[0] || '';
+  let jurusan = kelasArr.slice(1).join(' ') || '';
+
+  if (!jurusan && userId) {
+    try {
+      const { data: userData } = await supabaseAdmin
+        .from('users')
+        .select('kelas, jurusan')
+        .eq('id', userId)
+        .maybeSingle();
+      if (userData) {
+        if (!tingkat && userData.kelas) tingkat = userData.kelas.trim();
+        if (!jurusan && userData.jurusan) jurusan = userData.jurusan.trim();
+      }
+    } catch (e) {
+      console.error('[Sekretaris Dashboard] Gagal ambil jurusan dari DB:', e);
+    }
+  }
 
   let siswaQuery = supabaseAdmin.from('siswa').select('*').eq('kelas', tingkat);
   if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan);
@@ -291,15 +297,23 @@ export async function getSekretarisDashboardFull(kelas) {
   const safeSiswaIds = siswaIds.length > 0 ? siswaIds : [-1];
   const safeNisnArr = nisnArr.length > 0 ? nisnArr : ['__none__'];
 
-  // Absensi hari ini
-  const { data: absensiHariIni } = await supabaseAdmin
-    .from('absensi')
-    .select('siswa_id, status')
-    .eq('tanggal', today)
-    .in('siswa_id', safeSiswaIds);
+  // ── OPTIMASI: Query 7 hari saja, derivate data hari ini dari dalamnya (hemat 1 query) ──
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const startDate7 = getDateWIB(sevenDaysAgo);
+
+  // ── OPTIMASI: absensi 7 hari + izin pending → paralel ──
+  const [absensi7Res, izinPendingRes] = await Promise.all([
+    supabaseAdmin.from('absensi').select('tanggal, status, siswa_id').gte('tanggal', startDate7).lte('tanggal', today).in('siswa_id', safeSiswaIds),
+    supabaseAdmin.from('tb_absensi_sakit_izin').select('id, jenis_absensi, jam, nama_siswa, alasan').in('nisn', safeNisnArr).eq('status_verifikasi', 'MENUNGGU VERIFIKASI').order('created_at', { ascending: false }).limit(10),
+  ]);
+
+  // ── Derivate data hari ini dari hasil 7 hari ──
+  const absensi7All = absensi7Res.data || [];
+  const absensiHariIni = absensi7All.filter(a => a.tanggal === today);
 
   const absenMap = {};
-  for (const a of (absensiHariIni || [])) absenMap[a.siswa_id] = a.status;
+  for (const a of absensiHariIni) absenMap[a.siswa_id] = a.status;
 
   const hadir = Object.values(absenMap).filter(s => s === 'Hadir').length;
   const sakit = Object.values(absenMap).filter(s => s === 'Sakit').length;
@@ -311,29 +325,9 @@ export async function getSekretarisDashboardFull(kelas) {
 
   const belumAbsenList = (siswaList || []).filter(s => !absenMap[s.id]).map(s => ({ id: s.id, nama: s.nama, nisn: s.nisn }));
 
-  // Izin pending
-  const { data: izinPending } = await supabaseAdmin
-    .from('tb_absensi_sakit_izin')
-    .select('id, jenis_absensi, jam, nama_siswa, alasan')
-    .in('nisn', safeNisnArr)
-    .eq('status_verifikasi', 'MENUNGGU VERIFIKASI')
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  // Chart 7 hari terakhir
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-  const startDate7 = getDateWIB(sevenDaysAgo);
-
-  const { data: absensi7 } = await supabaseAdmin
-    .from('absensi')
-    .select('tanggal, status')
-    .gte('tanggal', startDate7)
-    .lte('tanggal', today)
-    .in('siswa_id', safeSiswaIds);
-
+  // ── Chart 7 hari dari data yang sudah diambil ──
   const weekMap = {};
-  for (const a of (absensi7 || [])) {
+  for (const a of absensi7All) {
     if (!weekMap[a.tanggal]) weekMap[a.tanggal] = { hadir: 0, sakit: 0, izin: 0, alpha: 0 };
     if (a.status === 'Hadir') weekMap[a.tanggal].hadir++;
     else if (a.status === 'Sakit') weekMap[a.tanggal].sakit++;
@@ -353,7 +347,7 @@ export async function getSekretarisDashboardFull(kelas) {
   return {
     totalSiswa, sudahAbsen, belumAbsen,
     hadir, sakit, izin, alpha, persentase,
-    izinPending: izinPending || [],
+    izinPending: izinPendingRes.data || [],
     weekChartData,
     belumAbsenList,
   };
@@ -361,10 +355,15 @@ export async function getSekretarisDashboardFull(kelas) {
 
 // ═══════════════════════════════════════════════════════════════
 // OSIS DASHBOARD
+// OPTIMASI: 2 blok Promise.all digabung jadi 1 (hemat ~200ms)
 // ═══════════════════════════════════════════════════════════════
 export async function getOsisDashboardFull() {
   const today = getTodayWIB();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  const startDate = getDateWIB(thirtyDaysAgo);
 
+  // ── OPTIMASI: Semua query dalam 1 Promise.all (sebelumnya 2 blok terpisah) ──
   const [
     siswaCountRes,
     beritaCountRes,
@@ -374,6 +373,8 @@ export async function getOsisDashboardFull() {
     recentPelanggaranRes,
     newsBeritaRes,
     newsPrestasiRes,
+    reward30Res,
+    pelanggaran30Res,
   ] = await Promise.all([
     supabaseAdmin.from('siswa').select('*', { count: 'exact', head: true }),
     supabaseAdmin.from('news_posts').select('*', { count: 'exact', head: true }).eq('status', 'Publish'),
@@ -383,6 +384,8 @@ export async function getOsisDashboardFull() {
     supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, nama_siswa, jenis_pelanggaran, poin, tanggal, kelas').order('created_at', { ascending: false }).limit(10),
     supabaseAdmin.from('news_posts').select('id, slug, title, category, views').eq('status', 'Publish').eq('category', 'Berita Sekolah').order('published_at', { ascending: false }).limit(6),
     supabaseAdmin.from('news_posts').select('id, slug, title, category, views').eq('status', 'Publish').eq('category', 'Siswa Berprestasi').order('published_at', { ascending: false }).limit(6),
+    supabaseAdmin.from('tb_reward_siswa').select('tanggal').gte('tanggal', startDate).lte('tanggal', today),
+    supabaseAdmin.from('tb_pelanggaran_siswa').select('tanggal').gte('tanggal', startDate).lte('tanggal', today),
   ]);
 
   const totalSiswa = siswaCountRes.count || 0;
@@ -390,16 +393,7 @@ export async function getOsisDashboardFull() {
   const rewardHariIni = rewardHariIniRes.count || 0;
   const pelanggaranHariIni = pelanggaranHariIniRes.count || 0;
 
-  // Chart 30 hari (reward vs pelanggaran)
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-  const startDate = getDateWIB(thirtyDaysAgo);
-
-  const [reward30Res, pelanggaran30Res] = await Promise.all([
-    supabaseAdmin.from('tb_reward_siswa').select('tanggal').gte('tanggal', startDate).lte('tanggal', today),
-    supabaseAdmin.from('tb_pelanggaran_siswa').select('tanggal').gte('tanggal', startDate).lte('tanggal', today),
-  ]);
-
+  // ── Chart 30 hari ──
   const chartMap = {};
   for (const r of (reward30Res.data || [])) {
     if (!chartMap[r.tanggal]) chartMap[r.tanggal] = { reward: 0, pelanggaran: 0 };

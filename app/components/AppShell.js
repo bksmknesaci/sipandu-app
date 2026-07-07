@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { updateProfileData } from '@/app/actions/userActions';
+import { updateProfileData, resolveAdminUserId } from '@/app/actions/userActions';
+import { getUserKelasInfo } from '@/app/actions/absensiActions';
 import NotificationCenter from '@/app/components/NotificationCenter';
 import { 
   Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, QrCode,
@@ -15,7 +16,6 @@ import {
   UserCircle, Mail, Phone, BookOpenCheck, ToggleLeft, Save, Edit3,
   LayoutGrid, MapPin, BarChart3
 } from 'lucide-react';
-import { resolveAdminUserId } from '@/app/actions/userActions';
 
 export default function AppShell({ children }) {
   const router = useRouter();
@@ -71,26 +71,22 @@ export default function AppShell({ children }) {
     } catch { setUserData(null); }
   }, [pathname]);
 
-    // ═══════════════════════════════════════════════════════════════
-  // FIX: Safety net — perbaiki Admin ID yang null di localStorage
-  // Terjadi pada session lama yang login sebelum fix (id null karena RLS blokir)
-  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     const fixAdminId = async () => {
       if (!isLoggedIn || !userData) return;
       if (userData.role !== 'Administrator') return;
-      if (userData.id && userData.id !== null) return; // Sudah benar, skip
+      if (userData.id && userData.id !== null) return;
 
-      console.log('[AppShell] ⚠️ Admin ID null/missing, mencoba perbaiki...');
+      console.log('[AppShell] Admin ID null/missing, mencoba perbaiki...');
       try {
         const result = await resolveAdminUserId(userData.username);
         if (result.id) {
           const updated = { ...userData, id: result.id };
           localStorage.setItem('userData', JSON.stringify(updated));
           setUserData(updated);
-          console.log(`[AppShell] ✅ Admin ID diperbaiki: null → ${result.id}`);
+          console.log('[AppShell] Admin ID diperbaiki: null -> ' + result.id);
         } else {
-          console.error('[AppShell] ❌ Gagal memperbaiki Admin ID, user tidak ditemukan di database');
+          console.error('[AppShell] Gagal memperbaiki Admin ID');
         }
       } catch (e) {
         console.error('[AppShell] Gagal resolve Admin ID:', e);
@@ -98,6 +94,26 @@ export default function AppShell({ children }) {
     };
     fixAdminId();
   }, [isLoggedIn, userData?.id, userData?.role, userData?.username]);
+
+  useEffect(() => {
+    const fixJurusan = async () => {
+      if (!isLoggedIn || !userData) return;
+      if (userData.role === 'Administrator') return;
+      if (userData.jurusan) return;
+      try {
+        const dbInfo = await getUserKelasInfo(userData.id);
+        if (dbInfo.jurusan) {
+          const updated = { ...userData, jurusan: dbInfo.jurusan };
+          localStorage.setItem('userData', JSON.stringify(updated));
+          setUserData(updated);
+          console.log('[AppShell] Jurusan diperbaiki: "" -> "' + dbInfo.jurusan + '"');
+        }
+      } catch (e) {
+        console.error('[AppShell] Gagal ambil jurusan dari DB:', e);
+      }
+    };
+    fixJurusan();
+  }, [isLoggedIn, userData?.id, userData?.jurusan]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -169,10 +185,12 @@ export default function AppShell({ children }) {
   const getRoleLabel = () => {
     if (!userData) return '';
     const kelas = userData.kelas || '';
+    const jurusan = userData.jurusan || '';
+    const kelasFull = jurusan ? (kelas + ' ' + jurusan) : kelas;
     if (isAdmin) return 'Administrator Sistem';
-    if (isWaliKelas) return kelas ? `Wali Kelas ${kelas}` : 'Wali Kelas';
-    if (isSekretaris) return kelas ? `Sekretaris ${kelas}` : 'Sekretaris Kelas';
-    if (isOsis) return kelas ? `OSIS ${kelas}` : 'OSIS';
+    if (isWaliKelas) return kelasFull ? ('Wali Kelas ' + kelasFull) : 'Wali Kelas';
+    if (isSekretaris) return kelasFull ? ('Sekretaris ' + kelasFull) : 'Sekretaris Kelas';
+    if (isOsis) return kelasFull ? ('OSIS ' + kelasFull) : 'OSIS';
     return userRole;
   };
 
@@ -210,7 +228,6 @@ export default function AppShell({ children }) {
     setProfileSaving(false);
   };
 
-  // px-4 saat expanded, px-[26px] saat collapse → icon 20px center = 26+10 = 36px = logo center
   const menuPad = sidebarExpanded ? 'px-4' : 'px-4 sm:px-[26px]';
   const txt = sidebarExpanded ? '' : 'sm:hidden';
 
@@ -225,10 +242,9 @@ export default function AppShell({ children }) {
     const id = menuId || href;
     return (
       <button onClick={() => handleNav(id, href)}
-        className={`w-full flex items-center gap-3 py-2.5 ${menuPad} rounded-xl text-slate-300 transition-all duration-150 whitespace-nowrap
-        ${activeMenu === id ? 'bg-blue-600 shadow-lg shadow-blue-600/20 text-white' : 'hover:bg-slate-700/60 hover:text-white active:scale-[0.97]'}`}>
+        className={'w-full flex items-center gap-3 py-2.5 ' + menuPad + ' rounded-xl text-slate-300 transition-all duration-150 whitespace-nowrap ' + (activeMenu === id ? 'bg-blue-600 shadow-lg shadow-blue-600/20 text-white' : 'hover:bg-slate-700/60 hover:text-white active:scale-[0.97]')}>
         <div className="flex-shrink-0 w-5 flex items-center justify-center"><Icon size={20} /></div>
-        <span className={`inline-block text-left ${txt}`}>{title}</span>
+        <span className={'inline-block text-left ' + txt}>{title}</span>
       </button>
     );
   };
@@ -236,13 +252,12 @@ export default function AppShell({ children }) {
   const DropdownMenu = ({ title, icon: Icon, menuKey, children, menuId }) => (
     <div>
       <button onClick={() => { toggleMenu(menuKey); setActiveMenu(menuId); }}
-        className={`w-full flex items-center justify-between py-2.5 ${menuPad} rounded-xl text-slate-300 transition-all duration-150 whitespace-nowrap
-        ${activeMenu === menuId ? 'bg-blue-600 shadow-lg shadow-blue-600/20 text-white' : 'hover:bg-slate-700/60 hover:text-white active:scale-[0.97]'}`}>
+        className={'w-full flex items-center justify-between py-2.5 ' + menuPad + ' rounded-xl text-slate-300 transition-all duration-150 whitespace-nowrap ' + (activeMenu === menuId ? 'bg-blue-600 shadow-lg shadow-blue-600/20 text-white' : 'hover:bg-slate-700/60 hover:text-white active:scale-[0.97]')}>
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 w-5 flex items-center justify-center"><Icon size={20} /></div>
-          <span className={`inline-block ${txt}`}>{title}</span>
+          <span className={'inline-block ' + txt}>{title}</span>
         </div>
-        <div className={`inline-block ${txt}`}>
+        <div className={'inline-block ' + txt}>
           {openMenus[menuKey] ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </div>
       </button>
@@ -254,10 +269,9 @@ export default function AppShell({ children }) {
     const isActive = pathname === href;
     return (
       <button onClick={() => handleNav(href, href)}
-        className={`w-full flex items-center gap-3 py-2 px-3 text-sm rounded-lg transition-all duration-150 whitespace-nowrap text-left
-        ${isActive ? 'text-white bg-blue-600/30 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-700/60 active:scale-[0.97]'}`}>
+        className={'w-full flex items-center gap-3 py-2 px-3 text-sm rounded-lg transition-all duration-150 whitespace-nowrap text-left ' + (isActive ? 'text-white bg-blue-600/30 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-700/60 active:scale-[0.97]')}>
         <div className="flex-shrink-0 w-4 flex items-center justify-center"><Icon size={16} /></div>
-        <span className={`inline-block ${txt}`}>{title}</span>
+        <span className={'inline-block ' + txt}>{title}</span>
       </button>
     );
   };
@@ -278,9 +292,7 @@ export default function AppShell({ children }) {
 
       <aside
         id="app-sidebar"
-        className={`fixed z-50 h-full bg-slate-900 text-white flex flex-col transition-[width] duration-300 ease-in-out overflow-hidden
-          ${isSidebarOpen ? 'w-56 translate-x-0 z-[60]' : '-translate-x-full w-56'}
-          sm:translate-x-0 sm:w-20 ${sidebarExpanded ? 'sm:w-56' : ''}`}
+        className={'fixed z-50 h-full bg-slate-900 text-white flex flex-col transition-[width] duration-300 ease-in-out overflow-hidden ' + (isSidebarOpen ? 'w-56 translate-x-0 z-[60]' : '-translate-x-full w-56') + ' sm:translate-x-0 sm:w-20 ' + (sidebarExpanded ? 'sm:w-56' : '')}
         onMouseEnter={() => setSidebarExpanded(true)}
         onMouseLeave={() => collapseSidebar()}
         onClick={(e) => {
@@ -299,7 +311,7 @@ export default function AppShell({ children }) {
             ) : (
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-xl shadow-md">S</div>
             )}
-            <div className={`inline-block ${txt} whitespace-nowrap`}>
+            <div className={'inline-block ' + txt + ' whitespace-nowrap'}>
               <h1 className="text-2xl font-extrabold text-blue-400 tracking-wider">SIPANDU</h1>
               <p className="text-[10px] text-slate-400 -mt-1">SMK Negeri 1 Cikedung</p>
             </div>
@@ -318,13 +330,13 @@ export default function AppShell({ children }) {
                 )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-slate-900"></span>
               </button>
-              <div className={`flex-1 min-w-0 inline-block ${txt} flex items-center gap-1`}>
+              <div className={'flex-1 min-w-0 inline-block ' + txt + ' flex items-center gap-1'}>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-[13px] truncate text-white leading-tight">{userData.nama || 'User'}</p>
                   <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{getRoleLabel()}</p>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setProfileDropdown(!profileDropdown); }} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-700/60 transition-colors">
-                  <ChevronDown size={14} className={`transition-all duration-300 ${profileDropdown ? 'rotate-180 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.9)]' : 'text-slate-500'}`} />
+                  <ChevronDown size={14} className={'transition-all duration-300 ' + (profileDropdown ? 'rotate-180 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.9)]' : 'text-slate-500')} />
                 </button>
               </div>
             </div>
@@ -345,16 +357,16 @@ export default function AppShell({ children }) {
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 text-sm scrollbar-thin scrollbar-thumb-slate-700">
           {isLoggedIn && (
             <>
-              <p className={`px-5 pt-2 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>DASHBOARD</p>
+              <p className={'px-5 pt-2 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>DASHBOARD</p>
               <NavLink icon={LayoutGrid} title="Dashboard" href="/dashboard" menuId="dashboard" />
             </>
           )}
-          <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU UMUM</p>
+          <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU UMUM</p>
           <NavLink icon={Users} title="Portal Orang Tua" href="/portal-ortu" />
           <NavLink icon={Award} title="Siswa Berprestasi" href="/siswa-berprestasi" />
           <NavLink icon={Newspaper} title="Seputar Sekolah" href="/berita-sekolah" />
 
-          <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU SISWA</p>
+          <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU SISWA</p>
           <NavLink icon={HeartPulse} title="Absen Sakit & Izin" href="/absen-sakit-izin" menuId="sakit" />
           <NavLink icon={Search} title="Cari Data Siswa" href="/cari-data-siswa" menuId="cari" />
           <NavLink icon={UserCheck} title="Absen Hadir Mandiri" href="/absen-mandiri" menuId="absen-mandiri" />
@@ -362,13 +374,13 @@ export default function AppShell({ children }) {
 
           {isLoggedIn && (isSekretaris || isAdmin) && (
             <>
-              <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU SEKRETARIS</p>
+              <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU SEKRETARIS</p>
               <NavLink icon={ClipboardList} title="Absensi Kelas" href="/absensi" menuId="absensi" />
             </>
           )}
           {isLoggedIn && (isOsis || isAdmin) && (
             <>
-              <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU OSIS</p>
+              <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU OSIS</p>
               <DropdownMenu title="Piket OSIS" icon={CalendarDays} menuKey="osis" menuId="osis">
                 <SubLink icon={Award} title="Entri Reward" href="/osis/entri-reward" />
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/osis/entri-pelanggaran" />
@@ -377,7 +389,7 @@ export default function AppShell({ children }) {
           )}
           {isLoggedIn && (isWaliKelas || isAdmin) && (
             <>
-              <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU WALI KELAS</p>
+              <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU WALI KELAS</p>
               <DropdownMenu title="Wali Kelas" icon={User} menuKey="wali" menuId="wali">
                 <SubLink icon={Award} title="Entri Reward" href="/wali-kelas/entri-reward" />
                 <SubLink icon={AlertTriangle} title="Entri Pelanggaran" href="/wali-kelas/entri-pelanggaran" />
@@ -390,7 +402,7 @@ export default function AppShell({ children }) {
           )}
           {isLoggedIn && isAdmin && (
             <>
-              <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU ADMIN</p>
+              <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU ADMIN</p>
               <DropdownMenu title="Administrator" icon={Shield} menuKey="admin" menuId="admin">
                 <SubLink icon={Users} title="Daftar Siswa" href="/admin/siswa" />
                 <SubLink icon={UserCog} title="Penanganan Siswa" href="/admin/siswa/penanganan" />
@@ -402,13 +414,13 @@ export default function AppShell({ children }) {
           )}
           {isLoggedIn && isAdmin && (
             <>
-              <p className={`px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ${txt}`}>MENU SETTING</p>
+              <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU SETTING</p>
               <DropdownMenu title="Pengaturan" icon={Settings} menuKey="setting" menuId="setting">
                 <SubLink icon={Building2} title="Profil SIPANDU" href="/setting/profil" />
                 <SubLink icon={UserCog} title="Managemen User" href="/admin/users" />
                 <SubLink icon={UserCheck} title="Penanggung Jawab" href="/setting/penanggung-jawab" />
                 <SubLink icon={CalendarCheck} title="Hari Efektif" href="/setting/hari-efektif" />
-                <SubLink icon={QrCode} title="QR Absensi" href="/setting/qr-absensi" />        
+                <SubLink icon={QrCode} title="QR Absensi" href="/setting/qr-absensi" />
                 <SubLink icon={MessageCircle} title="Konfigurasi WhatsApp" href="/setting/konfigurasi-whatsapp" />
                 <SubLink icon={Newspaper} title="Pos Berita" href="/setting/pos-berita" />
               </DropdownMenu>
@@ -446,7 +458,6 @@ export default function AppShell({ children }) {
         <main className="flex-1">{children}</main>
       </div>
 
-      {/* ═══════ BOTTOM NAV ═══════ */}
       <div className="fixed bottom-0 left-0 right-0 z-40 sm:hidden bg-white border-t border-gray-200 flex justify-around items-center h-14 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         {bottomNavItems.filter(b => b.show).map((item) => (
           <Link key={item.key} href={item.href} className="flex flex-col items-center justify-center py-1 px-3 text-gray-500 hover:text-blue-600 active:scale-90 transition-all duration-150">
@@ -460,10 +471,9 @@ export default function AppShell({ children }) {
         )}
       </div>
 
-      {/* ═══════ MODAL PROFIL ═══════ */}
       {showProfileModal && userData && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[999] flex items-center justify-center p-4" onClick={() => { setShowProfileModal(false); setProfileEditMode(false); }}>
-          <div className="appshell-profile-modal bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 pt-6 pb-12 relative">
               <button onClick={() => { setShowProfileModal(false); setProfileEditMode(false); }} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition"><X size={14}/></button>
               <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
@@ -479,7 +489,7 @@ export default function AppShell({ children }) {
             </div>
             <div className="pt-12 pb-4 px-5">
               {profileToast && (
-                <div className={`mb-3 px-3 py-2 rounded-lg text-xs font-semibold text-center ${profileToast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{profileToast.message}</div>
+                <div className={'mb-3 px-3 py-2 rounded-lg text-xs font-semibold text-center ' + (profileToast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200')}>{profileToast.message}</div>
               )}
               <div className="text-center mb-4">
                 <h2 className="text-base font-bold text-gray-800 leading-tight">{userData.nama || 'User'}</h2>
@@ -501,8 +511,8 @@ export default function AppShell({ children }) {
                       {f.edit && profileEditMode ? (
                         <input name={f.key} value={profileForm[f.key]} onChange={handleProfileInputChange} className="w-full text-xs text-gray-800 bg-white px-2 py-0.5 rounded border border-blue-300 focus:ring-1 focus:ring-blue-500 outline-none" />
                       ) : f.badge ? (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${userData.status === 'Aktif' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${userData.status === 'Aktif' ? 'bg-green-500' : 'bg-red-500'}`}/>{userData.status || 'Aktif'}
+                        <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ' + (userData.status === 'Aktif' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                          <span className={'w-1.5 h-1.5 rounded-full ' + (userData.status === 'Aktif' ? 'bg-green-500' : 'bg-red-500')}/>{userData.status || 'Aktif'}
                         </span>
                       ) : (
                         <p className="text-xs text-gray-800 font-medium truncate">{userData[f.key] || '-'}</p>
@@ -516,23 +526,13 @@ export default function AppShell({ children }) {
                 {!profileEditMode ? (
                   <button onClick={() => setProfileEditMode(true)} className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center justify-center gap-1 shadow-lg shadow-blue-500/25"><Edit3 size={12}/> Edit</button>
                 ) : (
-                  <button onClick={handleProfileSave} disabled={profileSaving} className="flex-1 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-xs font-semibold hover:from-emerald-600 hover:to-emerald-700 transition flex items-center justify-center gap-1 shadow-lg shadow-emerald-500/25 disabled:opacity-50">{profileSaving ? '⏳' : <><Save size={12}/> Simpan</>}</button>
+                  <button onClick={handleProfileSave} disabled={profileSaving} className="flex-1 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-xs font-semibold hover:from-emerald-600 hover:to-emerald-700 transition flex items-center justify-center gap-1 shadow-lg shadow-emerald-500/25 disabled:opacity-50">{profileSaving ? '...' : <><Save size={12}/> Simpan</>}</button>
                 )}
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes appshell-scaleIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .appshell-profile-modal {
-          animation: appshell-scaleIn 0.2s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

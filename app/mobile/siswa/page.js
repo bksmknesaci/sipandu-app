@@ -15,13 +15,13 @@ const menus = [
 ];
 
 const C = {
-  blue:    { border: 'border-l-blue-500',    bg: 'bg-blue-50',    icon: 'text-blue-600' },
-  amber:   { border: 'border-l-amber-500',   bg: 'bg-amber-50',   icon: 'text-amber-600' },
-  indigo:  { border: 'border-l-indigo-500',  bg: 'bg-indigo-50',  icon: 'text-indigo-600' },
-  emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-50', icon: 'text-emerald-600' },
-  green:   { border: 'border-l-green-500',   bg: 'bg-green-50',   icon: 'text-green-600' },
-  violet: { border: 'border-l-violet-500',  bg: 'bg-violet-50',  icon: 'text-violet-600' },
-  sky:    { border: 'border-l-sky-500',     bg: 'bg-sky-50',     icon: 'text-sky-600' },
+  blue:    { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)', shadow: '0 10px 15px -3px rgba(59,130,246,0.3)' },
+  amber:   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: '0 10px 15px -3px rgba(245,158,11,0.3)' },
+  indigo:  { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: '0 10px 15px -3px rgba(99,102,241,0.3)' },
+  emerald: { bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: '0 10px 15px -3px rgba(16,185,129,0.3)' },
+  green:   { bg: 'linear-gradient(135deg,#22c55e,#16a34a)', shadow: '0 10px 15px -3px rgba(34,197,94,0.3)' },
+  violet:  { bg: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', shadow: '0 10px 15px -3px rgba(139,92,246,0.3)' },
+  sky:     { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', shadow: '0 10px 15px -3px rgba(14,165,233,0.3)' },
 };
 
 export default function MobileSiswaPage() {
@@ -53,13 +53,14 @@ export default function MobileSiswaPage() {
             const c = C[menu.color] || C.blue;
             return (
               <button key={menu.href} onClick={() => router.push(menu.href)}
-                className="mc bg-white rounded-2xl border-t-gray-100 border-r-gray-100 border-b-gray-100 border-l-4 shadow-sm p-4 active:scale-95 transition-all duration-200 hover:shadow-md text-left"
-                style={{ animationDelay: `${i * 80}ms` }}>
-                <div className={`w-12 h-12 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
-                  <menu.icon size={24} className={c.icon} />
+                className="mc rounded-2xl p-4 active:scale-95 transition-all duration-200 text-left relative overflow-hidden"
+                style={{ animationDelay: `${i * 80}ms`, background: c.bg, boxShadow: c.shadow }}>
+                <div className="absolute -right-3 -bottom-3 w-20 h-20 rounded-full bg-white/10" />
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center mb-3 mc-bounce" style={{ animationDelay: `${i * 150}ms` }}>
+                  <menu.icon size={22} className="text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-800 text-[13px] leading-tight">{menu.title}</h3>
-                <p className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-2">{menu.desc}</p>
+                <h3 className="font-semibold text-white text-[13px] leading-tight relative z-10">{menu.title}</h3>
+                <p className="text-[10px] text-white/70 mt-1 leading-snug line-clamp-2 relative z-10">{menu.desc}</p>
               </button>
             );
           })}
@@ -72,6 +73,11 @@ export default function MobileSiswaPage() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .mc { opacity: 0; animation: mcSlideUp 0.4s ease-out forwards; }
+        @keyframes mcBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .mc-bounce { animation: mcBounce 2s ease-in-out infinite; }
       `}</style>
     </div>
   );

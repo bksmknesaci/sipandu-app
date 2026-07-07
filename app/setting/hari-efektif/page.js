@@ -282,7 +282,7 @@ export default function HariEfektifPage() {
                     <option>Ganjil</option><option>Genap</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div><label className="text-xs font-semibold text-gray-800">Mulai</label><input type="date" name="start_date" defaultValue={editingCalendar?.start_date} className="w-full mt-1 p-2 border rounded-lg bg-white text-black" /></div>
                   <div><label className="text-xs font-semibold text-gray-800">Selesai</label><input type="date" name="end_date" defaultValue={editingCalendar?.end_date} className="w-full mt-1 p-2 border rounded-lg bg-white text-black" /></div>
                 </div>
@@ -313,10 +313,10 @@ export default function HariEfektifPage() {
 
         {/* TAB 3: PREVIEW KALENDER */}
         {activeTab === 'preview' && (
-          <div className="bg-gray-50 p-6 rounded-lg border">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-gray-800">Preview Kalender Bulan Ini</h3>
-              <div className="flex gap-3 text-xs font-medium text-gray-800">
+          <div className="bg-gray-50 p-4 md:p-6 rounded-lg border overflow-x-auto">
+            <div className="flex justify-between items-center mb-4 min-w-[280px]">
+              <h3 className="font-bold text-gray-800 whitespace-nowrap">Preview Kalender Bulan Ini</h3>
+              <div className="flex gap-2 md:gap-3 text-xs font-medium text-gray-800 whitespace-nowrap">
                 <span className="flex items-center gap-1"><div className="w-3 h-3 bg-green-200 rounded"></div> Efektif</span>
                 <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-200 rounded"></div> Libur Nasional</span>
                 <span className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-200 rounded"></div> Libur Sekolah</span>
@@ -324,8 +324,8 @@ export default function HariEfektifPage() {
               </div>
             </div>
             
-            <div className="grid grid-cols-7 gap-2">
-              {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(d => <div key={d} className="text-center font-bold text-xs text-gray-800 pb-2">{d}</div>)}
+            <div className="grid grid-cols-7 gap-1.5 md:gap-2" style={{ minWidth: 420 }}>
+              {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(d => <div key={d} className="text-center font-bold text-[10px] md:text-xs text-gray-800 pb-1.5">{d}</div>)}
               {Array.from({length: 35}, (_, i) => {
                 const today = new Date()
                 const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -344,9 +344,9 @@ export default function HariEfektifPage() {
                 if (dateObj.getMonth() !== today.getMonth()) bgColor = 'opacity-0 pointer-events-none'
                 
                 return (
-                  <div key={i} className={`p-2 border rounded-lg min-h-[80px] ${bgColor}`}>
-                    <p className="text-xs font-bold text-gray-800">{dateObj.getDate()}</p>
-                    {holiday && <p className="text-[10px] mt-1 text-black font-bold truncate">{holiday.holiday_name}</p>}
+                  <div key={i} className={`p-1.5 md:p-2 border rounded-lg min-h-[56px] md:min-h-[80px] ${bgColor}`}>
+                    <p className="text-[10px] md:text-xs font-bold text-gray-800">{dateObj.getDate()}</p>
+                    {holiday && <p className="text-[8px] md:text-[10px] mt-0.5 text-black font-bold truncate">{holiday.holiday_name}</p>}
                   </div>
                 )
               })}

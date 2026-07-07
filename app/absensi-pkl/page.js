@@ -29,6 +29,17 @@ function getGPS() {
   })
 }
 
+function timeToMin(t) {
+  if (!t) return 0
+  const [h, m] = String(t).split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+function formatMinToTime(totalMin) {
+  const m = Math.max(0, Math.min(1439, Math.round(totalMin)))
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -43,7 +54,7 @@ function statusColor(s) {
 }
 
 const typeOptions = [
-  { type: 'Hadir', emoji: '✅', desc: 'Absen masuk dengan validasi GPS & selfie', bg: '#D1FAE5', border: '#6EE7B7', textColor: '#065F46' },
+  { type: 'Hadir', emoji: '✅', desc: 'Absen masuk dan pulang dengan validasi GPS & selfie', bg: '#D1FAE5', border: '#6EE7B7', textColor: '#065F46' },
   { type: 'Sakit', emoji: '🤒', desc: 'Wajib lampirkan foto selfie & alasan', bg: '#FEF3C7', border: '#FDE68A', textColor: '#92400E' },
   { type: 'Izin', emoji: '📝', desc: 'Wajib lampirkan foto selfie & alasan', bg: '#DBEAFE', border: '#93C5FD', textColor: '#1E40AF' },
 ]
@@ -65,7 +76,7 @@ export default function AbsensiPKL() {
   const [gpsStatus, setGpsStatus] = useState('')
   const [gpsValid, setGpsValid] = useState(null)
 
-  const [form, setForm] = useState({ company_name: '', company_address: '', industry_supervisor: '', start_date: '', end_date: '', work_start_time: '', work_end_time: '', work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'], latitude: '', longitude: '', radius_meter: '50' })
+  const [form, setForm] = useState({ company_name: '', company_address: '', industry_supervisor: '', guru_pembimbing: '', start_date: '', end_date: '', work_start_time: '', work_end_time: '', work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'], latitude: '', longitude: '', radius_meter: '50' })
   const [savingProfile, setSavingProfile] = useState(false)
 
   const videoRef = useRef(null)
@@ -238,6 +249,7 @@ export default function AbsensiPKL() {
       company_name: profile.company_name || '',
       company_address: profile.company_address || '',
       industry_supervisor: profile.industry_supervisor || '',
+      guru_pembimbing: profile.guru_pembimbing || '',
       start_date: profile.start_date || '',
       end_date: profile.end_date || '',
       work_start_time: profile.work_start_time || '',
@@ -294,9 +306,9 @@ export default function AbsensiPKL() {
               <p className="text-sm text-gray-500 mt-1">Masukkan NISN untuk memulai absensi</p>
             </div>
             <div className="flex gap-2">
-              <input value={nisn} onChange={e => setNisn(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Masukkan NISN..." className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" />
-              <button onClick={handleSearch} disabled={loading} className="px-5 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2">
-                {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />} Cari
+              <input value={nisn} onChange={e => setNisn(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Masukkan NISN..." className="flex-1 min-w-0 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" />
+              <button onClick={handleSearch} disabled={loading} className="px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2 shrink-0">
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />} <span className="sm:inline hidden">Cari</span>
               </button>
             </div>
           </div>
@@ -328,6 +340,7 @@ export default function AbsensiPKL() {
                 <div className="sm:col-span-2"><label className="text-xs font-semibold text-gray-500 block mb-1">Nama Perusahaan (DU/DI) *</label><input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
                 <div className="sm:col-span-2"><label className="text-xs font-semibold text-gray-500 block mb-1">Alamat PKL</label><input value={form.company_address} onChange={e => setForm(f => ({ ...f, company_address: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
                 <div><label className="text-xs font-semibold text-gray-500 block mb-1">Pembimbing Industri</label><input value={form.industry_supervisor} onChange={e => setForm(f => ({ ...f, industry_supervisor: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
+                <div><label className="text-xs font-semibold text-gray-500 block mb-1">Guru Pembimbing</label><input value={form.guru_pembimbing} onChange={e => setForm(f => ({ ...f, guru_pembimbing: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="text-xs font-semibold text-gray-500 block mb-1">Mulai PKL *</label><input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
                   <div><label className="text-xs font-semibold text-gray-500 block mb-1">Selesai PKL *</label><input type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" /></div>
@@ -451,7 +464,31 @@ export default function AbsensiPKL() {
             {attStep === 'gps' && (
               <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> Validasi Lokasi GPS</h3>
-                <p className="text-xs text-gray-500">Pastikan Anda berada di lokasi PKL ({profile.company_name}) — Radius: {profile.radius_meter}m</p>
+                <p className="text-xs text-gray-500">Pastikan Anda berada di lokasi PKL ({profile.company_name}) — Radius: 50m</p>
+
+                {/* Info Waktu Absensi */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><Clock size={13} /> Jadwal Absensi Hari Ini</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <p className="text-blue-500 font-semibold text-[10px] uppercase">Jam Masuk</p>
+                      <p className="font-bold text-gray-800 text-base">{profile.work_start_time || '-'}</p>
+                      <p className="text-[10px] text-gray-400">Buka {formatMinToTime(timeToMin(profile.work_start_time) - 60)} s.d. {formatMinToTime(timeToMin(profile.work_start_time) + 180)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <p className="text-blue-500 font-semibold text-[10px] uppercase">Jam Pulang</p>
+                      <p className="font-bold text-gray-800 text-base">{profile.work_end_time || '-'}</p>
+                      <p className="text-[10px] text-gray-400">Buka {formatMinToTime(timeToMin(profile.work_end_time) - 60)} s.d. {formatMinToTime(timeToMin(profile.work_end_time) + 120)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
+                    <span className="text-amber-600 text-sm">⏰</span>
+                    <div className="text-xs">
+                      <p className="font-semibold text-amber-800">Toleransi Terlambat: 15 menit</p>
+                      <p className="text-amber-600">Jika absen setelah <span className="font-bold">{formatMinToTime(timeToMin(profile.work_start_time) + 15)}</span>, status otomatis <span className="font-bold text-orange-600">Terlambat</span></p>
+                    </div>
+                  </div>
+                </div>
 
                 {gpsStatus === '' && (
                   <button onClick={handleValidateGPS} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md">
@@ -550,14 +587,14 @@ export default function AbsensiPKL() {
                     <Camera size={20} /> Buka Kamera
                   </button>
                 )}
-                {cameraActive && (
-                  <div className="relative rounded-xl overflow-hidden bg-black">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
+                <div className={`relative rounded-xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`}>
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
+                  {cameraActive && (
                     <button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95">
                       <div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
                 {capturedPhoto && (
                   <div className="space-y-3">
                     <img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" />
@@ -588,14 +625,14 @@ export default function AbsensiPKL() {
                     <Camera size={20} /> Buka Kamera
                   </button>
                 )}
-                {cameraActive && (
-                  <div className="relative rounded-xl overflow-hidden bg-black">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
+                <div className={`relative rounded-xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`}>
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
+                  {cameraActive && (
                     <button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95">
                       <div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
                 {capturedPhoto && (
                   <div className="space-y-3">
                     <img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" />

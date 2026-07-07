@@ -1,6 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getCached, TTL, invalidateCache } from '@/lib/cacheHelpers';
 
 // ── Helper: mapping key frontend → kolom database ──
 function mapSiswaToDB(data) {
@@ -36,9 +37,7 @@ export async function fetchSiswaAction() {
 }
 
 export async function saveSiswaAction(siswaData, editMode) {
-  // Mapping key frontend → kolom database SEBELUM operasi DB
   const dbData = mapSiswaToDB(siswaData);
-
   const { id, ...dataWithoutId } = dbData;
 
   if (editMode) {
@@ -90,7 +89,6 @@ export async function deleteAllSiswaAction() {
 }
 
 export async function importSiswaAction(dataArray) {
-  // Mapping key CSV → kolom database untuk setiap baris
   const cleanData = dataArray.map(({ id, nis, parent_whatsapp, ...rest }) => ({
     ...rest,
     nisn: nis || null,
@@ -130,16 +128,18 @@ export async function graduateAndDeleteAction(ids) {
   return { success: true, count: ids.length };
 }
 
-// ── KOP Surat Settings ──
+// ── OPTIMASI: Gunakan cache 'kop_surat' (sama dengan pklActions) ──
 export async function getKopSuratSettings() {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('app_settings')
-      .select('nama_sekolah, alamat, kop_logo_dinas, kop_logo_sekolah')
-      .eq('id', 1)
-      .single()
-    if (error) return {}
-    return data || {}
+    return await getCached('kop_surat', async () => {
+      const { data, error } = await supabaseAdmin
+        .from('app_settings')
+        .select('nama_sekolah, alamat, kop_logo_dinas, kop_logo_sekolah')
+        .eq('id', 1)
+        .single()
+      if (error) return {}
+      return data || {}
+    }, TTL.KOP_SURAT);
   } catch (e) {
     return {}
   }

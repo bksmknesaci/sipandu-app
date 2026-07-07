@@ -476,3 +476,13 @@ Catatan Penggunaan Nilai (Value Constraints)
 * pkl_profiles: "srv_pkl_profiles" — FOR ALL USING (true) WITH CHECK (true)
 * pkl_attendance: "srv_pkl_attendance" — FOR ALL USING (true) WITH CHECK (true)
 * pkl-selfies (storage): "srv_pkl_selfies" — FOR ALL USING (bucket_id = 'pkl-selfies') WITH CHECK (bucket_id = 'pkl-selfies')
+
+## Catatan Penggunaan Nilai (Value Constraints)
+* pkl_profiles
+* radius_meter: Dikunci permanen 50 meter, tidak dapat diubah oleh siswa
+
+## Perbaikan Login & Filter
+* Kolom kelas di tabel users hanya berisi tingkat (contoh: "XII"), bukan gabungan kelas+jurusan
+* Kolom jurusan di tabel users berisi nama jurusan (contoh: "KL 2"), terpisah dari kolom kelas
+* Server action getUserKelasInfo(userId) mengambil kedua kolom secara terpisah dari tabel users untuk keperluan filter
+* Filter Sekretaris/Wali Kelas di halaman Absensi dan Rekap Kehadiran wajib menggunakan data dari database (bukan localStorage) agar mendapat kelas+jurusan yang lengkap

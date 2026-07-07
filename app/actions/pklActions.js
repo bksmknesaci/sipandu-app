@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getCached, TTL } from '@/lib/cacheHelpers'
 
 const LATE_TOLERANCE_MINUTES = 15
 const CHECKIN_EARLY_MIN = 60
@@ -93,6 +94,7 @@ export async function savePklProfile(d) {
     company_name: d.company_name || null,
     company_address: d.company_address || null,
     industry_supervisor: d.industry_supervisor || null,
+    guru_pembimbing: d.guru_pembimbing || null,
     start_date: d.start_date || null,
     end_date: d.end_date || null,
     work_start_time: d.work_start_time || null,
@@ -115,7 +117,7 @@ export async function savePklProfile(d) {
   return { success: true, profile: res.data }
 }
 
-// ═════════════════ ATTENDANCE (STUDENT) ═════════════════
+// ═══════════════════ ATTENDANCE (STUDENT) ═════════════════
 
 export async function getTodayPklAttendance(studentId) {
   const today = getWIBDate()
@@ -124,6 +126,7 @@ export async function getTodayPklAttendance(studentId) {
   return { attendance: data }
 }
 
+// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklCheckIn({ studentId, profile, photoBase64, latitude, longitude, address }) {
   const now = getWIBTime()
   const ws = profile.work_start_time
@@ -135,29 +138,38 @@ export async function submitPklCheckIn({ studentId, profile, photoBase64, latitu
     const dist = haversine(latitude, longitude, profile.latitude, profile.longitude)
     if (dist > 50) return { error: `Anda berada di luar area lokasi PKL. Jarak: ${Math.round(dist)}m (batas: 50m)` }
   }
-  let selfieUrl = null
-  if (photoBase64) {
-    try {
-      const buf = base64ToBuffer(photoBase64)
-      const fn = `${getWIBDate()}/${studentId}_in_${Date.now()}.jpg`
-      const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
-      if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); selfieUrl = pu.publicUrl }
-    } catch (e) { console.error('Upload selfie error:', e) }
-  }
+
   const today = getWIBDate()
-  const { data: ex } = await supabaseAdmin.from('pkl_attendance').select('id').eq('student_id', studentId).eq('attendance_date', today).maybeSingle()
-  if (ex) return { error: 'Anda sudah melakukan absensi masuk hari ini' }
+
+  // PARALEL: upload foto + cek record existing
+  const [selfieResult, existingResult] = await Promise.all([
+    (async () => {
+      if (!photoBase64) return null
+      try {
+        const buf = base64ToBuffer(photoBase64)
+        const fn = `${today}/${studentId}_in_${Date.now()}.jpg`
+        const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
+        if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); return pu.publicUrl }
+      } catch (e) { console.error('Upload selfie error:', e) }
+      return null
+    })(),
+    supabaseAdmin.from('pkl_attendance').select('id').eq('student_id', studentId).eq('attendance_date', today).maybeSingle(),
+  ])
+
+  if (existingResult.data) return { error: 'Anda sudah melakukan absensi masuk hari ini' }
+
   const isLate = nowMin > startMin + LATE_TOLERANCE_MINUTES
   const status = isLate ? 'Terlambat' : 'Hadir'
   const { data, error } = await supabaseAdmin.from('pkl_attendance').insert([{
     student_id: studentId, attendance_date: today, attendance_type: 'Hadir',
     check_in_time: now, check_in_latitude: latitude, check_in_longitude: longitude,
-    check_in_address: address, selfie_url: selfieUrl, is_late: isLate, status,
+    check_in_address: address, selfie_url: selfieResult, is_late: isLate, status,
   }]).select().single()
   if (error) return { error: error.message }
   return { success: true, data, status, isLate }
 }
 
+// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklCheckOut({ studentId, profile, photoBase64, latitude, longitude, address }) {
   const now = getWIBTime()
   const we = profile.work_end_time
@@ -169,45 +181,62 @@ export async function submitPklCheckOut({ studentId, profile, photoBase64, latit
     const dist = haversine(latitude, longitude, profile.latitude, profile.longitude)
     if (dist > 50) return { error: `Anda berada di luar area lokasi PKL. Jarak: ${Math.round(dist)}m (batas: 50m)` }
   }
-  let selfieUrl = null
-  if (photoBase64) {
-    try {
-      const buf = base64ToBuffer(photoBase64)
-      const fn = `${getWIBDate()}/${studentId}_out_${Date.now()}.jpg`
-      const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
-      if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); selfieUrl = pu.publicUrl }
-    } catch (e) { console.error('Upload selfie error:', e) }
-  }
+
   const today = getWIBDate()
-  const { data: existing, error: findErr } = await supabaseAdmin.from('pkl_attendance').select('*').eq('student_id', studentId).eq('attendance_date', today).maybeSingle()
-  if (findErr) return { error: findErr.message }
-  if (!existing) return { error: 'Anda belum melakukan absensi masuk hari ini' }
-  if (existing.check_out_time) return { error: 'Anda sudah melakukan absensi pulang hari ini' }
+
+  // PARALEL: upload foto + cek existing record
+  const [selfieResult, existingResult] = await Promise.all([
+    (async () => {
+      if (!photoBase64) return null
+      try {
+        const buf = base64ToBuffer(photoBase64)
+        const fn = `${today}/${studentId}_out_${Date.now()}.jpg`
+        const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
+        if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); return pu.publicUrl }
+      } catch (e) { console.error('Upload selfie error:', e) }
+      return null
+    })(),
+    supabaseAdmin.from('pkl_attendance').select('*').eq('student_id', studentId).eq('attendance_date', today).maybeSingle(),
+  ])
+
+  if (existingResult.error) return { error: existingResult.error.message }
+  if (!existingResult.data) return { error: 'Anda belum melakukan absensi masuk hari ini' }
+  if (existingResult.data.check_out_time) return { error: 'Anda sudah melakukan absensi pulang hari ini' }
+
   const { data, error } = await supabaseAdmin.from('pkl_attendance').update({
     check_out_time: now, check_out_latitude: latitude, check_out_longitude: longitude,
-    check_out_address: address, check_out_selfie_url: selfieUrl, updated_at: new Date().toISOString()
-  }).eq('id', existing.id).select().single()
+    check_out_address: address, check_out_selfie_url: selfieResult, updated_at: new Date().toISOString()
+  }).eq('id', existingResult.data.id).select().single()
   if (error) return { error: error.message }
   return { success: true, data }
 }
 
+// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklSakitIzin({ studentId, type, photoBase64, note, latitude, longitude }) {
   if (!note || !note.trim()) return { error: 'Alasan wajib diisi untuk sakit/izin' }
-  let selfieUrl = null
-  if (photoBase64) {
-    try {
-      const buf = base64ToBuffer(photoBase64)
-      const fn = `${getWIBDate()}/${studentId}_${type.toLowerCase()}_${Date.now()}.jpg`
-      const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
-      if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); selfieUrl = pu.publicUrl }
-    } catch (e) { console.error('Upload selfie error:', e) }
-  }
+
   const today = getWIBDate()
-  const { data: ex } = await supabaseAdmin.from('pkl_attendance').select('id').eq('student_id', studentId).eq('attendance_date', today).maybeSingle()
-  if (ex) return { error: 'Anda sudah memiliki catatan absensi hari ini' }
+
+  // PARALEL: upload foto + cek existing
+  const [selfieResult, existingResult] = await Promise.all([
+    (async () => {
+      if (!photoBase64) return null
+      try {
+        const buf = base64ToBuffer(photoBase64)
+        const fn = `${today}/${studentId}_${type.toLowerCase()}_${Date.now()}.jpg`
+        const { data: ud } = await supabaseAdmin.storage.from('pkl-selfies').upload(fn, buf, { contentType: 'image/jpeg', upsert: true })
+        if (ud) { const { data: pu } = supabaseAdmin.storage.from('pkl-selfies').getPublicUrl(ud.path); return pu.publicUrl }
+      } catch (e) { console.error('Upload selfie error:', e) }
+      return null
+    })(),
+    supabaseAdmin.from('pkl_attendance').select('id').eq('student_id', studentId).eq('attendance_date', today).maybeSingle(),
+  ])
+
+  if (existingResult.data) return { error: 'Anda sudah memiliki catatan absensi hari ini' }
+
   const { data, error } = await supabaseAdmin.from('pkl_attendance').insert([{
     student_id: studentId, attendance_date: today, attendance_type: type,
-    selfie_url: selfieUrl, note: note.trim(), status: type,
+    selfie_url: selfieResult, note: note.trim(), status: type,
     check_in_latitude: latitude ? parseFloat(latitude) : null,
     check_in_longitude: longitude ? parseFloat(longitude) : null,
     check_in_address: (latitude && longitude) ? `Lat: ${latitude}, Lng: ${longitude}` : null,
@@ -216,23 +245,30 @@ export async function submitPklSakitIzin({ studentId, type, photoBase64, note, l
   return { success: true, data }
 }
 
-// ═════════════════ REKAP (WK/ADMIN) ═════════════════
+// ═══════════════════ REKAP (WK/ADMIN) ═════════════════
 
+// ── OPTIMASI: 2 query sequential → PARALEL + cache 5 menit ──
 export async function getPklFilters() {
-  const { data: profiles } = await supabaseAdmin.from('pkl_profiles').select('company_name, status')
-  const companies = [...new Set((profiles || []).map(p => p.company_name).filter(Boolean))].sort()
-  const statuses = ['Belum Mulai', 'Berjalan', 'Selesai']
-  const { data: siswa } = await supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null)
-  const kelasSet = new Set(), jurusanSet = new Set(), kelasJurusanList = [], kjSet = new Set()
-  ;(siswa || []).forEach(s => {
-    if (s.kelas) kelasSet.add(s.kelas.trim())
-    if (s.jurusan) jurusanSet.add(s.jurusan.trim())
-    if (s.kelas && s.jurusan) {
-      const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
-      if (!kjSet.has(combo)) { kjSet.add(combo); kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim() }) }
-    }
-  })
-  return { companies, statuses, tingkat: [...kelasSet].sort(), jurusan: [...jurusanSet].sort(), kelasJurusanList }
+  return getCached('pkl_filters', async () => {
+    const [profilesRes, siswaRes] = await Promise.all([
+      supabaseAdmin.from('pkl_profiles').select('company_name, status'),
+      supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null),
+    ])
+
+    const companies = [...new Set((profilesRes.data || []).map(p => p.company_name).filter(Boolean))].sort()
+    const statuses = ['Belum Mulai', 'Berjalan', 'Selesai']
+
+    const kelasSet = new Set(), jurusanSet = new Set(), kelasJurusanList = [], kjSet = new Set()
+    ;(siswaRes.data || []).forEach(s => {
+      if (s.kelas) kelasSet.add(s.kelas.trim())
+      if (s.jurusan) jurusanSet.add(s.jurusan.trim())
+      if (s.kelas && s.jurusan) {
+        const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
+        if (!kjSet.has(combo)) { kjSet.add(combo); kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim() }) }
+      }
+    })
+    return { companies, statuses, tingkat: [...kelasSet].sort(), jurusan: [...jurusanSet].sort(), kelasJurusanList }
+  }, TTL.KELAS_FILTERS)
 }
 
 export async function getPklStudents(filters = {}) {
@@ -302,11 +338,19 @@ export async function getPklRekapBulanan(year, month, filters = {}) {
   return { students: merged, year, month, monthName: monthNames[month], daysInMonth }
 }
 
+// ── OPTIMASI: Cache academic_calendar aktif ──
 export async function getPklRekapSemester(filters = {}) {
   const { students } = await getPklStudents(filters)
   if (students.length === 0) return { students: [], semesterInfo: null }
   let startDate, endDate, semesterLabel
-  const { data: cal } = await supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
+
+  // Cache kalender akademik aktif
+  const cal = await getCached('academic_calendar_active', () =>
+    supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
+      .then(r => r.data || null),
+    TTL.HARI_EFEKTIF
+  )
+
   if (cal) {
     startDate = cal.start_date; endDate = cal.end_date
     semesterLabel = `${cal.semester} ${cal.school_year}`
@@ -360,7 +404,7 @@ export async function getPklStats(filters = {}) {
     const wd = s.work_days ? isWorkDay(today, s.work_days) : false
     const inRange = (!s.start_date || today >= s.start_date) && (!s.end_date || today <= s.end_date)
     if (!inRange || s.status !== 'Berjalan') return
-    if (a) { stats[a.status] = (stats[a.status] || 0) + 1 }
+    if (a) { const key = (a.status || '').toLowerCase(); stats[key] = (stats[key] || 0) + 1 }
     else if (wd) { stats.alpha++ }
     else { stats.libur++ }
   })
@@ -376,7 +420,7 @@ export async function getPklAttendanceDetail(id) {
   return { detail: data }
 }
 
-// ═════════════════ MAINTENANCE ═════════════════
+// ═══════════════════ MAINTENANCE ═══════════════════
 
 export async function resetAllPklData() {
   const { data: att } = await supabaseAdmin.from('pkl_attendance').select('selfie_url, check_out_selfie_url').not('selfie_url', 'is', null)

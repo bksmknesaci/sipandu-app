@@ -239,27 +239,27 @@ export default function ProfilSIPANDU() {
               </div>
             </div>
 
-            {/* Preview KOP */}
+            {/* Preview KOP Surat */}
             <div className="mt-5 border border-gray-200 rounded-xl p-4 bg-gray-50">
               <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">Preview KOP Surat</p>
-              <div className="bg-white border rounded-lg p-4" style={{ fontFamily: 'Arial, sans-serif' }}>
-                <div className="flex justify-between items-center w-full mb-2">
-                  <div className="w-[70px] h-[70px] shrink-0 flex items-center justify-center">
+              <div className="bg-white border rounded-lg p-3 md:p-4" style={{ fontFamily: 'Arial, sans-serif' }}>
+                <div className="flex flex-col md:flex-row justify-between items-center w-full gap-2 md:gap-0">
+                  <div className="w-14 h-14 md:w-[70px] shrink-0 flex items-center justify-center mx-auto md:mx-0">
                     {kopLogoDinasUrl ? (
                       <img src={kopLogoDinasUrl} alt="" className="w-full h-full object-contain" />
                     ) : (
                       <div className="w-full h-full border border-dashed border-gray-300 rounded flex items-center justify-center text-[7px] text-gray-400 text-center leading-tight">LOGO<br/>DINAS</div>
                     )}
                   </div>
-                  <div className="text-center flex-1 px-3">
-                    <p className="text-[10px] m-0">PEMERINTAH DAERAH PROVINSI JAWA BARAT</p>
-                    <p className="text-[10px] font-bold m-0">DINAS PENDIDIKAN</p>
-                    <p className="text-[11px] font-bold m-0">CABANG DINAS PENDIDIKAN WILAYAH IX</p>
-                    <p className="text-[12px] font-bold m-0 mt-0.5">{(namaSekolah || 'SMKN 1 CIKEDUNG').toUpperCase()}</p>
-                    <p className="text-[8px] m-0 mt-0.5">{alamat || 'Jl. Raya Cikedung - Jatibarang Km 05 Kec. Cikedung Kab. Indramayu 45262'}</p>
-                    <p className="text-[8px] m-0">Telp. (0234) 5500198 | Website: www.smnk1cikedung.sch.id</p>
+                  <div className="text-center flex-1 px-1 md:px-3">
+                    <p className="text-[9px] md:text-[10px] m-0 leading-tight">PEMERINTAH DAERAH PROVINSI JAWA BARAT</p>
+                    <p className="text-[9px] md:text-[10px] font-bold m-0">DINAS PENDIDIKAN</p>
+                    <p className="text-[10px] md:text-[11px] font-bold m-0">CABANG DINAS PENDIDIKAN WILAYAH IX</p>
+                    <p className="text-[10px] md:text-[12px] font-bold m-0 mt-0.5">{(namaSekolah || 'SMKN 1 CIKEDUNG').toUpperCase()}</p>
+                    <p className="text-[7px] md:text-[8px] m-0 mt-0.5 leading-snug">{alamat || 'Jl. Raya Cikedung - Jatibarang Km 05 Kec. Cikedung Kab. Indramayu 45262'}</p>
+                    <p className="text-[7px] md:text-[8px] m-0">Telp. (0234) 5500198 | Website: www.smnk1cikedung.sch.id</p>
                   </div>
-                  <div className="w-[70px] h-[70px] shrink-0 flex items-center justify-center">
+                  <div className="w-14 h-14 md:w-[70px] shrink-0 flex items-center justify-center mx-auto md:mx-0">
                     {kopLogoSekolahUrl ? (
                       <img src={kopLogoSekolahUrl} alt="" className="w-full h-full object-contain" />
                     ) : (

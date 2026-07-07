@@ -3,6 +3,9 @@
 SIPANDU-APP/
 ├── .next/
 │   └── dev/
+|
+├── .vscode/
+│   └── settings.json
 │
 ├── app/
 │   ├── absen-mandiri/
@@ -179,6 +182,8 @@ SIPANDU-APP/
 │   └── PROJECT_CONTEXT.md
 │
 ├── lib/
+│   ├── cacheHelpers.js
+│   ├── dbOptimize.js
 │   ├── getCurrentUser.js
 │   ├── kopSuratHelper.js
 │   ├── supabase-admin.js

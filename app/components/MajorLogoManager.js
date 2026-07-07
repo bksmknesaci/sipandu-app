@@ -188,7 +188,7 @@ export default function MajorLogoManager() {
       ))}
 
       {/* Grid 3 Kolom — kartu sejajar rapi */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         {JURUSAN_SLOTS.map((slot) => {
           const hasLogo = majorLogos[slot.code];
           const isUploading = uploadingIndex === slot.code;
@@ -196,15 +196,15 @@ export default function MajorLogoManager() {
           return (
             <div
               key={slot.code}
-              className="border border-gray-200 rounded-xl p-5 text-center hover:border-indigo-300 hover:shadow-sm transition-all duration-200"
+              className="border border-gray-200 rounded-xl p-4 md:p-5 text-center hover:border-indigo-300 hover:shadow-sm transition-all duration-200"
             >
               {/* Kode Jurusan Badge */}
-              <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full mb-4">
+              <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full mb-3">
                 {slot.code}
               </span>
 
               {/* Preview Logo */}
-              <div className="w-20 h-20 mx-auto rounded-full border-2 border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center mb-3 relative group">
+              <div className="w-16 h-16 md:w-20 mx-auto rounded-full border-2 border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center mb-2 md:mb-3 relative group">
                 {hasLogo ? (
                   <>
                     <img
@@ -223,14 +223,14 @@ export default function MajorLogoManager() {
                     </button>
                   </>
                 ) : (
-                  <span className="text-gray-300 text-xl font-bold">
+                  <span className="text-gray-300 text-lg font-bold">
                     {slot.code.substring(0, 2)}
                   </span>
                 )}
               </div>
 
               {/* Nama Jurusan */}
-              <p className="text-sm text-gray-600 mb-4 leading-tight min-h-[2.5rem] flex items-center justify-center">
+              <p className="text-xs md:text-sm text-gray-600 mb-3 leading-tight min-h-[2rem] md:min-h-[2.5rem] flex items-center justify-center">
                 {slot.name}
               </p>
 
@@ -239,7 +239,7 @@ export default function MajorLogoManager() {
                 type="button"
                 onClick={() => triggerFileInput(slot.code)}
                 disabled={isUploading}
-                className="inline-flex items-center gap-1.5 bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg hover:bg-indigo-600 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 md:gap-1.5 bg-indigo-500 text-white text-[11px] md:text-xs px-3 md:px-4 py-2 rounded-lg hover:bg-indigo-600 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
                   <>

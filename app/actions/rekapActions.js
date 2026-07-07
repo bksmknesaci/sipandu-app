@@ -3,31 +3,27 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 // ============================
-// PARSE KELAS
-// ============================
-function parseKelasJurusan(kelas) {
-  if (!kelas) return { tingkat: '', jurusan: '' }
-  const parts = kelas.trim().split(/\s+/)
-  return {
-    tingkat: parts[0] || '',
-    jurusan: parts.length >= 3 ? parts.slice(1).join(' ') : (parts[1] || ''),
-  }
-}
-
-// ============================
 // GET REKAP KEHADIRAN
 // ============================
-export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, userKelas }) {
-  // select('*') sudah mencakup kolom 'nis' sehingga NISN akan tersedia di frontend
+// CATATAN OPTIMASI: Alur ini secara inherent sequential —
+// absensi bergantung pada studentIds dari query siswa.
+// Tidak bisa diparalelkan. Query sudah se-optimal mungkin.
+export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, userId }) {
   let studentQuery = supabaseAdmin.from('siswa').select('*').eq('status', 'Aktif');
-  
-  if (userRole === 'Wali Kelas' && userKelas) {
-    const parsed = parseKelasJurusan(userKelas);
-    if (parsed.tingkat) studentQuery = studentQuery.eq('kelas', parsed.tingkat);
-    if (parsed.jurusan) studentQuery = studentQuery.eq('jurusan', parsed.jurusan);
-  } else {
-    if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
-    if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
+  if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (userRole === 'Wali Kelas' && !tingkat && userId) {
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('kelas, jurusan')
+      .eq('id', userId)
+      .maybeSingle()
+    if (userData) {
+      if (userData.kelas) studentQuery = studentQuery.eq('kelas', userData.kelas.trim())
+      if (userData.jurusan) studentQuery = studentQuery.eq('jurusan', userData.jurusan.trim())
+    }
   }
 
   const { data: students, error: studentError } = await studentQuery.order('nama', { ascending: true });
@@ -35,14 +31,13 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
   if (!students || students.length === 0) return { students: [], attendance: [] };
 
   const studentIds = students.map(s => s.id);
-  
-  // Ambil data 1 tahun ajaran penuh (Juli - Juni) agar Tab Semester & Bulan terisi
+
   const year = parseInt(date.substring(0, 4));
   const month = parseInt(date.substring(5, 7));
   const academicStartYear = month >= 7 ? year : year - 1;
   const startDate = `${academicStartYear}-07-01`;
   const endDate = `${academicStartYear + 1}-06-30`;
-  
+
   let { data: absensi, error: absensiError } = await supabaseAdmin
     .from('absensi')
     .select('*')
@@ -52,10 +47,9 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
 
   if (absensiError) return { error: absensiError.message };
 
-  // Sync Alpha Otomatis (Hanya untuk hari ini)
   const today = new Date().toISOString().split('T')[0];
   const currentHour = new Date().getHours();
-  
+
   if (date === today && currentHour >= 14) {
     const todayRecords = (absensi || []).filter(a => a.tanggal === today);
     const presentIds = todayRecords.map(a => a.siswa_id);
@@ -73,14 +67,14 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
       await supabaseAdmin
         .from('absensi')
         .upsert(alphaInserts, { onConflict: 'siswa_id,tanggal', ignoreDuplicates: true });
-      
+
       const { data: updatedAbsensi } = await supabaseAdmin
         .from('absensi')
         .select('*')
         .in('siswa_id', studentIds)
         .gte('tanggal', startDate)
         .lte('tanggal', endDate);
-        
+
       absensi = updatedAbsensi || [];
     }
   }
@@ -91,6 +85,8 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
 // ============================
 // GET FILTER OPTIONS
 // ============================
+// CATATAN: Fungsi ini sudah digantikan oleh getKelasFilters() di absensiActions.js
+// yang memiliki cache 5 menit. Pertahankan untuk backward compatibility.
 export async function getFilterOptions() {
   const { data, error } = await supabaseAdmin
     .from('siswa')
@@ -106,16 +102,22 @@ export async function getFilterOptions() {
 // ============================
 // RESET SEMESTER ABSENSI
 // ============================
-export async function resetSemesterAbsensi({ date, tingkat, jurusan, userRole, userKelas }) {
+export async function resetSemesterAbsensi({ date, tingkat, jurusan, userRole, userId }) {
   let studentQuery = supabaseAdmin.from('siswa').select('id').eq('status', 'Aktif');
-  
-  if (userRole === 'Wali Kelas' && userKelas) {
-    const parsed = parseKelasJurusan(userKelas);
-    if (parsed.tingkat) studentQuery = studentQuery.eq('kelas', parsed.tingkat);
-    if (parsed.jurusan) studentQuery = studentQuery.eq('jurusan', parsed.jurusan);
-  } else {
-    if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
-    if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
+  if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (userRole === 'Wali Kelas' && !tingkat && userId) {
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('kelas, jurusan')
+      .eq('id', userId)
+      .maybeSingle()
+    if (userData) {
+      if (userData.kelas) studentQuery = studentQuery.eq('kelas', userData.kelas.trim())
+      if (userData.jurusan) studentQuery = studentQuery.eq('jurusan', userData.jurusan.trim())
+    }
   }
 
   const { data: students } = await studentQuery;
@@ -125,13 +127,12 @@ export async function resetSemesterAbsensi({ date, tingkat, jurusan, userRole, u
   const year = parseInt(date.substring(0, 4));
   const month = parseInt(date.substring(5, 7));
   const academicStartYear = month >= 7 ? year : year - 1;
-  
-  // Tentukan range semester yang dipilih
+
   let startDate, endDate;
-  if (month >= 7) { // Semester 1 (Juli - Desember)
+  if (month >= 7) {
     startDate = `${academicStartYear}-07-01`;
     endDate = `${academicStartYear}-12-31`;
-  } else { // Semester 2 (Januari - Juni)
+  } else {
     startDate = `${academicStartYear + 1}-01-01`;
     endDate = `${academicStartYear + 1}-06-30`;
   }
@@ -150,16 +151,22 @@ export async function resetSemesterAbsensi({ date, tingkat, jurusan, userRole, u
 // ============================
 // RESET SEMUA ABSENSI (TAHUNAN)
 // ============================
-export async function resetAllAbsensi({ tingkat, jurusan, userRole, userKelas }) {
+export async function resetAllAbsensi({ tingkat, jurusan, userRole, userId }) {
   let studentQuery = supabaseAdmin.from('siswa').select('id').eq('status', 'Aktif');
-  
-  if (userRole === 'Wali Kelas' && userKelas) {
-    const parsed = parseKelasJurusan(userKelas);
-    if (parsed.tingkat) studentQuery = studentQuery.eq('kelas', parsed.tingkat);
-    if (parsed.jurusan) studentQuery = studentQuery.eq('jurusan', parsed.jurusan);
-  } else {
-    if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
-    if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (tingkat) studentQuery = studentQuery.eq('kelas', tingkat);
+  if (jurusan) studentQuery = studentQuery.eq('jurusan', jurusan);
+
+  if (userRole === 'Wali Kelas' && !tingkat && userId) {
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('kelas, jurusan')
+      .eq('id', userId)
+      .maybeSingle()
+    if (userData) {
+      if (userData.kelas) studentQuery = studentQuery.eq('kelas', userData.kelas.trim())
+      if (userData.jurusan) studentQuery = studentQuery.eq('jurusan', userData.jurusan.trim())
+    }
   }
 
   const { data: students } = await studentQuery;
@@ -167,7 +174,6 @@ export async function resetAllAbsensi({ tingkat, jurusan, userRole, userKelas })
 
   const studentIds = students.map(s => s.id);
 
-  // Hapus semua data absensi untuk siswa di kelas ini, tanpa batasan tanggal
   const { error } = await supabaseAdmin
     .from('absensi')
     .delete()
@@ -176,9 +182,3 @@ export async function resetAllAbsensi({ tingkat, jurusan, userRole, userKelas })
   if (error) return { error: error.message };
   return { success: true };
 }
-
-// ==========================================
-// CATATAN: Fungsi Reward yang sebelumnya ada di bagian bawah sini
-// SUDAH DIHAPUS karena duplikat dan sudah diperbaiki sepenuhnya di:
-// app/actions/rewardActions.js
-// ==========================================

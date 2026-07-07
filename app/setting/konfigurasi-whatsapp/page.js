@@ -302,16 +302,16 @@ export default function KonfigurasiWhatsApp() {
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" style={{ minWidth: 800 }}>
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Tanggal</th>
-                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Nama Siswa</th>
-                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Kelas</th>
-                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">No WA</th>
-                    <th className="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase">Status</th>
-                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Pesan Error</th>
-                    <th className="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase">Aksi</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Tanggal</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Nama Siswa</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Kelas</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase whitespace-nowrap">No WA</th>
+                    <th className="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Status</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Pesan Error</th>
+                    <th className="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase whitespace-nowrap">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -324,11 +324,11 @@ export default function KonfigurasiWhatsApp() {
                   ) : logs.map(log => (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="py-3 px-4 text-xs text-gray-600 whitespace-nowrap">{new Date(log.created_at).toLocaleString('id-ID')}</td>
-                      <td className="py-3 px-4 font-medium text-gray-800 text-xs">{log.siswa_nama}</td>
-                      <td className="py-3 px-4 text-xs text-gray-600">{log.siswa_kelas} {log.siswa_jurusan}</td>
-                      <td className="py-3 px-4 text-xs font-mono text-gray-600">{log.phone || '—'}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      <td className="py-3 px-4 font-medium text-gray-800 text-xs whitespace-nowrap">{log.siswa_nama}</td>
+                      <td className="py-3 px-4 text-xs text-gray-600 whitespace-nowrap">{log.siswa_kelas} {log.siswa_jurusan}</td>
+                      <td className="py-3 px-4 text-xs font-mono text-gray-600 whitespace-nowrap">{log.phone || '—'}</td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap ${
                           log.status === 'success' ? 'bg-green-100 text-green-700' :
                           log.status === 'failed' ? 'bg-red-100 text-red-700' :
                           'bg-amber-100 text-amber-700'
@@ -338,7 +338,7 @@ export default function KonfigurasiWhatsApp() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-xs text-red-500 max-w-[200px] truncate">{log.response || '—'}</td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
                         {log.status === 'failed' && (
                           <button onClick={() => handleRetry(log.id)} disabled={retryingId === log.id}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold hover:bg-blue-100 transition disabled:opacity-50">
