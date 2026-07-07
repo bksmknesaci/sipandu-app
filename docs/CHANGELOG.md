@@ -1,5 +1,53 @@
 # Changelog SIPANDU
 
+## 2026-07-13 (Optimasi Round 4)
+- Cache getUnreadCount: getCached per userId dengan TTL.SHORT (10 detik) — dipanggil setiap navigasi header, sebelumnya 1 DB hit per halaman
+- Cache getDashboardNotifications: getCached per userId dengan TTL.SHORT (10 detik) — sebelumnya 1 DB hit per buka dashboard
+- Invalidate notifikasi: Semua write (create, markRead, delete) memanggil invalidateCacheByPrefix('notif_') agar cache selalu sinkron
+- Keamanan notifikasi: Escape wildcard ILIKE (%) dan (_) pada search di getUserNotificationsAdvanced untuk mencegah pattern injection
+- Cache getPublishedNews: getCached per kombinasi limit+category dengan TTL.MINUTE (1 menit) — dipanggil di beranda semua role, sebelumnya 1 DB hit per buka
+- Cache getAllNews: getCached dengan TTL.MINUTE — dipanggil di halaman Pos Berita admin
+- Cache getNewsBySlug: getCached per slug dengan TTL.MINUTE — dipanggil di halaman detail berita
+- Cache getNewsStats: getCached dengan TTL.MINUTE
+- Invalidate berita: saveNews, deleteNews, resetAllNews memanggil invalidateCacheByPrefix('news_')
+- Cache getAdminDashboardData: getCached dengan TTL.DASHBOARD_STATS (30 detik) — 12 query paralel jadi 0 saat cache hit, sebelumnya 12 DB hits per refresh
+- Cache getWaliKelasDashboardFull: getCached per kelas+userId dengan TTL.DASHBOARD_STATS — 8 query jadi 0
+- Cache getSekretarisDashboardFull: getCached per kelas+userId dengan TTL.DASHBOARD_STATS — 2 query jadi 0
+- Cache getOsisDashboardFull: getCached dengan TTL.DASHBOARD_STATS — 10 query jadi 0
+- Cache getRekapRewardStats: getCached dengan TTL.MINUTE (1 menit)
+- Cache getChartData: getCached dengan TTL.MINUTE
+- Cache getRekapRewardTable: getCached per filter combo dengan TTL.MINUTE
+- Cache getTopRewardStudents: getCached dengan TTL.MINUTE
+- Cache getHomeRewardChart: getCached dengan TTL.MINUTE — dipanggil di beranda semua role
+- Invalidate reward: saveRewardAction, deleteRewardAction, deleteAllRewardAction memanggil invalidateCacheByPrefix('reward_')
+- Cache getRekapPelanggaranStats: getCached dengan TTL.MINUTE
+- Cache getHomePelanggaranChart: getCached dengan TTL.MINUTE — dipanggil di beranda semua role
+- Invalidate pelanggaran: savePelanggaranAction, deleteAllPelanggaran memanggil invalidateCacheByPrefix('pelanggaran_')
+- Cache getPublishedAlumni: getCached dengan TTL.MINUTE — dipanggil di beranda (Kisah Alumni)
+- Cache getAlumniStats: getCached dengan TTL.MINUTE — dipanggil dari getFormulirStats
+- Cache alumni dropdowns: getCached dengan TTL.KELAS_FILTERS (5 menit) — tahun lulus, jurusan, status, kota options tidak perlu query ulang tiap ganti halaman
+- Invalidate alumni: toggleAlumniPublish, toggleAlumniFeatured, toggleAlumniPin memanggil invalidateCacheByPrefix('alumni_')
+- Cache getFormulirStats: getCached dengan TTL.MINUTE — dipanggil di dashboard admin
+- Invalidate formulir: saveTracerStudi, savePemetaanKarir, saveSnbpSnbt, resetAllFormulirAction memanggil invalidateCacheByPrefix('formulir_')
+- Cache getPenangananFilters: getCached dengan TTL.KELAS_FILTERS (5 menit) — dropdown tingkat/jurusan jarang berubah
+- Invalidate penanganan: savePenangananAction, resetAllPenangananAction memanggil invalidateCacheByPrefix('penanganan_')
+- Cache academic_calendar_active: getCached dengan TTL.HARI_EFEKTIF di cariSiswaActions — kalender akademik jarang berubah
+- CRITIS getRekapPelanggaranTable: Dari N×4 query per siswa (200 query untuk 50 siswa) menjadi 1 batch query mengambil SEMUA pelanggaran + group by NISN di JavaScript
+- searchStudentsForReward: Dari N+1 query WK lookup menjadi 1 batch query IN kelas unik
+- searchStudentsForPelanggaran: Dari N+1 query WK lookup menjadi 1 batch query IN kelas unik
+- getSiswaDetail (cariSiswaActions): 7 query sequential digabung menjadi 1 sequential + 6 paralel via Promise.all
+- searchSiswa: 2 query sequential (siswa + absensi) digabung paralel via Promise.all
+- getPenangananData: 3 query sequential digabung menjadi 1 + 2 paralel via Promise.all
+- getPenangananStats: 3 query sequential digabung menjadi 1 + 2 paralel via Promise.all
+- getSiswaPenangananDetail: 5 query sequential digabung menjadi 1 + 4 paralel via Promise.all
+- resetAllPenangananAction: 4 delete sequential digabung paralel via Promise.all
+- resetAllFormulirAction: 3 delete sequential digabung paralel via Promise.all
+- Keamanan ILIKE: Escape wildcard (%) dan (_) di searchStudentsForReward, searchStudentsForPelanggaran, searchSiswa, getAllAlumni, getRekapFormulir, getPenangananData, getPindahKeluarData
+- Fix getRekapRewardTable: Format return value tetap { data: [...] } saat dibungkus getCached — sebelumnya return array langsung menyebabkan data tabel kosong
+- Fix getTopRewardStudents: Format return value tetap { data: [...] } — sebelumnya return array langsung menyebabkan Tiga Besar kosong di beranda
+- Fix getPublishedAlumni: Format return value tetap { data: [...] } — sebelumnya return array langsung menyebabkan Kisah Alumni kosong di beranda
+-File diubah: app/actions/notificationActions.js, app/actions/newsActions.js, app/actions/dashboardActions.js, app/actions/rewardActions.js, app/actions/pelanggaranActions.js, app/actions/cariSiswaActions.js, app/actions/alumniActions.js, app/actions/formulirActions.js, app/actions/penangananActions.js, app/actions/parentPortalActions.js
+
 ## 2026-07-13 (Optimasi Round 3)
 - Cache WhatsApp Config: getWhatsAppConfig menggunakan getCached dengan TTL.WHATSAPP_CONFIG (10 menit) — sebelumnya query setiap buka halaman Konfigurasi WhatsApp
 - Cache School Settings: Helper getSchoolSettings menggunakan getCached dengan TTL.SETTINGS (10 menit) — sebelumnya query app_settings setiap kali kirim WA

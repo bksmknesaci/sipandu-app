@@ -1,7 +1,8 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { createNotification, getAdminUserIds } from '@/app/actions/notificationActions';
+import { createNotification, getAdminUserIds } from '@/app/actions/notificationActions'
+import { getCached, TTL, invalidateCacheByPrefix } from '@/lib/cacheHelpers'
 
 const kategoriPelanggaran = {
   Ringan: [
@@ -26,38 +27,30 @@ const kategoriPelanggaran = {
   ]
 }
 
-export async function getKategoriPelanggaran() {
-  return kategoriPelanggaran
-}
+export async function getKategoriPelanggaran() { return kategoriPelanggaran }
 
 export async function searchStudentsForPelanggaran(query, userRole, userKelas, userId) {
   if (!query || query.length < 3) return { data: [] }
 
+  const safeQuery = query.replace(/[%_]/g, '\\$&')
+
   let dbQuery = supabaseAdmin
     .from('siswa')
     .select('nisn, nama, kelas, jurusan, jenis_kelamin, total_reward, total_pelanggaran')
-    .or(`nama.ilike.%${query}%,nisn.ilike.%${query}%`)
+    .or(`nama.ilike.%${safeQuery}%,nisn.ilike.%${safeQuery}%`)
     .limit(10)
 
-  // ── Filter kelas binaan Wali Kelas ──
-  // userData.kelas: "XI TKRO 1" → parts: ["XI", "TKRO", "1"]
-  // tabel siswa: kelas="XI", jurusan="TKRO 1"
   if (userRole === 'Wali Kelas') {
     let kelasAKurat = null
     if (userId) {
       const { data: userRow } = await supabaseAdmin.from('users').select('kelas').eq('id', userId).single()
       kelasAKurat = userRow?.kelas
     }
-
     const kelasYangDigunakan = kelasAKurat || userKelas
-
     if (kelasYangDigunakan) {
       const parts = kelasYangDigunakan.trim().split(/\s+/)
-
       if (parts.length >= 2) {
-        const tingkat = parts[0]                    // "XI"
-        const jurusan = parts.slice(1).join(' ')    // "TKRO 1"
-        dbQuery = dbQuery.eq('kelas', tingkat).eq('jurusan', jurusan)
+        dbQuery = dbQuery.eq('kelas', parts[0]).eq('jurusan', parts.slice(1).join(' '))
       }
     }
   }
@@ -65,11 +58,21 @@ export async function searchStudentsForPelanggaran(query, userRole, userKelas, u
   const { data, error } = await dbQuery
   if (error) return { error: error.message }
 
-  const enrichedData = []
-  for (const siswa of data) {
-    const { data: waliData } = await supabaseAdmin.from('users').select('nama').eq('role', 'Wali Kelas').eq('kelas', siswa.kelas).single()
-    enrichedData.push({ ...siswa, wali_kelas: waliData?.nama || '-' })
+  // ── OPTIMASI: Batch WK lookup — 1 query (sebelumnya N query) ──
+  const uniqueKelas = [...new Set((data || []).map(s => s.kelas).filter(Boolean))]
+  const wkMap = {}
+  if (uniqueKelas.length > 0) {
+    const { data: wkList } = await supabaseAdmin.from('users').select('kelas, nama').eq('role', 'Wali Kelas').in('kelas', uniqueKelas)
+    for (const wk of (wkList || [])) {
+      if (!wkMap[wk.kelas]) wkMap[wk.kelas] = []
+      wkMap[wk.kelas].push(wk.nama)
+    }
   }
+
+  const enrichedData = (data || []).map(siswa => ({
+    ...siswa,
+    wali_kelas: wkMap[siswa.kelas]?.[0] || '-'
+  }))
   return { data: enrichedData }
 }
 
@@ -100,7 +103,6 @@ export async function savePelanggaranAction(pelanggaranData, file) {
     const newTotalReward = Math.max(0, (current_total_reward || 0) - deductPoin)
     await supabaseAdmin.from('siswa').update({ total_reward: newTotalReward }).eq('nisn', pelanggaranData.nisn)
 
-    // ── Kirim notifikasi ke Admin jika pelanggaran BERAT ──
     if (pelanggaranData.kategori === 'Berat') {
       try {
         const adminIds = await getAdminUserIds();
@@ -117,44 +119,64 @@ export async function savePelanggaranAction(pelanggaranData, file) {
             actionUrl: '/admin/siswa/penanganan',
           });
         }
-      } catch (notifErr) {
-        console.error('Gagal kirim notifikasi pelanggaran berat:', notifErr);
-      }
+      } catch (notifErr) { console.error('Gagal kirim notifikasi pelanggaran berat:', notifErr) }
     }
 
+    invalidateCacheByPrefix('pelanggaran_')
     return { success: true, newTotalPelanggaran, newTotalReward }
-  } catch (err) {
-    return { error: 'Terjadi kesalahan server: ' + err.message }
-  }
+  } catch (err) { return { error: 'Terjadi kesalahan server: ' + err.message } }
 }
 
+// ── OPTIMASI: Cache 1 menit ──
 export async function getRekapPelanggaranStats() {
-  try {
+  return getCached('pelanggaran_stats', async () => {
     const { data: pelanggaran } = await supabaseAdmin.from('tb_pelanggaran_siswa').select('kategori, created_at')
     const total = (pelanggaran || []).length
     const ringan = (pelanggaran || []).filter(p => p.kategori === 'Ringan').length
     const sedang = (pelanggaran || []).filter(p => p.kategori === 'Sedang').length
     const berat = (pelanggaran || []).filter(p => p.kategori === 'Berat').length
     return { total, ringan, sedang, berat }
-  } catch (err) {
-    return { total: 0, ringan: 0, sedang: 0, berat: 0 }
-  }
+  }, TTL.MINUTE)
 }
 
+// ── OPTIMASI KRITIS: 1 batch query mengganti N×4 query (sebelumnya 200 query untuk 50 siswa!) ──
 export async function getRekapPelanggaranTable() {
   try {
     const { data: siswa } = await supabaseAdmin.from('siswa').select('*').gt('total_pelanggaran', 0).order('total_pelanggaran', { ascending: false })
     if (!siswa) return { data: [] }
 
-    const enrichedData = []
-    for (const s of siswa) {
-      const { data: lastP } = await supabaseAdmin.from('tb_pelanggaran_siswa').select('jenis_pelanggaran, tanggal').eq('nisn', s.nisn).order('tanggal', { ascending: false }).limit(1).maybeSingle()
-      const ringan = (await supabaseAdmin.from('tb_pelanggaran_siswa').select('id').eq('nisn', s.nisn).eq('kategori', 'Ringan')).data?.length || 0
-      const sedang = (await supabaseAdmin.from('tb_pelanggaran_siswa').select('id').eq('nisn', s.nisn).eq('kategori', 'Sedang')).data?.length || 0
-      const berat = (await supabaseAdmin.from('tb_pelanggaran_siswa').select('id').eq('nisn', s.nisn).eq('kategori', 'Berat')).data?.length || 0
-      
-      enrichedData.push({ ...s, ringan, sedang, berat, last_pelanggaran: lastP?.jenis_pelanggaran || '-', last_tanggal: lastP?.tanggal || null })
+    const nisns = siswa.map(s => s.nisn).filter(Boolean)
+    if (nisns.length === 0) return { data: [] }
+
+    // 1 query untuk SEMUA data pelanggaran — sebelumnya 4 query per siswa
+    const { data: allPelanggaran } = await supabaseAdmin
+      .from('tb_pelanggaran_siswa')
+      .select('nisn, jenis_pelanggaran, tanggal, kategori')
+      .in('nisn', nisns)
+
+    // Process di JS — group per NISN
+    const pelanggaranMap = {}
+    for (const p of (allPelanggaran || [])) {
+      const n = (p.nisn || '').trim()
+      if (!pelanggaranMap[n]) pelanggaranMap[n] = { items: [], ringan: 0, sedang: 0, berat: 0 }
+      pelanggaranMap[n].items.push(p)
+      if (p.kategori === 'Ringan') pelanggaranMap[n].ringan++
+      else if (p.kategori === 'Sedang') pelanggaranMap[n].sedang++
+      else if (p.kategori === 'Berat') pelanggaranMap[n].berat++
     }
+
+    const enrichedData = siswa.map(s => {
+      const pm = pelanggaranMap[s.nisn] || { items: [], ringan: 0, sedang: 0, berat: 0 }
+      const sorted = pm.items.sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''))
+      return {
+        ...s,
+        ringan: pm.ringan,
+        sedang: pm.sedang,
+        berat: pm.berat,
+        last_pelanggaran: sorted[0]?.jenis_pelanggaran || '-',
+        last_tanggal: sorted[0]?.tanggal || null
+      }
+    })
     return { data: enrichedData }
   } catch (err) { return { data: [] } }
 }
@@ -166,34 +188,22 @@ export async function getStudentDetailPelanggaran(nisn) {
 }
 
 export async function deleteAllPelanggaran() {
-  const { error } = await supabaseAdmin
-    .from('tb_pelanggaran_siswa')
-    .delete()
-    .gte('id', 1)
+  const { error } = await supabaseAdmin.from('tb_pelanggaran_siswa').delete().gte('id', 1)
   if (error) return { error: error.message }
+  invalidateCacheByPrefix('pelanggaran_')
   return { success: true }
 }
 
+// ── OPTIMASI: Cache 1 menit — dipanggil di beranda semua role ──
 export async function getHomePelanggaranChart() {
-  try {
-    const { data: pelanggaran } = await supabaseAdmin
-      .from('tb_pelanggaran_siswa')
-      .select('kelas, jurusan, poin')
-
+  return getCached('pelanggaran_home_chart', async () => {
+    const { data: pelanggaran } = await supabaseAdmin.from('tb_pelanggaran_siswa').select('kelas, jurusan, poin')
     const kelasMap = {}
     for (const p of (pelanggaran || [])) {
       const name = `${p.kelas} ${p.jurusan}`.trim()
       if (!kelasMap[name]) kelasMap[name] = 0
       kelasMap[name] += p.poin || 0
     }
-
-    const chartData = Object.entries(kelasMap)
-      .map(([name, pelanggaran]) => ({ name, pelanggaran }))
-      .sort((a, b) => b.pelanggaran - a.pelanggaran)
-      .slice(0, 8)
-
-    return chartData
-  } catch (err) {
-    return []
-  }
+    return Object.entries(kelasMap).map(([name, pelanggaran]) => ({ name, pelanggaran })).sort((a, b) => b.pelanggaran - a.pelanggaran).slice(0, 8)
+  }, TTL.MINUTE)
 }

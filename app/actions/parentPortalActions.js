@@ -80,7 +80,11 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
       supabaseAdmin.from('effective_days').select('*').gte('date', startDate).lte('date', endDate).then(r => r.data || []),
       TTL.HARI_EFEKTIF
     ),
-    supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).single(),
+    // Cache kalender akademik — jarang berubah
+    getCached('academic_calendar_active', () =>
+      supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).single().then(r => r.data),
+      TTL.HARI_EFEKTIF
+    ),
     // Cache PJ lookup — data penanggung jawab jarang berubah
     getCached(`pj_${kelas}_${jurusan}`, () =>
       getPJByClass(kelas, jurusan),

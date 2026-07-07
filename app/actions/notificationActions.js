@@ -1,7 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getCached, TTL } from '@/lib/cacheHelpers';
+import { getCached, TTL, invalidateCacheByPrefix } from '@/lib/cacheHelpers';
 
 // ── OPTIMASI: Throttle deleteOldNotifications — max 1x per 5 menit ──
 let lastCleanupTime = 0;
@@ -26,6 +26,7 @@ export async function createNotification({ userId, title, message, type, priorit
     .select()
     .single();
   if (error) console.error('[createNotification] Error:', error.message);
+  invalidateCacheByPrefix('notif_');
   return { data, error };
 }
 
@@ -44,6 +45,7 @@ export async function notifyMultipleUsers({ userIds, title, message, type, prior
   }));
   const { data, error } = await supabaseAdmin.from('notifications').insert(rows).select();
   if (error) console.error('[notifyMultipleUsers] Error:', error.message);
+  invalidateCacheByPrefix('notif_');
   return { data, error };
 }
 
@@ -128,20 +130,24 @@ export async function notifySekretarisRevision({ sekretarisId, siswaNama, tangga
 // ═══════════════════════════════════════════════════════════════
 // READ
 // ═══════════════════════════════════════════════════════════════
+// ── OPTIMASI: Cache 10 detik per userId — dipanggil setiap navigasi header ──
 export async function getUnreadCount(userId) {
-  // ── OPTIMASI: Throttle cleanup — max 1x per 5 menit (bukan setiap 15 detik) ──
+  // ── Throttle cleanup — max 1x per 5 menit ──
   const now = Date.now();
   if (now - lastCleanupTime > 5 * 60 * 1000) {
     lastCleanupTime = now;
     deleteOldNotifications(30);
   }
 
-  const { count, error } = await supabaseAdmin
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('is_read', false);
-  return { count: count || 0, error };
+  const cacheKey = `notif_unread_${userId}`;
+  return getCached(cacheKey, async () => {
+    const { count, error } = await supabaseAdmin
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+    return { count: count || 0, error };
+  }, TTL.SHORT);
 }
 
 export async function getUserNotifications(userId, { limit = 20, offset = 0, filter = 'all' } = {}) {
@@ -168,6 +174,7 @@ export async function markAsRead(notificationId) {
     .update({ is_read: true })
     .eq('id', notificationId);
   if (error) console.error('[markAsRead] Error:', error.message);
+  invalidateCacheByPrefix('notif_');
   return { error };
 }
 
@@ -178,6 +185,7 @@ export async function markAllAsRead(userId) {
     .eq('user_id', userId)
     .eq('is_read', false);
   if (error) console.error('[markAllAsRead] Error:', error.message);
+  invalidateCacheByPrefix('notif_');
   return { error };
 }
 
@@ -186,11 +194,13 @@ export async function markAllAsRead(userId) {
 // ═══════════════════════════════════════════════════════════════
 export async function deleteNotification(notificationId) {
   const { error } = await supabaseAdmin.from('notifications').delete().eq('id', notificationId);
+  invalidateCacheByPrefix('notif_');
   return { error };
 }
 
 export async function deleteAllNotifications(userId) {
   const { error } = await supabaseAdmin.from('notifications').delete().eq('user_id', userId);
+  invalidateCacheByPrefix('notif_');
   return { error };
 }
 
@@ -230,12 +240,6 @@ export async function getAdminUserIds() {
 
 /**
  * ── OPTIMASI: Cache 5 menit — mapping kelas→WK jarang berubah ──
- * 
- * Sebelum: Setiap panggilan = hingga 5 query sequential (Strategi 0-4)
- * Sesudah: Panggilan pertama = hingga 5 query, selanjutnya = 0 query (dari cache)
- * 
- * Fungsi ini dipanggil di SETIAP: pengajuan sakit/izin, pesan ortu, revisi absensi.
- * Dengan cache, ratusan panggilan/hari tidak menghasilkan DB query sama sekali.
  */
 export async function getWaliKelasUserId(kelas, jurusan = '') {
   if (!kelas) return null;
@@ -322,9 +326,6 @@ export async function getWaliKelasUserId(kelas, jurusan = '') {
 
 /**
  * ── OPTIMASI: Cache 5 menit — sama seperti WK ──
- * 
- * BUG FIX: Strategi 2 sebelumnya mengembalikan `data[0]._id` (underscore bug)
- * Sekarang diperbaiki menjadi `data[0].id`
  */
 export async function getSekretarisUserId(kelas, jurusan = '') {
   if (!kelas) return null;
@@ -378,7 +379,7 @@ export async function getSekretarisUserId(kelas, jurusan = '') {
         .ilike('kelas', `%${allWords[0]}%`)
         .ilike('kelas', `%${allWords[1]}%`);
       ({ data, error } = await query.limit(1));
-      if (!error && data && data.length > 0) return data[0].id; // BUG FIX: sebelumnya data[0]._id
+      if (!error && data && data.length > 0) return data[0].id;
     }
 
     // Strategi 3
@@ -435,7 +436,9 @@ export async function getUserNotificationsAdvanced(userId, { limit = 20, offset 
   }
 
   if (search && search.trim().length > 0) {
-    query = query.or(`title.ilike.%${search.trim()}%,message.ilike.%${search.trim()}%`);
+    // ── OPTIMASI: Escape wildcard ILIKE untuk mencegah pattern injection ──
+    const safeSearch = search.trim().replace(/[%_]/g, '\\$&');
+    query = query.or(`title.ilike.%${safeSearch}%,message.ilike.%${safeSearch}%`);
   }
 
   const { data, error, count } = await query
@@ -447,13 +450,17 @@ export async function getUserNotificationsAdvanced(userId, { limit = 20, offset 
 
 // ═══════════════════════════════════════════════════════════════
 // GET NOTIFICATIONS UNTUK WIDGET DASHBOARD (5 terbaru)
+// ── OPTIMASI: Cache 10 detik per userId ──
 // ═══════════════════════════════════════════════════════════════
 export async function getDashboardNotifications(userId) {
-  const { data, error } = await supabaseAdmin
-    .from('notifications')
-    .select('id, title, message, type, priority, action_url, is_read, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(5);
-  return { data: data || [], error };
+  const cacheKey = `notif_dashboard_${userId}`;
+  return getCached(cacheKey, async () => {
+    const { data, error } = await supabaseAdmin
+      .from('notifications')
+      .select('id, title, message, type, priority, action_url, is_read, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    return { data: data || [], error };
+  }, TTL.SHORT);
 }
