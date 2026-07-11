@@ -1,5 +1,120 @@
 # Changelog SIPANDU
 
+## 2026-07-19 (Perbaikan Rekap Sakit & Izin)
+- Rekap Sakit & Izin: Fix filter Wali Kelas menampilkan semua jurusan — akar masalah u.kelas hanya berisi tingkat ("XII"), jurusan selalu kosong sehingga filter tidak efektif. Diganti prioritas ambil kelas+jurusan dari database via getUserKelasInfo(userId), fallback parse u.kelas
+- Rekap Sakit & Izin: Hapus duplikat useEffect fetchFilters yang menjalankan query 2x
+- Rekap Sakit & Izin: Tambah filter tanggal (date picker) untuk memfilter pengajuan per tanggal tertentu
+- Rekap Sakit & Izin: Tambah tombol "Semua Tanggal" untuk reset filter tanggal
+- Rekap Sakit & Izin: Tambah label info filter tanggal di bawah baris filter (nama hari lengkap + jumlah data ditemukan)
+- Rekap Sakit & Izin: Tambah kartu statistik "Pengajuan Hari Ini" (gradient biru, selalu hitung dari ALL data bukan filtered agar konsisten)
+- Rekap Sakit & Izin: Tambah icon mata (Eye) di kolom Aksi setiap baris data untuk melihat detail siswa
+- Rekap Sakit & Izin: Modal detail lengkap berisi header gradient + avatar inisial, info grid 4 kolom (jenis, status, tanggal lengkap, jam), alasan pengajuan, foto bukti (klik untuk zoom), lokasi GPS (latitude, longitude, akurasi, tombol Google Maps), catatan Wali Kelas jika ditolak, timestamp verifikasi
+- Rekap Sakit & Izin: Optimalisasi filteredData, stats, todayCount menggunakan useMemo agar tidak dihitung ulang setiap render
+- absensiActions.js — cleanupOldBuktiSakitIzin: Tambah hapus otomatis record yang sudah > 30 hari (hapus foto sisa di Storage + batch delete record dari tb_absensi_sakit_izin per 100 ID)
+- absensiActions.js — cleanupOldBuktiSakitIzin: Logika cleanup sekarang 2 tahap — >1 hari hapus foto saja, >30 hari hapus foto + record
+- File diubah: app/wali-kelas/rekap-sakit-izin/page.js, app/actions/absensiActions.js
+
+## 2026-07-19 (Perbaikan UX Konfirmasi & Alur WA Sekretaris)
+- pelanggaranActions.js — Fix syntax error: kurung siku `]` hilang di akhir baris 197 menyebabkan build error "Expected ',', got 'if'"
+- pelanggaranActions.js — deleteAllPelanggaran: Fix `.neq('id', 0).delete()` yang error "neq is not a function" — di Supabase JS v2 filter wajib dipanggil SETELAH `.delete()`, bukan sebelumnya
+- pelanggaranActions.js — deleteAllPelanggaran: Simplifikasi reset total_pelanggaran — hapus logika kumpulkan NISN + batch `.in()`, ganti langsung `.update({ total_pelanggaran: 0 }).gte('total_pelanggaran', 1)` agar tidak gagal silent
+- Rekap Pelanggaran: Ganti konfirmasi `prompt()` dengan modal popup 2 langkah — Step 1 peringatan (jumlah siswa & poin), Step 2 ketik "HAPUS SEMUA", loading spinner, result sukses/gagal
+- Rekap Pelanggaran: Import baru ShieldAlert, Loader2 dari lucide-react; state baru showDeleteModal, deleteStep, deleteConfirmText, deleteResult, deleteInputRef
+- Penanganan Siswa: Ganti konfirmasi `confirm()` dengan modal popup 2 langkah — Step 1 peringatan detail (riwayat BK, SP, catatan, status Pindah/Keluar) + ringkasan jumlah per kategori, Step 2 ketik "HAPUS SEMUA", loading spinner, result sukses/gagal
+- Penanganan Siswa: Import baru X, ShieldAlert, Loader2 dari lucide-react; state baru showResetModal, resetStep, resetConfirmText, resetting, resetResult, resetInputRef
+- Penanganan Siswa: Modal reset menggunakan z-index z-[60] agar tidak tertutup modal detail (z-50)
+- Absensi Kehadiran: Sekretaris setelah klik "Kirim & Kunci Absensi" — jika ada siswa Alpha, modal konfirmasi WhatsApp otomatis terbuka (cukup 1x klik untuk kirim absen + WA)
+- Absensi Kehadiran: Tombol "Minta Persetujuan Edit" baru muncul setelah alur kirim absensi + modal WA selesai
+- Absensi Kehadiran: Modal WhatsApp — tombol "Batal" diganti "Lewati" agar sekretaris bisa skip pengiriman WA tanpa membatalkan absensi
+- Absensi Kehadiran: Modal WhatsApp — tambah empty state saat tidak ada siswa Alpha dengan nomor WA valid
+- File diubah: app/actions/pelanggaranActions.js, app/wali-kelas/rekap-pelanggaran/page.js, app/admin/siswa/penanganan/page.js, app/absensi/page.js
+
+## 2026-07-18 (Perbaikan Rekap Pelangaran)
+- pelanggaranActions.js — deleteAllPelanggaran	Tambah: ambil semua NISN dari tb_pelanggaran_siswa, lalu batch update siswa.total_pelanggaran = 0 (100 NISN per batch) agar tidak melebihi batas URL	
+-	rekap-pelanggaran/page.js — Filter WK	Ubah logika: prioritas u.jurusan (dari DB via AppShell), fallback parse u.kelas — WK hanya melihat siswa jurusannya sendiri	
+-	rekap-pelanggaran/page.js — Tabel Status	Tambah panel collapsible "Keterangan Status Disiplin" di atas Stat Cards, berisi tabel 4 baris: Sangat Baik (0-5), Perlu Pembinaan (6-10), Pengawasan Khusus (11-20), Prioritas Pembinaan (>20) dengan warna badge yang sama dengan tabel	
+-	rekap-pelanggaran/page.js — Import	Tambah import ChevronDown dari lucide-react
+- pelanggaranActions.js — deleteAllPelanggaran	Ganti .delete() dengan .neq('id', 0).delete() agar PostgREST menerima WHERE clause yang valid
+-	pelanggaranActions.js — deleteAllPelanggaran	Tetap mempertahankan logika: ambil semua NISN terlebih dahulu, lalu batch reset total_pelanggaran = 0 agar benar-benar total nol dari awal
+
+## 2026-07-18 (Perbaikan Penanganan Siswa & Navigasi Mobile)
+- Fix error syncTahap is not defined di halaman Penanganan Siswa: Fungsi syncTahap hilang saat refactor sebelumnya — ditambahkan kembali dengan logika sinkronisasi checkbox SP1/SP2/SP3 otomatis saat tahap dipilih
+- Fix handler dropdown layanan_bk menyetel tahap: 'Pindah/Keluar' (nilai tidak ada di opsi) diganti ke 'Mutasi' yang konsisten dengan logika Status Akhir
+- Tambah konstanta BK_TO_TAHAP_MAP: mapping otomatis Pendampingan BK → Tahap (Belum→Belum Pembinaan, 1→Dalam Pembinaan, 2→SP1, 3→SP2, 4→SP3, Terakhir→Mutasi)
+- Hapus opsi "Mutasi" dari dropdown Status Akhir — tersisa hanya Aktif, Pindah, Keluar
+- Fix badge STATUS SAAT INI: Pindah/Keluar selalu tampil "Mutasi" karena TahapBadge mengecek tahap === 'Mutasi' sebelum statusAkhir === 'Pindah' — ubah prioritas: cek statusAkhir Pindah/Keluar pertama, baru tahap Mutasi
+- Filter Status Penanganan SP1/SP2 kosong tanpa filter Tingkat: Akar masalah .in('nisn', nisns) dengan ratusan NISN melebihi batas panjang URL PostgREST → data pelanggaran tidak lengkap → totalPoin turun di bawah threshold SP1/SP2
+- Tambah helper fetchInBatches() di penangananActions.js: memecah query .in() menjadi chunk 100 NISN per batch agar tidak melebihi batas URL PostgREST
+- Terapkan fetchInBatches() di getPenangananData dan getPenangananStats untuk konsistensi
+- Fix filter WK menampilkan semua jurusan: user.kelas dari tabel users hanya berisi tingkat ("X"), jurusan ada di user.jurusan ("KL") — sekarang prioritas ambil jurusan dari user.jurusan, fallback parse user.kelas
+- Kirim parameter userJurusan dari halaman ke server action untuk filter WK yang akurat
+- Tambah .trim() pada nilai tahap dan status_akhir dari database di seluruh fungsi penanganan (getPenangananData, getPenangananStats, savePenangananAction, autoUpdateTahapByPelanggaran) untuk menghindari mismatch akibat whitespace
+- Wali Kelas sekarang bisa mengisi form penanganan siswa binaannya (sebelumnya read-only) — hapus semua disabled={isWaliKelas} dari field Pendampingan BK, Tahap, SP, tanggal SP, Catatan, Penggalian, Tindakan, Hasil
+- Section Status Akhir + Tanggal Keputusan + Alasan Pindah/Keluar dibungkus {isAdmin && (...)} — hanya Administrator yang bisa mengakses
+- Tombol Simpan Penanganan selalu tampil untuk Admin dan Wali Kelas
+- Tombol Reset Semua dibungkus {isAdmin && (...)} — hanya Administrator
+- File baru app/wali-kelas/penanganan/page.js: Import komponen PenangananSiswa dari admin
+- Tambah SubLink "Penanganan Siswa" di sidebar Wali Kelas (AppShell.js)
+- Tambah deteksi pathname /wali-kelas/penanganan untuk auto-open dropdown Wali Kelas (AppShell.js)
+- Fix typo AppShell.js: komponen NavLink memiliki '}}}> (satu } kelebihan) menyebabkan 6 error berantai — diperbaiki menjadi ')}>
+- Revamp semua 5 halaman mobile (Siswa, Sekretaris, OSIS, Wali Kelas, Admin) dengan desain konsisten: header gradient 3 warna + dekorasi lingkaran + tombol kembali
+- Tambah animasi hover di semua kartu menu mobile: hover:-translate-y-2, hover:shadow-2xl, dekorasi lingkaran pojok group-hover:scale-[1.8]
+- Halaman Mobile Siswa: tambah menu "Absensi PKL" (7 menu total)
+- Halaman Mobile Wali Kelas: tambah menu "Rekap Kehadiran PKL" dan "Penanganan Siswa" (7 menu total)
+- Halaman Mobile Admin: tambah menu "Konfigurasi WhatsApp" (12 menu total)
+- File diubah: app/admin/siswa/penanganan/page.js, app/actions/penangananActions.js, app/components/AppShell.js, app/mobile/siswa/page.js, app/mobile/sekretaris/page.js, app/mobile/osis/page.js, app/mobile/wali-kelas/page.js, app/mobile/admin/page.js
+- File baru: app/wali-kelas/penanganan/page.js
+
+## 2026-07-17 (Fix Konsistensi Hari Efektif)
+- Fix perhitungan Hari Efektif di halaman Hari Efektif: Sebelumnya menghitung semua hari kalender minus libur (termasuk Sabtu/Minggu) menghasilkan 168 hari — sekarang hanya menghitung weekday Senin-Jumat yang bukan hari libur, konsisten dengan Rekap Kehadiran (116 hari)
+- Fix kalender Portal Orang Tua tidak menampilkan libur bulan lain: Query effective_days difilter per bulan ini saja — diganti fetch SEMUA hari libur tanpa filter tanggal, komputasi tipe hari di client saat navigasi bulan
+- Fix cache Portal Orang Tua tidak update saat Admin edit libur: Cache key `effective_all_holidays_portal` tidak dimulai dengan `holidays_` sehingga tidak ter-clear oleh invalidateCacheByPrefix('holidays_') — diganti ke `holidays_all_portal`
+- File diubah: app/actions/effectiveDaysActions.js, app/actions/parentPortalActions.js
+
+## 2026-07-16 (Perbaikan Hari Efektif)
+- Fix import CSV massal tidak memperbarui data: Cache invalidation hanya ada di blok edit (if id), tidak di blok tambah baru (else) — pindahkan ke luar if/else
+- Fix import CSV massal tidak memperbarui data: Cache key holidays_${monthKey} hanya merepresentasikan bulan ini, data CSV bulan lain tidak ter-clear — ganti ke fixed key holidays_all_list
+- Fix error invalidateCache is not defined: Semua fungsi write menggunakan invalidateCache yang tidak ada di cacheHelpers.js — ganti ke invalidateCacheByPrefix, import langsung di atas file
+- Optimasi import CSV: Dari N+1 query (panggil saveHoliday per baris) menjadi 1x batch insert dengan fallback per-row, 1x cache invalidation, 1x log aktivitas
+- Tambah loading state di tombol Import CSV Massal (spinner + teks "Memuat..." + tombol disabled)
+- Hapus semua data libur sekarang juga menghapus riwayat aktivitas (effective_day_logs)
+- Fix tanggal off-by-1 di Preview Kalender: toISOString().split('T')[0] mengkonversi ke UTC sehingga tanggal Indonesia bergeser -1 hari — ganti ke toLocaleDateString('sv-SE')
+- Tambah navigasi bulan di Preview Kalender (tombol ChevronLeft/Right + nama bulan + tahun)
+- Highlight tanggal hari ini di Preview Kalender (ring biru)
+- Preview Kalender sekarang menggunakan perhitungan daysInMonth yang akurat (bukan hardcoded 35 cells)
+- Tambah 2 opsi filter di tab Hari Libur Manual: "Kegiatan Sekolah" dan "Khusus" (sebelumnya hanya 4 opsi)
+- Kartu statistik diubah dari 4 kartu generik menjadi 7 kartu per kategori (Hari Efektif, Nasional, Sekolah, Semester, Ujian, Kegiatan, Khusus) dengan warna berbeda
+- Badge kategori di tabel Hari Libur Manual sekarang 6 warna sesuai jenis (sebelumnya hanya 2 warna)
+- Warna blok di Preview Kalender disesuaikan 6 kategori + legenda lengkap
+- File diubah: app/actions/effectiveDaysActions.js, app/setting/hari-efektif/page.js
+
+## 2026-07-15 (Perbaikan Notifikasi & Portal Orang Tua)
+- Fix notif WK tidak muncul saat orang tua kirim pesan: Akar masalah getWaliKelasUserId & getSekretarisUserId melakukan ILIKE jurusanPart ke kolom users.kelas (yang hanya berisi "XII"), bukan ke kolom users.jurusan (yang berisi "RPL 2") — diganti ke .eq('kelas', tingkat).ilike('jurusan', '%jurusanPart%')
+- Fix dropdown notif mobile tertutup saat scroll: Scroll event listener sekarang mengecek e.target apakah berada di dalam panel — scroll dalam panel tidak menutup dropdown, sehingga tombol "Lihat Semua Notifikasi" bisa dicapai
+- Hapus tombol filter "30 Hari" di halaman Pusat Notifikasi
+- Ubah auto-hapus notifikasi dari 30 hari menjadi 7 hari (deleteOldNotifications default parameter + pemanggilan di getUnreadCount)
+- Ubah auto-hapus pesan chat orang tua dari 10 hari menjadi 7 hari (deleteOldParentMessages default parameter + pemanggilan di getParentMessages)
+- Aktifkan lonceng notifikasi di Portal Orang Tua: Menggunakan tabel parent_notifications dengan Supabase Realtime subscription
+- Lonceng Portal Orang Tua: Notifikasi otomatis muncul saat Wali Kelas membalas pesan (createParentNotification dipanggil dari sendWKReplyMessage)
+- Lonceng Portal Orang Tua: Polling fallback setiap 15 detik jika WebSocket gagal
+- Lonceng Portal Orang Tua: Animasi shake berulang setiap 5 detik saat ada notif unread
+- Lonceng Portal Orang Tua: Click outside dropdown (mouse + touch) untuk menutup
+- Lonceng Portal Orang Tua: Notifikasi otomatis dihapus setelah 7 hari (di getParentNotifications)
+- File diubah: app/components/NotificationCenter.js, app/notifikasi/page.js, app/actions/notificationActions.js, app/actions/parentPortalActions.js, app/portal-ortu/page.js
+
+## 2026-07-14 (Perbaikan Bug)
+- Fix filter Wali Kelas di Rekap Kehadiran PKL: Siswa kelas lain muncul karena filter menggunakan .includes("XI") yang salah mencocokkan "XII" — diganti ke exact match (===)
+- Rekap Kehadiran PKL tab bulanan: Tampilan disamakan dengan Rekap Kehadiran reguler (header 2 baris, kolom No, Hari Efektif, Total H/S/I/A/T, % Hadir, sticky hanya desktop, border konsisten)
+- Fix double-counting tab bulanan PKL: counts[d.status] di-increment 2x (loop pre-calc + JSX render) — hapus duplikat di JSX render
+- Fix Alpha melebihi Hari Efektif di PKL: Backend menghitung Alpha untuk tanggal masa depan yang belum terjadi — tambah batasan ds <= todayStr sehingga Alpha hanya dihitung sampai hari ini
+- Fix Hari Efektif PKL realtime: Hanya menghitung hari kerja sampai hari ini (isPastOrToday), bukan seluruh bulan
+- Fix tab semester PKL: Alpha dan total kerja juga menggunakan batasan realtime sampai hari ini
+- Fix Absensi Kelas "Finalisasi & Kirim WA": Modal menampilkan 0 siswa Alpha karena getAlphaStudentsForWA memfilter .eq('locked', true) sementara Admin menyimpan dengan locked: false
+- Fix getAlphaStudentsForWA: Hapus filter locked yang menyebabkan siswa Alpha tidak ditemukan
+- Fix getAlphaStudentsForWA: Ganti join syntax siswa!inner() dengan 2 query terpisah untuk menghindari error "Could not find a relationship between 'absensi' and 'siswa' in the schema cache" dari PostgREST
+- Fix handleOpenWAModal di absensi/page.js: Gunakan state lokal siswaList sebagai sumber utama daftar siswa Alpha, getAlphaStudentsForWA hanya untuk lookup nomor WA
+- File diubah: app/actions/pklActions.js, app/wali-kelas/rekap-pkl/page.js, app/actions/whatsappActions.js, app/absensi/page.js
+
 ## 2026-07-13 (Optimasi Round 4)
 - Cache getUnreadCount: getCached per userId dengan TTL.SHORT (10 detik) — dipanggil setiap navigasi header, sebelumnya 1 DB hit per halaman
 - Cache getDashboardNotifications: getCached per userId dengan TTL.SHORT (10 detik) — sebelumnya 1 DB hit per buka dashboard

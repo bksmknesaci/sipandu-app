@@ -377,11 +377,13 @@ export default function NotificationCenter({ userId, userRole }) {
     }
   }, [isOpen]);
 
-  // ── Tutup saat scroll (mobile) ──
+  // ── Tutup saat scroll di luar panel (mobile) ──
   useEffect(() => {
     if (!isOpen) return;
     let scrollTimeout;
-    const handleScroll = () => {
+    const handleScroll = (e) => {
+      // Jangan tutup jika scroll terjadi di dalam panel notifikasi itu sendiri
+      if (panelRef.current && panelRef.current.contains(e.target)) return;
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => setIsOpen(false), 150);
     };

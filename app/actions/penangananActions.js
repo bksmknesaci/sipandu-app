@@ -12,6 +12,17 @@ function parseKelasJurusan(kelas) {
   }
 }
 
+// ── Helper: batch .in() query agar tidak melebihi batas panjang URL PostgREST ──
+async function fetchInBatches(table, columns, nisns, batchSize = 100) {
+  const results = []
+  for (let i = 0; i < nisns.length; i += batchSize) {
+    const batch = nisns.slice(i, i + batchSize)
+    const { data } = await supabaseAdmin.from(table).select(columns).in('nisn', batch)
+    if (data) results.push(...data)
+  }
+  return results
+}
+
 // ── OPTIMASI: Cache 5 menit — filter options jarang berubah ──
 export async function getPenangananFilters() {
   return getCached('penanganan_filters', async () => {
@@ -42,10 +53,11 @@ export async function getPenangananData(filters = {}) {
   try {
     let query = supabaseAdmin.from('siswa').select('*').in('status', ['Aktif', 'Pindah', 'Keluar'])
 
-    if (filters?.userRole === 'Wali Kelas' && filters?.userKelas) {
+    if (filters?.userRole === 'Wali Kelas') {
       const parsed = parseKelasJurusan(filters.userKelas)
+      const jurusan = (filters?.userJurusan || '').trim() || parsed.jurusan
       if (parsed.tingkat) query = query.eq('kelas', parsed.tingkat)
-      if (parsed.jurusan) query = query.eq('jurusan', parsed.jurusan)
+      if (jurusan) query = query.eq('jurusan', jurusan)
     } else {
       if (filters?.tingkat) query = query.eq('kelas', filters.tingkat)
       if (filters?.jurusan) query = query.eq('jurusan', filters.jurusan)
@@ -63,21 +75,21 @@ export async function getPenangananData(filters = {}) {
     const nisns = siswaList.map(s => s.nisn).filter(Boolean)
     if (nisns.length === 0) return { data: [] }
 
-    // ── OPTIMASI: 2 query paralel (sebelumnya sequential) ──
-    const [pelanggaranRes, penangananRes] = await Promise.all([
-      supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, poin').in('nisn', nisns),
-      supabaseAdmin.from('tb_penanganan_siswa').select('*').in('nisn', nisns),
+    // Gunakan batch query agar data lengkap meski nisns sangat banyak
+    const [pelanggaranData, penangananData] = await Promise.all([
+      fetchInBatches('tb_pelanggaran_siswa', 'nisn, poin', nisns),
+      fetchInBatches('tb_penanganan_siswa', '*', nisns),
     ])
 
     const pelanggaranTotals = {}
-    ;(pelanggaranRes.data || []).forEach(p => {
+    pelanggaranData.forEach(p => {
       const nisn = (p.nisn || '').trim()
       if (!pelanggaranTotals[nisn]) pelanggaranTotals[nisn] = 0
       pelanggaranTotals[nisn] += (p.poin || 0)
     })
 
     const penangananMap = {}
-    ;(penangananRes.data || []).forEach(p => {
+    penangananData.forEach(p => {
       penangananMap[(p.nisn || '').trim()] = p
     })
 
@@ -86,18 +98,21 @@ export async function getPenangananData(filters = {}) {
       const totalPoin = pelanggaranTotals[nisn] || 0
       const penanganan = penangananMap[nisn] || null
 
+      // Trim tahap dari database untuk menghindari mismatch akibat whitespace
+      const dbTahap = (penanganan?.tahap || '').trim()
+      const statusAkhir = (penanganan?.status_akhir || s.status || 'Aktif').trim()
+
       let tahap = 'Belum Pembinaan'
-      const statusAkhir = penanganan?.status_akhir || s.status || 'Aktif'
 
       if (statusAkhir === 'Pindah' || statusAkhir === 'Keluar') {
-        tahap = penanganan?.tahap || statusAkhir
-      } else if (penanganan?.tahap) {
-        tahap = penanganan.tahap
+        tahap = dbTahap || statusAkhir
+      } else if (dbTahap) {
+        tahap = dbTahap
       } else if (totalPoin > 0) {
         if (totalPoin >= 150) tahap = 'SP3'
         else if (totalPoin >= 126) tahap = 'SP2'
         else if (totalPoin >= 100) tahap = 'SP1'
-        else tahap = 'Pembinaan BK'
+        else tahap = 'Dalam Pembinaan'
       }
 
       return {
@@ -107,18 +122,21 @@ export async function getPenangananData(filters = {}) {
       }
     })
 
+    // Sort: Pindah/Keluar ke bawah, lalu poin pelanggaran tertinggi di atas
     result.sort((a, b) => {
-      const aStatus = a.penanganan?.status_akhir === 'Aktif' ? 0 : 1;
-      const bStatus = b.penanganan?.status_akhir === 'Aktif' ? 0 : 1;
-      return aStatus - bStatus;
-    });
+      const aExit = a.penanganan?.status_akhir === 'Aktif' ? 0 : 1
+      const bExit = b.penanganan?.status_akhir === 'Aktif' ? 0 : 1
+      if (aExit !== bExit) return aExit - bExit
+      return (b.total_pelanggaran || 0) - (a.total_pelanggaran || 0)
+    })
 
     let finalData = result;
     if (filters?.status && filters.status !== 'Semua') {
-      if (filters.status === 'Pindah' || filters.status === 'Keluar') {
-        finalData = finalData.filter(s => s.penanganan?.status_akhir === filters.status || s.status === filters.status)
+      const filterStatus = (filters.status || '').trim()
+      if (filterStatus === 'Pindah' || filterStatus === 'Keluar') {
+        finalData = finalData.filter(s => (s.penanganan?.status_akhir || '').trim() === filterStatus || (s.status || '').trim() === filterStatus)
       } else {
-        finalData = finalData.filter(s => s.penanganan?.tahap === filters.status)
+        finalData = finalData.filter(s => (s.penanganan?.tahap || '').trim() === filterStatus)
       }
     }
 
@@ -131,21 +149,21 @@ export async function getPenangananStats() {
     const { data: siswa } = await supabaseAdmin.from('siswa').select('nisn, status').in('status', ['Aktif', 'Pindah', 'Keluar'])
     const nisns = (siswa || []).map(s => s.nisn).filter(Boolean)
 
-    // ── OPTIMASI: 2 query paralel (sebelumnya sequential) ──
-    const [pelanggaranRes, penangananRes] = await Promise.all([
-      supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, poin').in('nisn', nisns),
-      supabaseAdmin.from('tb_penanganan_siswa').select('nisn, tahap, status_akhir').in('nisn', nisns),
+    // Gunakan batch query agar data lengkap
+    const [pelanggaranData, penangananData] = await Promise.all([
+      fetchInBatches('tb_pelanggaran_siswa', 'nisn, poin', nisns),
+      fetchInBatches('tb_penanganan_siswa', 'nisn, tahap, status_akhir', nisns),
     ])
 
     const pelanggaranTotals = {}
-    ;(pelanggaranRes.data || []).forEach(p => {
+    pelanggaranData.forEach(p => {
       const nisn = (p.nisn || '').trim()
       if (!pelanggaranTotals[nisn]) pelanggaranTotals[nisn] = 0
       pelanggaranTotals[nisn] += (p.poin || 0)
     })
 
     const penangananMap = {}
-    ;(penangananRes.data || []).forEach(p => {
+    penangananData.forEach(p => {
       penangananMap[(p.nisn || '').trim()] = p
     })
 
@@ -156,13 +174,17 @@ export async function getPenangananStats() {
       const p = penangananMap[nisn]
       const totalPoin = pelanggaranTotals[nisn] || 0
 
-      if (p?.status_akhir === 'Pindah') { pindah++; return }
-      if (p?.status_akhir === 'Keluar') { keluar++; return }
+      // Trim nilai dari database
+      const dbStatusAkhir = (p?.status_akhir || '').trim()
+      const dbTahap = (p?.tahap || '').trim()
+
+      if (dbStatusAkhir === 'Pindah') { pindah++; return }
+      if (dbStatusAkhir === 'Keluar') { keluar++; return }
 
       if (totalPoin > 0 || p) {
-        let tahap = 'Pembinaan BK'
-        if (p?.status_akhir && p.status_akhir !== 'Aktif') tahap = p.tahap || p.status_akhir
-        else if (p?.tahap) tahap = p.tahap
+        let tahap = 'Dalam Pembinaan'
+        if (dbStatusAkhir && dbStatusAkhir !== 'Aktif') tahap = dbTahap || dbStatusAkhir
+        else if (dbTahap) tahap = dbTahap
         else {
           if (totalPoin >= 150) tahap = 'SP3'
           else if (totalPoin >= 126) tahap = 'SP2'
@@ -179,7 +201,7 @@ export async function getPenangananStats() {
   } catch (err) { return { bk: 0, sp1: 0, sp2: 0, sp3: 0, pindah: 0, keluar: 0 } }
 }
 
-export async function savePenangananAction(payload, files = []) {
+export async function savePenangananAction(payload) {
   try {
     const today = new Date().toLocaleDateString('sv-SE')
     const parseDate = (val) => (!val || val.trim() === '') ? null : val
@@ -188,50 +210,57 @@ export async function savePenangananAction(payload, files = []) {
       .from('tb_penanganan_siswa')
       .upsert({
         siswa_id: payload.siswa_id, nisn: payload.nisn, total_poin: payload.total_poin,
-        tahap: payload.tahap, layanan_bk: payload.layanan_bk,
+        tahap: (payload.tahap || '').trim(),
+        layanan_bk: (payload.layanan_bk || '').trim(),
         sp1: payload.sp1 || false, tgl_sp1: parseDate(payload.tgl_sp1),
         sp2: payload.sp2 || false, tgl_sp2: parseDate(payload.tgl_sp2),
         sp3: payload.sp3 || false, tgl_sp3: parseDate(payload.tgl_sp3),
-        catatan_bk: payload.catatan_bk || null, status_akhir: payload.status_akhir || 'Aktif',
+        catatan_bk: payload.catatan_bk || null,
+        alasan_pindah_keluar: payload.alasan_pindah_keluar || null,
+        penggalian_masalah: payload.penggalian_masalah || null,
+        tindakan_korektip: payload.tindakan_korektip || null,
+        hasil_diharapkan: payload.hasil_diharapkan || null,
+        status_akhir: (payload.status_akhir || 'Aktif').trim(),
         updated_at: new Date().toISOString()
       }, { onConflict: 'siswa_id' })
       .select().single()
 
     if (upsertError) return { error: upsertError.message }
 
+    // Riwayat: sinkronkan Catatan Permasalahan + Alasan Pindah/Keluar
+    const noteParts = []
+    if (payload.catatan_bk) noteParts.push(`Catatan: ${payload.catatan_bk}`)
+    if (payload.alasan_pindah_keluar) noteParts.push(`Alasan PK: ${payload.alasan_pindah_keluar}`)
+
     await supabaseAdmin.from('tb_penanganan_history').insert([{
       penanganan_id: penanganan.id, updated_by: payload.user_id,
-      action: `Update penanganan ke tahap ${payload.tahap} (Status: ${payload.status_akhir})`,
-      note: payload.catatan_bk || '-'
+      action: `Update penanganan ke tahap ${(payload.tahap || '').trim()} (Status: ${(payload.status_akhir || 'Aktif').trim()})`,
+      note: noteParts.join(' | ') || '-'
     }])
 
-    if (payload.status_akhir === 'Pindah' || payload.status_akhir === 'Keluar') {
-      await supabaseAdmin.from('siswa').update({ status: payload.status_akhir }).eq('id', payload.siswa_id)
+    const statusAkhir = (payload.status_akhir || 'Aktif').trim()
+
+    if (statusAkhir === 'Pindah' || statusAkhir === 'Keluar') {
+      await supabaseAdmin.from('siswa').update({ status: statusAkhir }).eq('id', payload.siswa_id)
 
       const { data: existingPK } = await supabaseAdmin.from('tb_pindah_keluar').select('id').eq('siswa_id', payload.siswa_id).maybeSingle()
 
       if (!existingPK) {
         const tanggalKeputusan = parseDate(payload.tanggal_keputusan) || today
-        const { data: pindahKeluarData } = await supabaseAdmin.from('tb_pindah_keluar').insert([{
+        await supabaseAdmin.from('tb_pindah_keluar').insert([{
           siswa_id: payload.siswa_id, nisn: payload.nisn, nama: payload.nama,
           kelas: payload.kelas, jurusan: payload.jurusan, jenis_kelamin: payload.jenis_kelamin,
-          status: payload.status_akhir, tanggal_keputusan: tanggalKeputusan,
-          alasan: payload.catatan_bk, ditetapkan_oleh: payload.user_id
-        }]).select().single()
-
-        if (pindahKeluarData && files.length > 0) {
-          for (const file of files) {
-            const fileExt = file.name.split('.').pop()
-            const fileName = `dokumen-${payload.nisn}-${Date.now()}.${fileExt}`
-            const buffer = Buffer.from(await file.arrayBuffer())
-            const { error: uploadError } = await supabaseAdmin.storage.from('dokumen-penanganan').upload(fileName, buffer, { contentType: file.type, upsert: true })
-            if (!uploadError) {
-              const { data: urlData } = supabaseAdmin.storage.from('dokumen-penanganan').getPublicUrl(fileName)
-              await supabaseAdmin.from('tb_pindah_keluar_dokumen').insert([{ pindah_keluar_id: pindahKeluarData.id, file_url: urlData.publicUrl, file_name: file.name }])
-            }
-          }
-        }
+          status: statusAkhir, tanggal_keputusan: tanggalKeputusan,
+          alasan: payload.alasan_pindah_keluar || '-',
+          ditetapkan_oleh: payload.user_id
+        }])
       }
+    }
+
+    // Status Aktif → kembalikan status siswa + HAPUS record dari tb_pindah_keluar
+    if (statusAkhir === 'Aktif') {
+      await supabaseAdmin.from('siswa').update({ status: 'Aktif' }).eq('id', payload.siswa_id)
+      await supabaseAdmin.from('tb_pindah_keluar').delete().eq('siswa_id', payload.siswa_id)
     }
 
     invalidateCacheByPrefix('penanganan_')
@@ -241,20 +270,30 @@ export async function savePenangananAction(payload, files = []) {
 
 export async function getSiswaPenangananDetail(siswaId) {
   try {
-    // Step 1: Siswa (harus duluan untuk dapat nisn)
     const { data: siswa } = await supabaseAdmin.from('siswa').select('*').eq('id', siswaId).single()
     if (!siswa) return { error: 'Siswa tidak ditemukan' }
 
     const nisn = (siswa.nisn || '').trim()
-    const today = new Date().toLocaleDateString('sv-SE')
 
-    // ── OPTIMASI: 5 query paralel (sebelumnya 5x sequential) ──
-    const [pelanggaranRes, rewardRes, absensiRes, penangananRes] = await Promise.all([
+    const [pelanggaranRes, rewardRes, penangananRes, calendarRes] = await Promise.all([
       supabaseAdmin.from('tb_pelanggaran_siswa').select('*').eq('nisn', nisn).order('tanggal', { ascending: false }),
       supabaseAdmin.from('tb_reward_siswa').select('*').eq('nisn', nisn).order('tanggal', { ascending: false }),
-      supabaseAdmin.from('absensi').select('status').eq('siswa_id', siswaId).eq('tanggal', today),
       supabaseAdmin.from('tb_penanganan_siswa').select('*').eq('siswa_id', siswaId).maybeSingle(),
+      supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle(),
     ])
+
+    let semesterAttendance = []
+    let semesterInfo = null
+    if (calendarRes.data?.start_date && calendarRes.data?.end_date) {
+      semesterInfo = calendarRes.data
+      const { data: attData } = await supabaseAdmin
+        .from('absensi')
+        .select('tanggal, status')
+        .eq('siswa_id', siswaId)
+        .gte('tanggal', calendarRes.data.start_date)
+        .lte('tanggal', calendarRes.data.end_date)
+      semesterAttendance = attData || []
+    }
 
     let history = []
     if (penangananRes.data?.id) {
@@ -268,7 +307,8 @@ export async function getSiswaPenangananDetail(siswaId) {
       siswa: { ...siswa, total_pelanggaran: totalPelanggaran },
       pelanggaran: pelanggaranRes.data || [],
       reward: rewardRes.data || [],
-      absensi: absensiRes.data || [],
+      semesterAttendance,
+      semesterInfo,
       penanganan: penangananRes.data || {},
       history,
     }
@@ -313,9 +353,34 @@ export async function getPindahKeluarStats() {
   } catch (err) { return { pindah: 0, keluar: 0, tahunIni: 0, semesterIni: 0 } }
 }
 
+export async function autoUpdateTahapByPelanggaran(payload) {
+  try {
+    const { data: penanganan, error: upsertError } = await supabaseAdmin
+      .from('tb_penanganan_siswa')
+      .upsert({
+        siswa_id: payload.siswa_id, nisn: payload.nisn, total_poin: payload.total_poin,
+        tahap: (payload.tahap || '').trim(),
+        layanan_bk: (payload.layanan_bk || 'Belum Pendampingan').trim(),
+        status_akhir: (payload.status_akhir || 'Aktif').trim(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'siswa_id' })
+      .select().single()
+
+    if (upsertError) return { error: upsertError.message }
+
+    await supabaseAdmin.from('tb_penanganan_history').insert([{
+      penanganan_id: penanganan.id, updated_by: payload.user_id,
+      action: `Auto-update tahap ke ${(payload.tahap || '').trim()}`,
+      note: payload.reason
+    }])
+
+    invalidateCacheByPrefix('penanganan_')
+    return { success: true }
+  } catch (err) { return { error: err.message } }
+}
+
 export async function resetAllPenangananAction() {
   try {
-    // ── OPTIMASI: 4 delete paralel (sebelumnya sequential) ──
     await Promise.all([
       supabaseAdmin.from('tb_pindah_keluar_dokumen').delete().neq('id', 0),
       supabaseAdmin.from('tb_pindah_keluar').delete().neq('id', 0),

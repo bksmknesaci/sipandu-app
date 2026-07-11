@@ -11,9 +11,9 @@ const kategoriPelanggaran = {
     { nama: 'Rambut Panjang', poin: 1 },
   ],
   Sedang: [
-    { nama: 'Bolos Sekolah', poin: 2 },
-    { nama: 'Bolos Pelajaran', poin: 2 },
-    { nama: 'Mencoret Seragam', poin: 2 },
+    { name: 'Bolos Sekolah', poin: 2 },
+    { name: 'Bolos Pelajaran', poin: 2 },
+    { name: 'Mencoret Seragam', poin: 2 },
   ],
   Berat: [
     { nama: 'Mencuri', poin: 3 },
@@ -22,7 +22,7 @@ const kategoriPelanggaran = {
     { nama: 'Merokok', poin: 3 },
     { nama: 'Berkelahi', poin: 3 },
     { nama: 'Membawa Sajam', poin: 3 },
-    { nama: 'Tawuran', poin: 3 },
+    { name: 'Tawuran', poin: 3 },
     { nama: 'Narkoba', poin: 3 },
   ]
 }
@@ -41,18 +41,19 @@ export async function searchStudentsForPelanggaran(query, userRole, userKelas, u
     .limit(10)
 
   if (userRole === 'Wali Kelas') {
-    let kelasAKurat = null
+    let kelasFromDB = null
+    let jurusanFromDB = null
     if (userId) {
-      const { data: userRow } = await supabaseAdmin.from('users').select('kelas').eq('id', userId).single()
-      kelasAKurat = userRow?.kelas
-    }
-    const kelasYangDigunakan = kelasAKurat || userKelas
-    if (kelasYangDigunakan) {
-      const parts = kelasYangDigunakan.trim().split(/\s+/)
-      if (parts.length >= 2) {
-        dbQuery = dbQuery.eq('kelas', parts[0]).eq('jurusan', parts.slice(1).join(' '))
+      const { data: userRow } = await supabaseAdmin.from('users').select('kelas, jurusan').eq('id', userId).single()
+      if (userRow) {
+        kelasFromDB = userRow.kelas || null
+        jurusanFromDB = userRow.jurusan || null
       }
     }
+    const tingkat = kelasFromDB || (userKelas ? userKelas.trim().split(/\s+/)[0] : null)
+    const jurusan = jurusanFromDB || (userKelas && userKelas.trim().split(/\s+/).length > 1 ? userKelas.trim().split(/\s+/).slice(1).join(' ') : null)
+    if (tingkat) dbQuery = dbQuery.eq('kelas', tingkat)
+    if (jurusan) dbQuery = dbQuery.eq('jurusan', jurusan)
   }
 
   const { data, error } = await dbQuery
@@ -105,9 +106,9 @@ export async function savePelanggaranAction(pelanggaranData, file) {
 
     if (pelanggaranData.kategori === 'Berat') {
       try {
-        const adminIds = await getAdminUserIds();
+        const adminIds = await getAdminUserIds()
         if (adminIds.length > 0) {
-          const lokasi = pelanggaranData.lokasi ? ` di ${pelanggaranData.lokasi}` : '';
+          const lokasi = pelanggaranData.lokasi ? ` di ${pelanggaranData.lokasi}` : ''
           await createNotification({
             userId: adminIds[0],
             title: '⚠️ Pelanggaran Berat Terdeteksi',
@@ -188,10 +189,30 @@ export async function getStudentDetailPelanggaran(nisn) {
 }
 
 export async function deleteAllPelanggaran() {
-  const { error } = await supabaseAdmin.from('tb_pelanggaran_siswa').delete().gte('id', 1)
-  if (error) return { error: error.message }
-  invalidateCacheByPrefix('pelanggaran_')
-  return { success: true }
+  try {
+    // 1. Hapus semua record dari tb_pelanggaran_siswa
+    //    .gte('id', 0) sebagai WHERE clause wajib PostgREST (DELETE tanpa WHERE ditolak)
+    const { error: deleteError } = await supabaseAdmin
+      .from('tb_pelanggaran_siswa')
+      .delete()
+      .gte('id', 0)
+
+    if (deleteError) return { error: 'Gagal menghapus data pelanggaran: ' + deleteError.message }
+
+    // 2. Reset total_pelanggaran ke 0 untuk semua siswa yang nilainya > 0
+    //    Tidak perlu kumpulkan NISN — langsung filter berdasarkan kondisi kolom
+    const { error: updateError } = await supabaseAdmin
+      .from('siswa')
+      .update({ total_pelanggaran: 0 })
+      .gte('total_pelanggaran', 1)
+
+    if (updateError) return { error: 'Gagal reset total poin: ' + updateError.message }
+
+    invalidateCacheByPrefix('pelanggaran_')
+    return { success: true }
+  } catch (err) {
+    return { error: 'Terjadi kesalahan: ' + err.message }
+  }
 }
 
 // ── OPTIMASI: Cache 1 menit — dipanggil di beranda semua role ──

@@ -451,53 +451,59 @@ function extractStoragePath(url) {
 
 export async function cleanupOldBuktiSakitIzin() {
   try {
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const cutoff = yesterday.toISOString()
+    // ── 1. Hapus foto bukti yang sudah lebih dari 1 hari (existing behavior) ──
+    const oneDayAgo = new Date()
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+    const oneDayCutoff = oneDayAgo.toISOString()
 
-    const { data: oldRecords, error: queryError } = await supabaseAdmin
+    const { data: oldPhotos } = await supabaseAdmin
       .from('tb_absensi_sakit_izin')
       .select('id, foto_bukti')
+      .lt('created_at', oneDayCutoff)
       .not('foto_bukti', 'is', null)
-      .lt('created_at', cutoff)
-      .limit(100)
 
-    if (queryError || !oldRecords || oldRecords.length === 0) {
-      return { deleted: 0 }
-    }
-
-    let deletedCount = 0
-    const idsToUpdate = []
-
-    for (const record of oldRecords) {
-      const path = extractStoragePath(record.foto_bukti)
-      if (path) {
-        const { error: deleteError } = await supabaseAdmin.storage
-          .from('bukti-sakit-izin')
-          .remove([path])
-
-        if (!deleteError) {
-          idsToUpdate.push(record.id)
-          deletedCount++
+    for (const record of (oldPhotos || [])) {
+      if (record.foto_bukti) {
+        const fileName = record.foto_bukti.split('/').pop()
+        if (fileName) {
+          await supabaseAdmin.storage.from('bukti-sakit-izin').remove([fileName])
         }
       }
     }
 
-    if (idsToUpdate.length > 0) {
-      await supabaseAdmin
-        .from('tb_absensi_sakit_izin')
-        .update({ foto_bukti: null })
-        .in('id', idsToUpdate)
-    }
+    // ── 2. Hapus record yang sudah lebih dari 30 hari ──
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyDayCutoff = thirtyDaysAgo.toISOString()
 
-    if (deletedCount > 0) {
-      console.log(`[cleanupBukti] ${deletedCount} file foto lama dihapus dari storage`)
-    }
+    const { data: oldRecords } = await supabaseAdmin
+      .from('tb_absensi_sakit_izin')
+      .select('id, foto_bukti')
+      .lte('created_at', thirtyDayCutoff)
 
-    return { deleted: deletedCount }
+    if (oldRecords && oldRecords.length > 0) {
+      // Hapus foto yang mungkin masih tersisa (jika cleanup 1 hari sebelumnya gagal)
+      for (const record of oldRecords) {
+        if (record.foto_bukti) {
+          const fileName = record.foto_bukti.split('/').pop()
+          if (fileName) {
+            await supabaseAdmin.storage.from('bukti-sakit-izin').remove([fileName])
+          }
+        }
+      }
+
+      // Hapus record dari database (batch 100 untuk aman)
+      const ids = oldRecords.map(r => r.id)
+      for (let i = 0; i < ids.length; i += 100) {
+        const batch = ids.slice(i, i + 100)
+        await supabaseAdmin
+          .from('tb_absensi_sakit_izin')
+          .delete()
+          .in('id', batch)
+      }
+    }
   } catch (err) {
-    console.error('[cleanupBukti] Error:', err)
-    return { deleted: 0 }
+    console.error('Gagal cleanup sakit/izin:', err)
   }
 }
 

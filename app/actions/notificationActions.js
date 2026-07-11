@@ -136,7 +136,7 @@ export async function getUnreadCount(userId) {
   const now = Date.now();
   if (now - lastCleanupTime > 5 * 60 * 1000) {
     lastCleanupTime = now;
-    deleteOldNotifications(30);
+    deleteOldNotifications(7);
   }
 
   const cacheKey = `notif_unread_${userId}`;
@@ -204,7 +204,7 @@ export async function deleteAllNotifications(userId) {
   return { error };
 }
 
-export async function deleteOldNotifications(days = 30) {
+export async function deleteOldNotifications(days = 7) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const ds = cutoff.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
@@ -255,68 +255,47 @@ export async function getWaliKelasUserId(kelas, jurusan = '') {
     } else {
       const kelasArr = kelas.trim().split(/\s+/);
       tingkat = kelasArr[0] || '';
-      jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
+      jurusanPart = kelasArr.length > 1 ? kelasArr.slice(1).join(' ') : '';
     }
 
-    // Strategi 0: Gabungan kelas+jurusan
-    if (tingkat && jurusanPart) {
-      const combined = `${tingkat} ${jurusanPart}`;
-      let { data, error } = await supabaseAdmin
+    // Strategi 1: Exact match kelas (tingkat) + ILIKE jurusan — cara paling akurat
+    // users.kelas = "XII", users.jurusan = "RPL 2"
+    if (tingkat) {
+      let query = supabaseAdmin
         .from('users')
-        .select('id, kelas, nama')
+        .select('id, kelas, jurusan, nama')
         .eq('role', 'Wali Kelas')
         .eq('status', 'Aktif')
-        .ilike('kelas', `%${combined}%`)
+        .eq('kelas', tingkat);
+
+      if (jurusanPart) {
+        query = query.ilike('jurusan', `%${jurusanPart}%`);
+      }
+
+      let { data, error } = await query.limit(1);
+      if (!error && data && data.length > 0) return data[0].id;
+    }
+
+    // Strategi 2: ILIKE jurusan saja (fallback jika tingkat tidak cocok)
+    if (jurusanPart) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, kelas, jurusan, nama')
+        .eq('role', 'Wali Kelas')
+        .eq('status', 'Aktif')
+        .ilike('jurusan', `%${jurusanPart}%`)
         .limit(1);
       if (!error && data && data.length > 0) return data[0].id;
     }
 
-    // Strategi 1: tingkat + jurusanPart (pisah)
-    let query = supabaseAdmin
+    // Strategi 3: ILIKE kelas dengan full string (fallback format lama)
+    const { data, error } = await supabaseAdmin
       .from('users')
-      .select('id, kelas, nama')
-      .eq('role', 'Wali Kelas')
-      .eq('status', 'Aktif');
-    if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
-    if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
-    let { data, error } = await query.limit(1);
-    if (!error && data && data.length > 0) return data[0].id;
-
-    // Strategi 2: kata-kata dari kelas sendiri
-    const allWords = kelas.trim().split(/\s+/);
-    if (allWords.length >= 2) {
-      query = supabaseAdmin
-        .from('users')
-        .select('id, kelas, nama')
-        .eq('role', 'Wali Kelas')
-        .eq('status', 'Aktif')
-        .ilike('kelas', `%${allWords[0]}%`)
-        .ilike('kelas', `%${allWords[1]}%`);
-      ({ data, error } = await query.limit(1));
-      if (!error && data && data.length > 0) return data[0].id;
-    }
-
-    // Strategi 3: hanya jurusan saja
-    const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
-    if (jurusanSearch) {
-      query = supabaseAdmin
-        .from('users')
-        .select('id, kelas, nama')
-        .eq('role', 'Wali Kelas')
-        .eq('status', 'Aktif')
-        .ilike('kelas', `%${jurusanSearch}%`);
-      ({ data, error } = await query.limit(1));
-      if (!error && data && data.length > 0) return data[0].id;
-    }
-
-    // Strategi 4: full kelas ILIKE (fallback terakhir)
-    query = supabaseAdmin
-      .from('users')
-      .select('id, kelas, nama')
+      .select('id, kelas, jurusan, nama')
       .eq('role', 'Wali Kelas')
       .eq('status', 'Aktif')
-      .ilike('kelas', `%${kelas.trim()}%`);
-    ({ data, error } = await query.limit(1));
+      .ilike('kelas', `%${kelas.trim()}%`)
+      .limit(1);
     if (!error && data && data.length > 0) return data[0].id;
 
     console.log(`[getWaliKelasUserId] Tidak ditemukan untuk kelas="${kelas}" jurusan="${jurusan}"`);
@@ -341,68 +320,46 @@ export async function getSekretarisUserId(kelas, jurusan = '') {
     } else {
       const kelasArr = kelas.trim().split(/\s+/);
       tingkat = kelasArr[0] || '';
-      jurusanPart = kelasArr.length > 1 ? kelasArr[1] : '';
+      jurusanPart = kelasArr.length > 1 ? kelasArr.slice(1).join(' ') : '';
     }
 
-    // Strategi 0: Gabungan kelas+jurusan
-    if (tingkat && jurusanPart) {
-      const combined = `${tingkat} ${jurusanPart}`;
-      let { data, error } = await supabaseAdmin
+    // Strategi 1: Exact match kelas (tingkat) + ILIKE jurusan
+    if (tingkat) {
+      let query = supabaseAdmin
         .from('users')
-        .select('id, kelas, nama')
+        .select('id, kelas, jurusan, nama')
         .eq('role', 'Sekretaris Kelas')
         .eq('status', 'Aktif')
-        .ilike('kelas', `%${combined}%`)
+        .eq('kelas', tingkat);
+
+      if (jurusanPart) {
+        query = query.ilike('jurusan', `%${jurusanPart}%`);
+      }
+
+      let { data, error } = await query.limit(1);
+      if (!error && data && data.length > 0) return data[0].id;
+    }
+
+    // Strategi 2: ILIKE jurusan saja
+    if (jurusanPart) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, kelas, jurusan, nama')
+        .eq('role', 'Sekretaris Kelas')
+        .eq('status', 'Aktif')
+        .ilike('jurusan', `%${jurusanPart}%`)
         .limit(1);
       if (!error && data && data.length > 0) return data[0].id;
     }
 
-    // Strategi 1
-    let query = supabaseAdmin
+    // Strategi 3: ILIKE kelas dengan full string (fallback format lama)
+    const { data, error } = await supabaseAdmin
       .from('users')
-      .select('id, kelas, nama')
-      .eq('role', 'Sekretaris Kelas')
-      .eq('status', 'Aktif');
-    if (tingkat) query = query.ilike('kelas', `%${tingkat}%`);
-    if (jurusanPart) query = query.ilike('kelas', `%${jurusanPart}%`);
-    let { data, error } = await query.limit(1);
-    if (!error && data && data.length > 0) return data[0].id;
-
-    // Strategi 2
-    const allWords = kelas.trim().split(/\s+/);
-    if (allWords.length >= 2) {
-      query = supabaseAdmin
-        .from('users')
-        .select('id, kelas, nama')
-        .eq('role', 'Sekretaris Kelas')
-        .eq('status', 'Aktif')
-        .ilike('kelas', `%${allWords[0]}%`)
-        .ilike('kelas', `%${allWords[1]}%`);
-      ({ data, error } = await query.limit(1));
-      if (!error && data && data.length > 0) return data[0].id;
-    }
-
-    // Strategi 3
-    const jurusanSearch = jurusanPart || (allWords.length >= 2 ? allWords[1] : '');
-    if (jurusanSearch) {
-      query = supabaseAdmin
-        .from('users')
-        .select('id, kelas, nama')
-        .eq('role', 'Sekretaris Kelas')
-        .eq('status', 'Aktif')
-        .ilike('kelas', `%${jurusanSearch}%`);
-      ({ data, error } = await query.limit(1));
-      if (!error && data && data.length > 0) return data[0].id;
-    }
-
-    // Strategi 4
-    query = supabaseAdmin
-      .from('users')
-      .select('id, kelas, nama')
+      .select('id, kelas, jurusan, nama')
       .eq('role', 'Sekretaris Kelas')
       .eq('status', 'Aktif')
-      .ilike('kelas', `%${kelas.trim()}%`);
-    ({ data, error } = await query.limit(1));
+      .ilike('kelas', `%${kelas.trim()}%`)
+      .limit(1);
     if (!error && data && data.length > 0) return data[0].id;
 
     console.log(`[getSekretarisUserId] Tidak ditemukan untuk kelas="${kelas}" jurusan="${jurusan}"`);

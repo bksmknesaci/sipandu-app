@@ -220,6 +220,11 @@ Status: ACTIVE
 - Aksi Setujui (Status di absensi utama tetap Sakit/Izin)
 - Aksi Tolak (Status di absensi utama otomatis berubah menjadi Alpha, wajib isi catatan)
 - Reset Filter
+- Fix filter Wali Kelas: Sekarang hanya menampilkan data siswa sesuai kelas binaannya (menggunakan getUserKelasInfo dari database, bukan parse u.kelas yang hanya mengambil tingkat)
+- Filter tanggal: Date picker untuk memfilter pengajuan berdasarkan tanggal tertentu, tombol "Semua Tanggal" untuk reset
+- Kartu statistik "Pengajuan Hari Ini": Selalu menampilkan total pengajuan hari ini dari seluruh data (tidak terpengaruh filter tanggal/status)
+- Icon mata (Eye) di kolom Aksi: Modal detail lengkap siswa yang mengajukan (profil, jenis, tanggal, jam, alasan, foto bukti klik-zoom, koordinat GPS + akurasi + tombol Google Maps, catatan WK jika ditolak, timestamp verifikasi)
+- Hapus otomatis riwayat pengajuan sakit/izin yang sudah lebih dari 30 hari (record + foto bukti di Storage) — tidak berpengaruh ke data Rekap Kehadiran karena sumber data terpisah
 
 Status: ACTIVE
 
@@ -315,6 +320,18 @@ Status: ACTIVE
 - Logika Otomatis: Siswa SP1/SP2/SP3 otomatis masuk hitungan kartu "Dalam Pembinaan"
 - Logika Kunci: Siswa Pindah/Keluar tidak bisa diedit formnya (Terkunci) dan otomatis tidak masuk hitungan aktif
 - Integrasi: Mengubah status ke Pindah/Keluar otomatis mengubah status tabel siswa dan mengirim data ke Rekap Pindah & Keluar
+- Wali Kelas: Bisa mengisi form penanganan siswa binaannya (Pendampingan BK, Tahap, SP, Catatan, Penggalian, Tindakan, Hasil) — bukan hanya read-only
+- Wali Kelas: Filter otomatis hanya menampilkan siswa kelas binaannya (berdasarkan kolom users.kelas + users.jurusan dari database)
+- Wali Kelas: Info Penanggung Jawab (Wali Kelas & Sekretaris) ditampilkan via PJInfoCard
+- Wali Kelas: Tidak bisa mengubah Status Akhir (Pindah/Keluar) — hanya Administrator
+- Wali Kelas: Tidak bisa menekan tombol Reset Semua Penanganan — hanya Administrator
+- Dropdown Pendampingan BK otomatis set Tahap Penanganan: Belum Pendampingan→Belum Pembinaan, Pendampingan 1→Dalam Pembinaan, Pendampingan 2→SP1, Pendampingan 3→SP2, Pendampingan 4→SP3, Pendampingan Terakhir→Mutasi
+- Dropdown Tahap Penanganan otomatis sinkronisasi checkbox SP1/SP2/SP3 saat dipilih
+- Dropdown Status Akhir: Hanya opsi Aktif, Pindah, Keluar (opsi Mutasi dihapus)
+- Badge STATUS SAAT INI: Pindah tampil badge hijau "Pindah", Keluar tampil badge merah "Keluar" (bukan "Mutasi")
+- Halaman Penanganan Siswa untuk Wali Kelas diakses via /wali-kelas/penanganan (import komponen yang sama dengan Admin)
+- Filter Status Penanganan (SP1/SP2/SP3): Menggunakan batch query (100 NISN per batch) agar data lengkap meski tanpa filter Tingkat
+- Konfirmasi Reset Semua Penanganan menggunakan modal popup 2 langkah (bukan browser confirm): Step 1 peringatan detail apa yang dihapus + jumlah per kategori, Step 2 ketik "HAPUS SEMUA", loading state spinner, result sukses/gagal — hanya Administrator
 
 Status: ACTIVE
 
@@ -386,13 +403,20 @@ Status: ACTIVE
 
 ## Menu Hari Efektif (Setting)
 - Halaman Manajemen Hari Efektif & Kalender Akademik (/setting/hari-efektif)
-- Kartu Statistik (Hari Efektif, Libur Nasional, Libur Sekolah, Total Non-Efektif)
+- Kartu Statistik (7 kartu: Hari Efektif, Nasional, Sekolah, Semester, Ujian, Kegiatan, Khusus) dengan warna berbeda per kategori
 - 4 Tab Navigasi: Hari Libur Manual, Kalender Pendidikan, Preview Kalender, Riwayat Aktivitas
-- Tab Libur: CRUD Hari Libur, Import/Export CSV, Tombol Hapus Semua Data
+- Tab Libur: CRUD Hari Libur, Import/Export CSV dengan loading state, Tombol Hapus Semua Data
+- Tab Libur: Filter dropdown lengkap 6 kategori (Nasional, Sekolah, Semester, Ujian, Kegiatan Sekolah, Khusus)
+- Tab Libur: Badge kategori di tabel berwarna sesuai jenis (merah/kuning/ungu/biru/teal/abu)
 - Tab Kalender: Setup Tahun Pelajaran, Semester, Tanggal, Hanya 1 Kalender Boleh Aktif
-- Tab Preview: Tampilan Kalender Bulan Ini (Warna blok sesuai status)
-- Tab Riwayat: Audit Trail aktivitas admin
+- Tab Preview: Tampilan Kalender per Bulan dengan navigasi bulan lalu/depan (ChevronLeft/Right)
+- Tab Preview: Warna blok sesuai 6 kategori + highlight tanggal hari ini (ring biru)
+- Tab Preview: Fix off-by-1 tanggal menggunakan toLocaleDateString('sv-SE') bukan toISOString()
+- Tab Riwayat: Audit Trail aktivitas admin, otomatis terhapus saat klik "Hapus Semua Data"
 - Otomatis Sabtu & Minggu dihitung sebagai hari non-efektif
+- Import CSV: Batch insert (1 query untuk semua row) dengan fallback per-row, 1x cache invalidation, 1x log aktivitas
+- Fix cache: invalidateCacheByPrefix digunakan di semua operasi write (sebelumnya invalidateCache yang tidak ada menyebabkan error)
+- Fix perhitungan Hari Efektif: Sekarang mengecualikan Sabtu & Minggu (hanya Senin-Jumat) sehingga konsisten dengan Rekap Kehadiran — sebelumnya menghitung semua hari kalender minus libur termasuk weekend
 
 Status: ACTIVE
 
@@ -503,6 +527,16 @@ Status: ACTIVE
 - Skeleton loading saat memuat data
 - Halaman tidak menggunakan AppShell (standalone page)
 - Matching Wali Kelas & Sekretaris menggunakan logika fleksibel (exact, tingkat, substring)
+- Fix matching Wali Kelas & Sekretaris: Gunakan getPJByClass dari penanggungJawabActions.js (sumber data sama dengan halaman Penanggung Jawab) agar 100% konsisten dan sinkron dengan database
+- Hapus pesan di chat Pesan Wali Kelas (hanya pesan dari Orang Tua, dengan validasi sender_type, tombol muncul saat hover)
+- Lonceng Notifikasi: Tombol lonceng di top nav dengan badge unread, Supabase Realtime subscription, polling fallback 15 detik
+- Lonceng Notifikasi: Animasi shake berulang setiap 5 detik saat ada notif belum dibaca
+- Lonceng Notifikasi: Notifikasi muncul saat Wali Kelas membalas pesan (judul "💬 Balasan dari Wali Kelas" + preview pesan)
+- Lonceng Notifikasi: Click outside untuk menutup dropdown (mouse + touch)
+- Lonceng Notifikasi: Notifikasi orang tua otomatis dihapus setelah 7 hari
+- Auto-hapus pesan chat diubah dari 10 hari menjadi 7 hari
+- Kalender Akademik: Navigasi bulan lalu/depan sekarang menampilkan hari libur yang benar  sebelumnya hanya fetch data libur bulan ini sehingga bulan lain kosong
+- Kalender Akademik: Cache key disesuaikan agar otomatis ter-clear saat Admin menambah/edit/hapus hari libur di halaman Hari Efektif
 
 Status: ACTIVE
 
@@ -671,7 +705,7 @@ Status: ACTIVE
 - Komponen DashboardNotifications (Widget 5 notifikasi terbaru di Dashboard)
 - Halaman Pusat Notifikasi (/notifikasi) dengan filter lengkap
 - Tab Status: Semua, Belum Dibaca, Sudah Dibaca, Penting, Sistem
-- Tab Waktu: Semua Waktu, Hari Ini, 7 Hari, 30 Hari
+- Tab Waktu: Semua Waktu, Hari Ini, 7 Hari
 - Pencarian notifikasi real-time
 - Tandai Dibaca (satu / semua), Hapus (satu / semua)
 - Pagination halaman notifikasi
@@ -711,24 +745,21 @@ Status: ACTIVE
 ## Navigasi Bawah Mobile (Halaman Khusus)
 - 5 tombol navigasi bawah: Siswa, Sekretaris, OSIS, Wali Kelas, Admin
 - Setiap tombol mengarah ke halaman khusus (/mobile/*)
-- Halaman Mobile Siswa: 6 menu (Portal Orang Tua, Absen Sakit/Izin, Cari Data Siswa, Absen Mandiri, Siswa Berprestasi, Seputar Sekolah)
+- Halaman Mobile Siswa: 7 menu (Portal Orang Tua, Absen Sakit/Izin, Cari Data Siswa, Absen Mandiri, Absensi PKL, Siswa Berprestasi, Seputar Sekolah)
 - Halaman Mobile Sekretaris: 1 menu (Absensi Kehadiran)
 - Halaman Mobile OSIS: 2 menu (Entri Reward, Entri Pelanggaran)
-- Halaman Mobile Wali Kelas: 5 menu (Entri Reward, Entri Pelanggaran, Rekap Pelanggaran, - Rekap Sakit/Izin, Rekap Kehadiran)
-- Halaman Mobile Admin: 10 menu (Daftar Siswa, Penanganan, Rekap Reward, Rekap Formulir, - Rekap Pindah/Keluar, Manajemen User, Profil SIPANDU, Penanggung Jawab, Hari Efektif, Pos Berita)
-- Desain kartu grid 2 kolom dengan border warna kiri unik per menu
-- Animasi staggered slide-up (80ms delay per kartu)
-- Header gradient dengan ikon unik per kategori
+- Halaman Mobile Wali Kelas: 7 menu (Entri Reward, Entri Pelanggaran, Rekap Pelanggaran, Rekap Sakit & Izin, Rekap Kehadiran, Rekap Kehadiran PKL, Penanganan Siswa)
+- Halaman Mobile Admin: 12 menu (Daftar Siswa, Penanganan Siswa, Rekap Reward, Rekap Formulir, Rekap Pindah/Keluar, Manajemen User, Profil SIPANDU, Penanggung Jawab, Hari Efektif, QR Absensi, Konfigurasi WhatsApp, Pos Berita)
+- Desain kartu menu full gradient warna dengan ikon putih transparan
+- Animasi hover: kartu naik (translate-y-2), bayangan membesar (shadow-2xl), dekorasi lingkaran pojok mengembang (scale 1.5x/1.8x)
+- Ikon kartu berwarna putih transparan (bg-white/20) dengan animasi bounce naik-turun (2 detik per siklus, 100ms stagger per kartu)
+- Dekorasi lingkaran putih transparan di pojok kanan bawah setiap kartu
+- Teks judul putih, deskripsi putih transparan (white/65)
+- Gradient dan shadow menggunakan inline style (bukan class Tailwind dinamis) untuk menghindari masalah JIT purge
+- Header gradient 3 warna dengan dekorasi lingkaran, emoji, tombol kembali
 - Akses control: halaman menampilkan "Akses Ditolak" jika role tidak sesuai
 - Tap feedback: active:scale-95 pada setiap kartu
 - Tombol navigasi bawah hanya muncul sesuai role (Sekretaris/OSIS/Wali/Admin)
-- Desain kartu menu diubah: dari kartu putih dengan border kiri warna menjadi kartu full gradient warna
-- Ikon kartu berwarna putih transparan (bg-white/20) dengan animasi bounce naik-turun (2 detik per siklus)
-- Setiap kartu memiliki delay bounce berbeda (150ms per indeks) agar gerakan tidak serempak
-- Dekorasi lingkaran putih transparan (bg-white/10) di pojok kanan bawah setiap kartu
-- Teks judul putih, deskripsi putih transparan (white/70)
-- Gradient dan shadow menggunakan inline style (bukan class Tailwind dinamis) untuk menghindari masalah JIT purge
-- Mobile Admin: Tambah kartu menu "QR Absensi" dengan ikon QrCode, warna amber, mengarah ke /setting/qr-absensi
 
 Status: ACTIVE
 
@@ -841,6 +872,10 @@ Status: ACTIVE
 - Admin: tidak ada batasan tanggal maksimal masa depan (max={today})
 - Status submitted otomatis reset saat Admin ganti tanggal
 - Fix: tidak ada lagi duplikasi data saat sekretaris klik tombol berkali-kali sebelum simpan
+- Sekretaris: Setelah klik "Kirim & Kunci Absensi", jika ada siswa Alpha maka modal konfirmasi WhatsApp otomatis terbuka — cukup 1x klik untuk kirim absen + finalisasi WA
+- Sekretaris: Tombol "Minta Persetujuan Edit" baru muncul setelah seluruh alur kirim absensi selesai (termasuk modal WA ditutup/dilewati)
+- Modal WhatsApp: Tombol "Batal" diganti "Lewati" agar Sekretaris bisa melewati pengiriman WA tanpa membatalkan
+- Modal WhatsApp: Tambahkan empty state saat tidak ada siswa Alpha yang memiliki nomor WA valid
 
 Status: ACTIVE
 
@@ -879,6 +914,7 @@ Status: ACTIVE
 - Tombol Refresh Data di header tabel
 - Optimalisasi: Stats dihitung langsung dari data tabel tanpa query terpisah (hemat 1 DB round-trip)
 - Wali Kelas: dropdown Tingkat & Jurusan disabled, hanya data kelas binaan, tombol Hapus Semua tersembunyi
+- Konfirmasi Hapus Semua menggunakan modal popup 2 langkah (bukan browser prompt): Step 1 peringatan detail jumlah siswa & poin, Step 2 ketik "HAPUS SEMUA", loading state spinner, result sukses/gagal
 
 Status: ACTIVE
 
@@ -896,12 +932,6 @@ Status: ACTIVE
 - Fix filter Jurusan: Dropdown dinamis dari database (bukan hardcode 12 opsi manual)
 - Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
 - Menggunakan getKelasFilters() sama seperti Rekap Kehadiran
-
-Status: ACTIVE
-
-## Portal Orang Tua (Update)
-- Fix matching Wali Kelas & Sekretaris: Gunakan getPJByClass dari penanggungJawabActions.js (sumber data sama dengan halaman Penanggung Jawab) agar 100% konsisten dan sinkron dengan database
-- Hapus pesan di chat Pesan Wali Kelas (hanya pesan dari Orang Tua, dengan validasi sender_type, tombol muncul saat hover)
 
 Status: ACTIVE
 
@@ -992,6 +1022,14 @@ Status: ACTIVE
 - Tombol Tandai Semua Dibaca & Hapus Semua
 - Tombol aksi per notifikasi (navigasi ke halaman terkait)
 - Footer "Lihat Semua Notifikasi →" ke halaman pusat notifikasi
+- Popup konfirmasi revisi absensi untuk Admin: klik notif "Permintaan Revisi Baru" → muncul popup detail (kelas, tanggal, alasan) dengan tombol Setujui/Tolak, bukan redirect ke halaman Absensi
+- Popup konfirmasi revisi absensi juga berfungsi di halaman Pusat Notifikasi (/notifikasi) — konsisten dengan tombol lonceng
+- Setelah Admin setujui → notif ke Sekretaris "✅ Revisi Absensi Disetujui" dengan action ke /absensi
+- Setelah Admin tolak → notif ke Sekretaris "❌ Revisi Absensi Ditolak"
+- Polling fallback 15 detik di NotificationCenter — notif tetap muncul meski WebSocket Supabase gagal connect
+- Tambah server action getEditRequestDetails() untuk fetch detail permintaan revisi di popup
+- Fix dropdown mobile: Scroll di dalam panel tidak lagi menutup dropdown — sebelumnya scroll event menutup panel sehingga tombol "Lihat Semua Notifikasi" tidak bisa dicapai
+- Auto-hapus notifikasi diubah dari 30 hari menjadi 7 hari
 
 Status: ACTIVE
 - Fix shake interval dari 4000ms menjadi 5000ms (tidak terlalu sering)
@@ -1107,15 +1145,7 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Notifikasi Lonceng (Update — 2026-07-06)
-- Popup konfirmasi revisi absensi untuk Admin: klik notif "Permintaan Revisi Baru" → muncul popup detail (kelas, tanggal, alasan) dengan tombol Setujui/Tolak, bukan redirect ke halaman Absensi
-- Popup konfirmasi revisi absensi juga berfungsi di halaman Pusat Notifikasi (/notifikasi) — konsisten dengan tombol lonceng
-- Setelah Admin setujui → notif ke Sekretaris "✅ Revisi Absensi Disetujui" dengan action ke /absensi
-- Setelah Admin tolak → notif ke Sekretaris "❌ Revisi Absensi Ditolak"
-- Polling fallback 15 detik di NotificationCenter — notif tetap muncul meski WebSocket Supabase gagal connect
-- Tambah server action getEditRequestDetails() untuk fetch detail permintaan revisi di popup
-
-Status: ACTIVE
+--- 
 
 ## Login Admin Hardcoded (Update — 2026-07-06)
 - Fix kritis: Login admin/admin123 sekarang menggunakan server action getAdminLoginData() (supabaseAdmin, bypass RLS) bukan client supabase yang diblokir RLS
@@ -1340,5 +1370,21 @@ Status: ACTIVE
 - Throttle deleteOldNotifications: Dari setiap 15 detik menjadi max 1x per 5 menit
 - Invalidate otomatis: Setiap operasi write (save, delete, reset) secara otomatis meng-invalidate cache terkait agar data selalu konsisten
 - Singleton Supabase Client: lib/supabase-admin.js dan lib/supabase.js menggunakan 1 instance per warm instance — mengurangi 50-70% koneksi DB baru
+
+Status: ACTIVE
+
+--- 
+
+## Rekap Kehadiran PKL (Update)
+- Fix filter Wali Kelas: Siswa kelas lain tidak lagi muncul — filter menggunakan exact match (===) bukan substring match (.includes()), sehingga kelas "XI" tidak lagi mencocokkan "XII"
+- Tab Bulanan: Tampilan disamakan dengan Rekap Kehadiran reguler — header 2 baris (Nama Bulan + Tanggal/Hari), kolom No, kolom Hari Efektif (dihitung dari work_days per siswa), kolom Total H/S/I/A/T, kolom % Hadir
+- Tab Bulanan: Sticky kolom No/Nama/L/P hanya aktif di desktop (md:sticky), di HP bebas digeser
+- Tab Bulanan: Border konsisten menggunakan border-r border-b pada setiap sel
+- Tab Bulanan: Hari libur background merah pekat dengan teks putih
+- Realtime Alpha: Status Alpha hanya dihitung sampai hari ini (isPastOrToday), tanggal masa depan yang belum terjadi tidak langsung di-mark Alpha
+- Realtime Alpha: Hari Efektif hanya menghitung hari kerja sampai hari ini, sehingga Total Alpha tidak pernah melebihi Hari Efektif
+- Fix double-counting: Angka status di kolom Total tab bulanan akurat (sebelumnya terhitung 2x karena increment di loop pre-calculation DAN di JSX render)
+- Export CSV/PDF tab bulanan: Kolom Hari Efektif dan % Hadir sudah termasuk
+- Tab Semester: Alpha juga menggunakan batasan realtime (hanya sampai hari ini)
 
 Status: ACTIVE

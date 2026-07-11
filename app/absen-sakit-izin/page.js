@@ -120,7 +120,7 @@ export default function AbsenSakitIzinPage() {
     }
 
     const res = await submitSakitIzin(formData)
-    if (res.success) { setAlreadySubmitted(true); setToast({ type: 'success', message: 'Absensi Sakit/Izin berhasil dikirim & Sinkron ke Rekap!' }) } 
+    if (res.success) { setAlreadySubmitted(true); setToast({ type: 'success', message: 'Absensi Sakit/Izin berhasil dikirim!' }) } 
     else { setToast({ type: 'error', message: res.error || 'Gagal mengirim absensi' }) }
     setSubmitting(false)
   }

@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, TrendingUp, Star, Users, Eye, X, Search, Filter, RefreshCw, FileText, Trash2 } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { AlertTriangle, TrendingUp, Star, Users, Eye, X, Search, Filter, RefreshCw, FileText, Trash2, ChevronDown, ShieldAlert, Loader2 } from 'lucide-react'
 import { getRekapPelanggaranTable, getStudentDetailPelanggaran, deleteAllPelanggaran } from '@/app/actions/pelanggaranActions'
 import { getKelasFilters } from '@/app/actions/absensiActions'
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
@@ -35,7 +35,15 @@ export default function RekapPelanggaran() {
   const [loading, setLoading] = useState(true)
   const [showDetail, setShowDetail] = useState(null)
   const [detailData, setDetailData] = useState(null)
+  const [showStatusRef, setShowStatusRef] = useState(false)
+
+  // Modal Hapus Semua
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteStep, setDeleteStep] = useState(1)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deletingAll, setDeletingAll] = useState(false)
+  const [deleteResult, setDeleteResult] = useState(null)
+  const deleteInputRef = useRef(null)
 
   // Filter States
   const [tingkatFilter, setTingkatFilter] = useState('')
@@ -50,16 +58,25 @@ export default function RekapPelanggaran() {
       if (stored) {
         const u = JSON.parse(stored)
         setUserData(u)
-        if (u.role === 'Wali Kelas' && u.kelas) {
-          const parts = u.kelas.trim().split(/\s+/)
-          if (parts.length >= 2) {
-            setTingkatFilter(parts[0])
-            setJurusanFilter(parts.slice(1).join(' '))
-          }
+        if (u.role === 'Wali Kelas') {
+          const tingkat = (u.kelas || '').trim().split(/\s+/)[0] || ''
+          const jurusan = (u.jurusan || '').trim() || (() => {
+            const parts = (u.kelas || '').trim().split(/\s+/)
+            return parts.length >= 3 ? parts.slice(1).join(' ') : (parts[1] || '')
+          })()
+          if (tingkat) setTingkatFilter(tingkat)
+          if (jurusan) setJurusanFilter(jurusan)
         }
       }
     } catch {}
   }, [])
+
+  // Auto-focus input konfirmasi saat step 2
+  useEffect(() => {
+    if (showDeleteModal && deleteStep === 2 && deleteInputRef.current) {
+      setTimeout(() => deleteInputRef.current?.focus(), 100)
+    }
+  }, [showDeleteModal, deleteStep])
 
   // Fetch kelas jurusan untuk filter dropdown
   useEffect(() => {
@@ -70,7 +87,7 @@ export default function RekapPelanggaran() {
     fetchFilters()
   }, [])
 
-  // Fetch data utama — optimasi: hanya 1 query, stats dihitung dari tableData
+  // Fetch data utama
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
@@ -112,7 +129,7 @@ export default function RekapPelanggaran() {
     return result
   }, [tableData, tingkatFilter, jurusanFilter, searchTerm])
 
-  // Stats dihitung langsung dari filteredData — tanpa query terpisah
+  // Stats dihitung langsung dari filteredData
   const stats = useMemo(() => ({
     total: filteredData.reduce((s, d) => s + (d.total_pelanggaran || 0), 0),
     ringan: filteredData.reduce((s, d) => s + (d.ringan || 0), 0),
@@ -133,21 +150,37 @@ export default function RekapPelanggaran() {
     setShowDetail(nisn)
   }
 
-  const handleDeleteAll = async () => {
-    const val1 = prompt('Ketik "HAPUS SEMUA" untuk konfirmasi:')
-    if (val1 !== 'HAPUS SEMUA') return alert('Konfirmasi dibatalkan.')
-    const val2 = prompt('Ketik sekali lagi "HAPUS SEMUA" untuk memastikan:')
-    if (val2 !== 'HAPUS SEMUA') return alert('Konfirmasi dibatalkan.')
+  // ── Modal Hapus Semua: buka modal ──
+  const openDeleteModal = () => {
+    setDeleteStep(1)
+    setDeleteConfirmText('')
+    setDeleteResult(null)
+    setShowDeleteModal(true)
+  }
 
+  // ── Modal Hapus Semua: tutup modal ──
+  const closeDeleteModal = () => {
+    if (deletingAll) return // tidak bisa tutup saat sedang menghapus
+    setShowDeleteModal(false)
+    setDeleteStep(1)
+    setDeleteConfirmText('')
+    setDeleteResult(null)
+  }
+
+  // ── Modal Hapus Semua: eksekusi hapus ──
+  const executeDeleteAll = async () => {
     setDeletingAll(true)
+    setDeleteResult(null)
     try {
       const result = await deleteAllPelanggaran()
-      if (result.error) throw new Error(result.error)
-      fetchData()
-      alert('Semua data pelanggaran berhasil dihapus.')
+      if (result.error) {
+        setDeleteResult({ success: false, message: result.error })
+      } else {
+        setDeleteResult({ success: true, message: `Semua data pelanggaran berhasil dihapus. Total poin ${filteredData.length} siswa telah direset ke 0.` })
+        fetchData()
+      }
     } catch (err) {
-      console.error(err)
-      alert('Gagal menghapus: ' + err.message)
+      setDeleteResult({ success: false, message: 'Gagal menghapus: ' + err.message })
     }
     setDeletingAll(false)
   }
@@ -227,7 +260,7 @@ export default function RekapPelanggaran() {
       '</head><body>' +
         kopHTML +
         '<div style="text-align:center;margin-bottom:16px;">' +
-          '<h2 style="margin:0;font-size:16px;">REKAP PELANGGARAN SISWA</h2>' +
+          '<h2 style="margin:0;font-size:16px;">REKAP PELANGARAN SISWA</h2>' +
           '<p style="margin:4px 0 0 0;font-size:13px;font-weight:bold;">Tingkat: ' + (tingkatFilter || 'Semua Tingkat') + ' — Semua Jurusan</p>' +
           '<p style="margin:4px 0 0 0;font-size:11px;color:#6b7280;">Total: ' + dataToPrint.length + ' siswa, ' + grandTotal + ' poin pelanggaran</p>' +
         '</div>' +
@@ -254,6 +287,63 @@ export default function RekapPelanggaran() {
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Rekap Pelanggaran Siswa</h1>
           <p className="text-red-100 mt-2 text-sm md:text-base font-medium">Monitoring riwayat pelanggaran siswa kelas binaan Anda.</p>
         </div>
+      </div>
+
+      {/* Keterangan Status Disiplin */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <button
+          onClick={() => setShowStatusRef(!showStatusRef)}
+          className="w-full flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
+            <FileText size={16} className="text-indigo-600" />
+            Keterangan Status Disiplin
+          </div>
+          <ChevronDown size={16} className={`text-gray-400 transition-transform duration-200 ${showStatusRef ? 'rotate-180' : ''}`} />
+        </button>
+        {showStatusRef && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-200 px-4 py-2.5 text-left text-xs font-bold text-gray-600">Status Disiplin</th>
+                  <th className="border border-gray-200 px-4 py-2.5 text-center text-xs font-bold text-gray-600">Total Poin</th>
+                  <th className="border border-gray-200 px-4 py-2.5 text-left text-xs font-bold text-gray-600">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-gray-200 px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">Sangat Baik</span>
+                  </td>
+                  <td className="border border-gray-200 px-4 py-3 text-center font-bold text-green-700">0 – 5</td>
+                  <td className="border border-gray-200 px-4 py-3 text-xs text-gray-600">Siswa belum mendapatkan pelanggaran atau total poin masih di bawah 6 poin. Tidak ada tindakan yang diperlukan.</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-200 px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">Perlu Pembinaan</span>
+                  </td>
+                  <td className="border border-gray-200 px-4 py-3 text-center font-bold text-yellow-700">6 – 10</td>
+                  <td className="border border-gray-200 px-4 py-3 text-xs text-gray-600">Siswa mulai menunjukkan perilaku yang perlu pembinaan dari Wali Kelas. Wali Kelas koordinasi dengan Kaprodi wajib melakukan pembinaan dan pencatatan.</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-200 px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700">Pengawasan Khusus</span>
+                  </td>
+                  <td className="border border-gray-200 px-4 py-3 text-center font-bold text-orange-700">11 – 20</td>
+                  <td className="border border-gray-200 px-4 py-3 text-xs text-gray-600">Akumulasi pelanggaran cukup signifikan. Guru BK perlu melakukan pengawasan khusus, konsultasi dengan Wali Kelas, Waka Kesiswaan dan membuat catatan.</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-200 px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">Prioritas Pembinaan</span>
+                  </td>
+                  <td className="border border-gray-200 px-4 py-3 text-center font-bold text-red-700">&gt; 20</td>
+                  <td className="border border-gray-200 px-4 py-3 text-xs text-gray-600">Pelanggaran berat (Mencuri, Bullying, Berjudi, dll) atau akumulasi sangat tinggi. Wali Kelas wajib memproses segera, koordinasi dengan Guru BK, Kaprodi, Waka Kesiswaan, Kepala Sekolah untuk SP, dan melaporkan ke Administrator.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Stat Cards */}
@@ -348,14 +438,12 @@ export default function RekapPelanggaran() {
             >
               <FileText size={14} /> PDF Per Tingkat
             </button>
-            {/* Hapus Semua — khusus Administrator */}
             {!isWK && (
               <button
-                onClick={handleDeleteAll}
-                disabled={deletingAll}
-                className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+                onClick={openDeleteModal}
+                className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-700 transition shadow-sm"
               >
-                <Trash2 size={14} /> {deletingAll ? 'Menghapus...' : 'Hapus Semua'}
+                <Trash2 size={14} /> Hapus Semua
               </button>
             )}
             <button
@@ -427,7 +515,7 @@ export default function RekapPelanggaran() {
         </div>
       </div>
 
-      {/* Modal Detail */}
+      {/* ── Modal Detail Pelanggaran ── */}
       {showDetail && detailData && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDetail(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
@@ -456,7 +544,7 @@ export default function RekapPelanggaran() {
                         <div>
                           <p className="font-semibold text-gray-800 text-sm">{'\u26A0\uFE0F'} {p.jenis_pelanggaran}</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {new Date(p.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} {'\u2022'} {p.kategori} {'\u2022'} oleh {p.dicatat_oleh}
+                            {new Date(p.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} {'\u2022'} {p.kategori} {'\u2022'} oleh {p.dicatat_oleg}
                           </p>
                           {p.kronologi && (
                             <p className="text-xs text-gray-400 mt-1 italic">"{p.kronologi}"</p>
@@ -476,6 +564,155 @@ export default function RekapPelanggaran() {
                   <p className="text-sm text-gray-400 ml-6">Belum ada riwayat</p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Konfirmasi Hapus Semua (2 Langkah) ── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeDeleteModal}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={e => e.stopPropagation()}
+            style={{ animation: 'scaleIn 0.2s ease-out' }}
+          >
+            {/* Header Merah */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-600 p-5 text-white text-center relative">
+              <button
+                onClick={closeDeleteModal}
+                disabled={deletingAll}
+                className="absolute top-3 right-3 text-white/70 hover:text-white disabled:opacity-30 transition"
+              >
+                <X size={18} />
+              </button>
+              <div className="w-14 h-14 mx-auto bg-white/20 rounded-full flex items-center justify-center mb-3 border border-white/30">
+                <ShieldAlert size={28} />
+              </div>
+              <h3 className="text-lg font-extrabold">Hapus Semua Pelanggaran</h3>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              {/* Step Indicator */}
+              <div className="flex items-center justify-center gap-2 mb-5">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${deleteStep >= 1 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-400'}`}>1</div>
+                <div className={`w-10 h-0.5 transition-colors ${deleteStep >= 2 ? 'bg-red-600' : 'bg-gray-200'}`}></div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${deleteStep >= 2 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-400'}`}>2</div>
+              </div>
+
+              {/* Step 1: Peringatan */}
+              {deleteStep === 1 && !deleteResult && (
+                <div className="space-y-4">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p className="text-sm text-red-800 font-semibold mb-2">⚠️ Perhatian!</p>
+                    <p className="text-xs text-red-700 leading-relaxed">
+                      Tindakan ini akan menghapus <strong>seluruh data pelanggaran</strong> dari tabel <code className="bg-red-100 px-1 py-0.5 rounded text-[10px]">tb_pelanggaran_siswa</code> dan <strong>mereset total poin pelanggaran menjadi 0</strong> untuk semua siswa.
+                    </p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p className="text-xs text-amber-800">
+                      📊 Saat ini terdapat <strong>{filteredData.length} siswa</strong> dengan total <strong>{stats.total} poin</strong> pelanggaran yang akan dihapus.
+                    </p>
+                  </div>
+
+                  <p className="text-xs text-gray-500 text-center">Tindakan ini tidak dapat dibatalkan.</p>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={closeDeleteModal}
+                      disabled={deletingAll}
+                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={() => setDeleteStep(2)}
+                      disabled={deletingAll}
+                      className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+                    >
+                      Lanjutkan
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Ketik Konfirmasi */}
+              {deleteStep === 2 && !deleteResult && (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                    <p className="text-sm text-gray-700 mb-3">Ketik <code className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold text-sm">HAPUS SEMUA</code> untuk konfirmasi:</p>
+                    <input
+                      ref={deleteInputRef}
+                      type="text"
+                      value={deleteConfirmText}
+                      onChange={e => setDeleteConfirmText(e.target.value)}
+                      placeholder="HAPUS SEMUA"
+                      disabled={deletingAll}
+                      className="w-full text-center py-3 px-4 border-2 border-gray-200 rounded-xl text-sm font-mono font-bold tracking-wider focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setDeleteStep(1)}
+                      disabled={deletingAll}
+                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      ← Kembali
+                    </button>
+                    <button
+                      onClick={executeDeleteAll}
+                      disabled={deletingAll || deleteConfirmText !== 'HAPUS SEMUA'}
+                      className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-sm flex items-center justify-center gap-2"
+                    >
+                      {deletingAll ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Menghapus...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 size={14} />
+                          Hapus Permanen
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Result: Sukses / Gagal */}
+              {deleteResult && (
+                <div className="space-y-4">
+                  {deleteResult.success ? (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                      <div className="w-12 h-12 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-3">
+                        <span className="text-2xl">✅</span>
+                      </div>
+                      <p className="text-sm text-green-800 font-semibold mb-1">Berhasil Dihapus</p>
+                      <p className="text-xs text-green-700 leading-relaxed">{deleteResult.message}</p>
+                    </div>
+                  ) : (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                      <div className="w-12 h-12 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-3">
+                        <span className="text-2xl">❌</span>
+                      </div>
+                      <p className="text-sm text-red-800 font-semibold mb-1">Gagal Menghapus</p>
+                      <p className="text-xs text-red-700 leading-relaxed">{deleteResult.message}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={closeDeleteModal}
+                    className="w-full py-2.5 rounded-xl bg-gray-800 text-white text-sm font-semibold hover:bg-gray-900 transition shadow-sm"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

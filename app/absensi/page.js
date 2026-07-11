@@ -245,9 +245,20 @@ export default function AbsensiKehadiran() {
     const saveResult = await batchUpsertAbsensi(records)
     if (saveResult.error) { showToast(saveResult.error, 'error'); setIsSubmitting(false); return }
     const lockResult = await submitAbsensi(fetchDate, selectedTingkat, selectedJurusan)
-    if (lockResult.error) showToast(lockResult.error, 'error')
-    else { setIsSubmitted(true); showToast('Absensi berhasil dikirim dan terkunci!') }
+    if (lockResult.error) { showToast(lockResult.error, 'error'); setIsSubmitting(false); return }
+
+    setIsSubmitted(true)
     setIsSubmitting(false)
+
+    // Setelah absensi terkunci, cek apakah ada siswa Alpha
+    // Jika ada, otomatis buka modal konfirmasi WA — sekretaris cukup 1x klik
+    const alphaStudents = siswaList.filter(s => s.status === 'Alpha')
+    if (alphaStudents.length > 0) {
+      showToast('Absensi berhasil dikirim dan terkunci!', 'success')
+      await handleOpenWAModal()
+    } else {
+      showToast('Absensi berhasil dikirim dan terkunci!', 'success')
+    }
   }
 
   const handleRequestEdit = async () => {
@@ -265,10 +276,39 @@ export default function AbsensiKehadiran() {
   // [WA] FINALISASI & KIRIM WHATSAPP
   // ═══════════════════════════════════════════════════════════
   const handleOpenWAModal = async () => {
-    // 1. Cari siswa Alpha yang punya parent_whatsapp
+    const alphaLocal = siswaList.filter(s => s.status === 'Alpha')
+    if (alphaLocal.length === 0) {
+      showToast('Tidak ada siswa Alpha', 'error')
+      return
+    }
+
     const res = await getAlphaStudentsForWA(fetchDate, selectedTingkat, selectedJurusan)
-    if (res.error) { showToast(res.error, 'error'); return }
-    setWaAlphaStudents(res.students || [])
+    if (res.error) {
+      showToast(res.error, 'error')
+      return
+    }
+
+    const waPhoneMap = new Map()
+    ;(res.students || []).forEach(s => {
+      const key = String(s.siswa_id || s.id || '')
+      if (key) waPhoneMap.set(key, s.phone || s.parent_whatsapp || '')
+    })
+
+    const alphaStudents = alphaLocal.map(s => {
+      const phone = waPhoneMap.get(String(s.id)) || ''
+      const phoneTrimmed = phone.trim()
+      return {
+        id: s.id,
+        nisn: s.nisn,
+        nama: s.nama,
+        kelas: s.kelas,
+        jurusan: s.jurusan,
+        phone: phoneTrimmed || 'Tidak ada nomor',
+        phoneValid: phoneTrimmed.length >= 10
+      }
+    })
+
+    setWaAlphaStudents(alphaStudents)
     setWaModal('confirm')
   }
 
@@ -282,7 +322,6 @@ export default function AbsensiKehadiran() {
     }
     setWaResult(res.results)
     setWaModal('result')
-    // Refresh data absensi
     fetchData()
     checkSubmitted()
   }
@@ -451,7 +490,6 @@ export default function AbsensiKehadiran() {
                   <><span className="px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold border border-blue-200">✅ Admin menyetujui edit (1x saja)</span><button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Perubahan</>}</button></>
                 )}
                 {isAdmin && <button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Semua</>}</button>}
-                {/* [WA] Tombol Finalisasi & Kirim WhatsApp — hanya untuk Admin */}
                 {isAdmin && stats.alpha > 0 && (
                   <button onClick={handleOpenWAModal}
                     className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 transition flex items-center gap-2 shadow-lg shadow-green-500/25">
@@ -495,7 +533,7 @@ export default function AbsensiKehadiran() {
               <>
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-4 text-white shrink-0">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg"><MessageCircle size={20} /></div><div><h3 className="font-bold text-sm">Finalisasi & Kirim WhatsApp</h3><p className="text-xs text-green-100">Konfirmasi pengiriman notifikasi</p></div></div>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg"><MessageCircle size={20} /></div><div><h3 className="font-bold text-sm">Finalisasi & Kirim WhatsApp</h3><p className="text-xs text-green-100">Konfirmasi pengiriman notifikasi ke orang tua</p></div></div>
                     <button onClick={handleCloseWAModal} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition shrink-0"><X size={16} /></button>
                   </div>
                 </div>
@@ -531,9 +569,15 @@ export default function AbsensiKehadiran() {
                       </div>
                     </div>
                   )}
+
+                  {waAlphaStudents.filter(s => s.phoneValid).length === 0 && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                      <p className="text-sm text-gray-500">Tidak ada siswa Alpha yang memiliki nomor WA orang tua. Pengiriman WhatsApp tidak dapat dilakukan.</p>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 border-t bg-gray-50 shrink-0 flex gap-3">
-                  <button onClick={handleCloseWAModal} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">Batal</button>
+                  <button onClick={handleCloseWAModal} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">Lewati</button>
                   <button onClick={handleExecuteSendWA} disabled={waAlphaStudents.filter(s => s.phoneValid).length === 0}
                     className="flex-1 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl text-sm font-bold hover:from-green-700 hover:to-emerald-700 transition shadow-lg shadow-green-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                     <Send size={16} /> Kirim Sekarang
@@ -564,7 +608,6 @@ export default function AbsensiKehadiran() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                  {/* Summary cards */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
                       <p className="text-2xl font-extrabold text-green-700">{waResult.filter(r => r.status === 'success').length}</p>
@@ -580,7 +623,6 @@ export default function AbsensiKehadiran() {
                     </div>
                   </div>
 
-                  {/* Detail list */}
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {waResult.map((r, i) => (
                       <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${r.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>

@@ -28,7 +28,6 @@ const DATE_TABS = [
   { key: 'all', label: 'Semua Waktu' },
   { key: 'today', label: 'Hari Ini' },
   { key: '7days', label: '7 Hari' },
-  { key: '30days', label: '30 Hari' },
 ];
 
 function timeAgo(dateStr) {

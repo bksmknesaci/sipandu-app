@@ -1,83 +1,84 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Users, HeartPulse, Search, UserCheck, Award, Newspaper, MapPin } from 'lucide-react';
+import { 
+  Users, HeartPulse, Search, UserCheck, Award, Newspaper, MapPin, ArrowLeft
+} from 'lucide-react';
 
-const menus = [
-  { icon: Users, title: 'Portal Orang Tua', href: '/portal-ortu', color: 'blue', desc: 'Monitoring siswa oleh orang tua' },
-  { icon: HeartPulse, title: 'Absen Sakit & Izin', href: '/absen-sakit-izin', color: 'amber', desc: 'Pengajuan ketidakhadiran' },
-  { icon: Search, title: 'Cari Data Siswa', href: '/cari-data-siswa', color: 'indigo', desc: 'Pencarian data lengkap siswa' },
-  { icon: UserCheck, title: 'Absen Hadir Mandiri', href: '/absen-mandiri', color: 'emerald', desc: 'Scan QR untuk hadir' },
-  { icon: MapPin, title: 'Absensi PKL', href: '/absensi-pkl', color: 'sky', desc: 'Absensi Praktik Kerja Lapangan' },
-  { icon: Award, title: 'Siswa Berprestasi', href: '/siswa-berprestasi', color: 'green', desc: 'Daftar siswa berprestasi' },
-  { icon: Newspaper, title: 'Seputar Sekolah', href: '/berita-sekolah', color: 'violet', desc: 'Berita dan informasi sekolah' },
+const MENUS = [
+  { title: 'Portal Orang Tua', desc: 'Cek data & kehadiran anak', icon: Users, href: '/portal-ortu', gradient: 'linear-gradient(135deg, #059669, #10b981)', shadow: 'rgba(16,185,129,0.4)' },
+  { title: 'Absen Sakit & Izin', desc: 'Ajukan ketidakhadiran online', icon: HeartPulse, href: '/absen-sakit-izin', gradient: 'linear-gradient(135deg, #db2777, #ec4899)', shadow: 'rgba(236,72,153,0.4)' },
+  { title: 'Cari Data Siswa', desc: 'Temukan profil & data siswa', icon: Search, href: '/cari-data-siswa', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)', shadow: 'rgba(59,130,246,0.4)' },
+  { title: 'Absen Hadir Mandiri', desc: 'Scan QR untuk absensi hadir', icon: UserCheck, href: '/absen-mandiri', gradient: 'linear-gradient(135deg, #4f46e5, #6366f1)', shadow: 'rgba(99,102,241,0.4)' },
+  { title: 'Absensi PKL', desc: 'Absensi hadir saat PKL', icon: MapPin, href: '/absensi-pkl', gradient: 'linear-gradient(135deg, #ea580c, #f97316)', shadow: 'rgba(249,115,22,0.4)' },
+  { title: 'Siswa Berprestasi', desc: 'Berita prestasi siswa sekolah', icon: Award, href: '/siswa-berprestasi', gradient: 'linear-gradient(135deg, #d97706, #f59e0b)', shadow: 'rgba(245,158,11,0.4)' },
+  { title: 'Seputar Sekolah', desc: 'Informasi & berita sekolah', icon: Newspaper, href: '/berita-sekolah', gradient: 'linear-gradient(135deg, #0891b2, #06b6d4)', shadow: 'rgba(6,182,212,0.4)' },
 ];
 
-const C = {
-  blue:    { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)', shadow: '0 10px 15px -3px rgba(59,130,246,0.3)' },
-  amber:   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: '0 10px 15px -3px rgba(245,158,11,0.3)' },
-  indigo:  { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: '0 10px 15px -3px rgba(99,102,241,0.3)' },
-  emerald: { bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: '0 10px 15px -3px rgba(16,185,129,0.3)' },
-  green:   { bg: 'linear-gradient(135deg,#22c55e,#16a34a)', shadow: '0 10px 15px -3px rgba(34,197,94,0.3)' },
-  violet:  { bg: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', shadow: '0 10px 15px -3px rgba(139,92,246,0.3)' },
-  sky:     { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', shadow: '0 10px 15px -3px rgba(14,165,233,0.3)' },
-};
-
-export default function MobileSiswaPage() {
+export default function MobileSiswa() {
   const router = useRouter();
-  const [userData, setUserData] = useState(null);
-  useEffect(() => { try { const s = localStorage.getItem('userData'); if (s) setUserData(JSON.parse(s)); } catch {} }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="relative">
-        <div className="bg-gradient-to-br from-slate-800 via-slate-850 to-slate-900 px-5 pt-12 pb-7">
-          <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-400 hover:text-white mb-5 transition-colors active:scale-95">
-            <ArrowLeft size={20} /><span className="text-sm font-medium">Kembali</span>
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30" style={{width:52,height:52}}>S</div>
-            <div>
-              <h1 className="text-lg font-bold text-white">Menu Siswa</h1>
-              <p className="text-[11px] text-slate-400 mt-0.5">{userData?.nama || 'Pengguna'}</p>
-            </div>
+      {/* Header */}
+      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-cyan-600 pt-12 pb-8 px-5 relative overflow-hidden">
+        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10"></div>
+        <div className="absolute bottom-2 -left-6 w-28 h-28 rounded-full bg-white/5"></div>
+        <button onClick={() => router.back()} className="mb-4 flex items-center gap-2 text-white/80 hover:text-white transition-colors">
+          <ArrowLeft size={20} />
+          <span className="text-sm font-medium">Kembali</span>
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+            <span className="text-2xl">🎓</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">Siswa</h1>
+            <p className="text-blue-200 text-xs font-medium mt-0.5">Menu akses layanan siswa</p>
           </div>
         </div>
-        <div className="bg-gray-50 h-5 rounded-t-3xl -mt-1" />
       </div>
 
-      <div className="px-4 pb-24">
+      {/* Menu Grid */}
+      <div className="px-4 -mt-4 pb-24">
         <div className="grid grid-cols-2 gap-3">
-          {menus.map((menu, i) => {
-            const c = C[menu.color] || C.blue;
+          {MENUS.map((menu, idx) => {
+            const Icon = menu.icon;
+            const delay = idx * 100;
             return (
-              <button key={menu.href} onClick={() => router.push(menu.href)}
-                className="mc rounded-2xl p-4 active:scale-95 transition-all duration-200 text-left relative overflow-hidden"
-                style={{ animationDelay: `${i * 80}ms`, background: c.bg, boxShadow: c.shadow }}>
-                <div className="absolute -right-3 -bottom-3 w-20 h-20 rounded-full bg-white/10" />
-                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center mb-3 mc-bounce" style={{ animationDelay: `${i * 150}ms` }}>
-                  <menu.icon size={22} className="text-white" />
+              <button
+                key={menu.href}
+                onClick={() => router.push(menu.href)}
+                className="group relative overflow-hidden rounded-2xl p-5 text-left transition-all duration-300 ease-out active:scale-95 hover:-translate-y-2 hover:shadow-2xl"
+                style={{
+                  background: menu.gradient,
+                  boxShadow: `0 4px 15px ${menu.shadow}`,
+                }}
+              >
+                <div className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full bg-white/10 transition-transform duration-500 ease-out group-hover:scale-[1.8] group-hover:-bottom-6 group-hover:-right-6"></div>
+                <div className="absolute -top-3 -left-3 w-10 h-10 rounded-full bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.5]"></div>
+                <div className="relative z-10">
+                  <div
+                    className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-3"
+                    style={{ animation: `bounceSlow 2s ease-in-out ${delay}ms infinite` }}
+                  >
+                    <Icon size={22} className="text-white drop-shadow-sm" />
+                  </div>
+                  <h3 className="text-white font-bold text-[13px] leading-tight drop-shadow-sm">{menu.title}</h3>
+                  <p className="text-white/65 text-[10px] mt-1 leading-snug drop-shadow-sm">{menu.desc}</p>
                 </div>
-                <h3 className="font-semibold text-white text-[13px] leading-tight relative z-10">{menu.title}</h3>
-                <p className="text-[10px] text-white/70 mt-1 leading-snug line-clamp-2 relative z-10">{menu.desc}</p>
               </button>
             );
           })}
         </div>
       </div>
 
-      <style>{`
-        @keyframes mcSlideUp {
-          from { opacity: 0; transform: translateY(20px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .mc { opacity: 0; animation: mcSlideUp 0.4s ease-out forwards; }
-        @keyframes mcBounce {
+      <style jsx>{`
+        @keyframes bounceSlow {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
         }
-        .mc-bounce { animation: mcBounce 2s ease-in-out infinite; }
       `}</style>
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, User, GraduationCap, BookOpen, Award, AlertTriangle, Calendar, Clock,
   MapPin, CheckCircle, XCircle, MessageCircle, Send, Bell, ChevronRight, ChevronLeft,
@@ -10,7 +10,8 @@ import {
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { searchStudentByNIS, getDashboardData, sendParentMessage, deleteParentMessage, markNotificationRead } from '@/app/actions/parentPortalActions';
+import { searchStudentByNIS, getDashboardData, sendParentMessage, deleteParentMessage, markNotificationRead, getParentNotifications } from '@/app/actions/parentPortalActions';
+import { supabase } from '@/lib/supabase';
 
 const PIE_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444'];
 const STATUS_MAP = {
@@ -25,6 +26,20 @@ const CAL_COLORS = {
   ujian: 'bg-blue-100 text-blue-700', kegiatan: 'bg-purple-100 text-purple-700'
 };
 const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+function timeAgo(dateStr) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Baru saja';
+  if (diffMins < 60) return `${diffMins} menit lalu`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} hari lalu`;
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 /* ============ DONUT CHART COMPONENT ============ */
 function DonutChart({ data, centerValue, centerLabel, size = 160 }) {
@@ -110,6 +125,12 @@ export default function PortalOrtu() {
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [deletingMsgId, setDeletingMsgId] = useState(null);
   const msgEndRef = useRef(null);
+    // ── Notifikasi Lonceng State ──
+  const [ortuNotifs, setOrtuNotifs] = useState([]);
+  const [ortuNotifUnread, setOrtuNotifUnread] = useState(0);
+  const [notifShaking, setNotifShaking] = useState(false);
+  const notifBellRef = useRef(null);
+  const notifPanelRef = useRef(null);
 
   const refreshData = async () => {
     if (!student) return;
@@ -155,6 +176,8 @@ export default function PortalOrtu() {
 
   const handleMarkRead = async (id) => {
     await markNotificationRead(id);
+    setOrtuNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    setOrtuNotifUnread(prev => Math.max(0, prev - 1));
     await refreshData();
   };
 
@@ -189,6 +212,84 @@ export default function PortalOrtu() {
     if (msgEndRef.current) msgEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [data?.messages]);
 
+    // ── Fetch notifikasi orang tua ──
+  const fetchOrtuNotifs = useCallback(async () => {
+    if (!student) return;
+    try {
+      const res = await getParentNotifications(student.id);
+      if (!res.error) {
+        setOrtuNotifs(res.data);
+        setOrtuNotifUnread(res.data.filter(n => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error('[fetchOrtuNotifs] Error:', err);
+    }
+  }, [student]);
+
+  useEffect(() => { fetchOrtuNotifs(); }, [fetchOrtuNotifs]);
+
+  // ── Supabase Realtime: parent_notifications ──
+  useEffect(() => {
+    if (!student) return;
+    const channel = supabase
+      .channel(`parent-notif-${student.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'parent_notifications',
+        filter: `student_id=eq.${student.id}`,
+      }, () => {
+        fetchOrtuNotifs();
+        setNotifShaking(true);
+        setTimeout(() => setNotifShaking(false), 700);
+      })
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[PortalOrtu] WebSocket notif gagal, polling fallback aktif');
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [student, fetchOrtuNotifs]);
+
+  // ── Polling fallback notifikasi: setiap 15 detik ──
+  useEffect(() => {
+    if (!student) return;
+    const iv = setInterval(fetchOrtuNotifs, 15000);
+    return () => clearInterval(iv);
+  }, [student, fetchOrtuNotifs]);
+
+  // ── Shake berulang jika ada unread notif ──
+  useEffect(() => {
+    if (ortuNotifUnread <= 0) return;
+    const iv = setInterval(() => {
+      setNotifShaking(true);
+      setTimeout(() => setNotifShaking(false), 700);
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [ortuNotifUnread]);
+
+  // ── Click outside notif dropdown (mouse + touch) ──
+  useEffect(() => {
+    if (!showNotif) return;
+    function handleClickOutside(e) {
+      if (
+        notifPanelRef.current && !notifPanelRef.current.contains(e.target) &&
+        notifBellRef.current && !notifBellRef.current.contains(e.target)
+      ) {
+        setShowNotif(false);
+      }
+    }
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showNotif]);
+
   // ===== SEARCH SCREEN =====
   if (!student) {
     return (
@@ -215,9 +316,20 @@ export default function PortalOrtu() {
             {loading ? '⏳ Mencari...' : 'Lihat Dashboard'}
           </button>
         </div>
-      </div>
-    );
-  }
+      <style>{`
+        @keyframes ortuBellShake {
+          0%, 100% { transform: rotate(0deg); }
+          15% { transform: rotate(14deg); }
+          30% { transform: rotate(-14deg); }
+          45% { transform: rotate(10deg); }
+          60% { transform: rotate(-10deg); }
+          75% { transform: rotate(4deg); }
+        }
+        .ortu-bell-shake { animation: ortuBellShake 0.7s ease-in-out; }
+      `}</style>
+    </div>
+  );
+}
 
   if (loading || !data) return <div className="min-h-screen bg-gray-50 p-4 md:p-8"><Skeleton /></div>;
 
@@ -259,29 +371,51 @@ export default function PortalOrtu() {
             <Download size={14} /> Export PDF
           </button>
           <div className="relative">
-            <button onClick={() => setShowNotif(!showNotif)} className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
-              <Bell size={18} />
-              {data.notifications.filter(n => !n.is_read).length > 0 && (
+            <button ref={notifBellRef} onClick={() => setShowNotif(!showNotif)} className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
+              <Bell size={18} className={notifShaking ? 'ortu-bell-shake' : ''} />
+              {ortuNotifUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                  {data.notifications.filter(n => !n.is_read).length}
+                  {ortuNotifUnread > 99 ? '99+' : ortuNotifUnread}
                 </span>
               )}
             </button>
             {showNotif && (
-              <div className="absolute right-0 top-11 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-80 overflow-y-auto z-50">
-                <div className="p-3 border-b border-gray-100 flex justify-between items-center">
-                  <p className="text-sm font-bold text-gray-800">Notifikasi</p>
-                  <button onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                </div>
-                {data.notifications.length === 0 ? (
-                  <p className="p-4 text-xs text-gray-400 text-center">Belum ada notifikasi</p>
-                ) : data.notifications.map(n => (
-                  <div key={n.id} onClick={() => { if (!n.is_read) handleMarkRead(n.id); }} className={`p-3 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
-                    <p className="text-xs font-semibold text-gray-800">{n.title}</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">{n.message}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{new Date(n.created_at).toLocaleDateString('id-ID')}</p>
+              <div
+                ref={notifPanelRef}
+                className="absolute right-0 top-11 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
+                style={{ maxHeight: `${typeof window !== 'undefined' ? Math.min(360, window.innerHeight - 80) : 360}px` }}
+              >
+                <div className="p-3 border-b border-gray-100 flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Bell size={14} className="text-gray-600" />
+                    <p className="text-sm font-bold text-gray-800">Notifikasi</p>
+                    {ortuNotifUnread > 0 && (
+                      <span className="bg-red-100 text-red-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{ortuNotifUnread} baru</span>
+                    )}
                   </div>
-                ))}
+                  <button onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-gray-600 text-xs p-1">✕</button>
+                </div>
+                <div className="overflow-y-auto" style={{ maxHeight: `${typeof window !== 'undefined' ? Math.min(300, window.innerHeight - 130) : 300}px` }}>
+                  {ortuNotifs.length === 0 ? (
+                    <div className="p-6 text-center">
+                      <Bell size={28} className="mx-auto text-gray-200 mb-2" />
+                      <p className="text-xs text-gray-400">Belum ada notifikasi</p>
+                    </div>
+                  ) : ortuNotifs.map(n => (
+                    <div
+                      key={n.id}
+                      onClick={() => { if (!n.is_read) handleMarkRead(n.id); }}
+                      className={`p-3 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/50' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-semibold text-gray-800 leading-snug">{n.title}</p>
+                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1" />}
+                      </div>
+                      {n.message && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>}
+                      <p className="text-[10px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -695,24 +829,30 @@ export default function PortalOrtu() {
                 {(() => {
                   const firstDay = new Date(calYear, calMonth - 1, 1).getDay()
                   const daysInMonth = new Date(calYear, calMonth, 0).getDate()
+                  const todayStr = new Date().toLocaleDateString('sv-SE')
+                  const holiData = data.allHolidays || []
                   const cells = []
                   for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />)
                   for (let d = 1; d <= daysInMonth; d++) {
                     const dt = new Date(calYear, calMonth - 1, d)
                     const dateStr = dt.toLocaleDateString('sv-SE')
                     const day = dt.getDay()
+                    const holiday = holiData.find(h => h.date === dateStr)
                     let type = 'effective'
-                    if (day === 0 || day === 6) type = 'weekend'
-                    else {
-                      const h = data.calendarDays.find(c => c.date === dateStr)
-                      if (h) type = h.type
+                    if (day === 0 || day === 6) {
+                      type = 'weekend'
+                    } else if (holiday) {
+                      const cat = holiday.category
+                      if (cat === 'Nasional') type = 'holiday_nasional'
+                      else if (cat === 'Ujian') type = 'ujian'
+                      else if (cat === 'Kegiatan Sekolah' || cat === 'Khusus') type = 'kegiatan'
+                      else type = 'holiday_sekolah'
                     }
-                    const isToday = dateStr === new Date().toLocaleDateString('sv-SE')
-                    const holiday = data.calendarDays.find(c => c.date === dateStr)?.holiday
+                    const isToday = dateStr === todayStr
                     cells.push(
-                      <div key={d} title={holiday || ''} className={`aspect-square flex flex-col items-center justify-center rounded-lg text-[10px] font-semibold relative ${CAL_COLORS[type]} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                      <div key={d} title={holiday?.holiday_name || ''} className={`aspect-square flex flex-col items-center justify-center rounded-lg text-[10px] font-semibold relative ${CAL_COLORS[type]} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
                         {d}
-                        {holiday && <span className="text-[6px] leading-tight text-center mt-0.5 line-clamp-2 px-0.5">{holiday}</span>}
+                        {holiday?.holiday_name && <span className="text-[6px] leading-tight text-center mt-0.5 line-clamp-2 px-0.5">{holiday.holiday_name}</span>}
                       </div>
                     )
                   }

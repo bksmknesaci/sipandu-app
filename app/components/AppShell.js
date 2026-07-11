@@ -135,6 +135,7 @@ export default function AppShell({ children }) {
     else if (pathname.includes('/rekap-kehadiran')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
     else if (pathname.includes('/absensi-pkl')) setActiveMenu('absensi-pkl');
     else if (pathname.includes('/wali-kelas/rekap-pkl')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
+    else if (pathname.includes('/wali-kelas/penanganan')) { setActiveMenu('wali'); setOpenMenus(prev => ({ ...prev, wali: true })); }
     else if (pathname.includes('/admin/users')) { setActiveMenu('setting'); setOpenMenus(prev => ({ ...prev, setting: true })); }
     else if (pathname.includes('/admin/siswa')) { setActiveMenu('admin'); setOpenMenus(prev => ({ ...prev, admin: true })); }
     else if (pathname.includes('/setting/profil')) { setActiveMenu('setting'); setOpenMenus(prev => ({ ...prev, setting: true })); }
@@ -319,41 +320,6 @@ export default function AppShell({ children }) {
           <button className="sm:hidden text-slate-400" onClick={(e) => { e.stopPropagation(); closeSidebarMobile(); }}><X size={24}/></button>
         </div>
 
-        {isLoggedIn && userData && (
-          <div className="flex-shrink-0 border-b border-slate-700/60 px-3 py-3 relative" ref={profileDropdownRef}>
-            <div className="flex items-center gap-2.5">
-              <button onClick={(e) => { e.stopPropagation(); openProfileModal(); }} className="relative flex-shrink-0 group/avatar">
-                {userData.foto_url ? (
-                  <img src={userData.foto_url} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-blue-500/40 shadow group-hover/avatar:border-blue-400 transition-colors" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow">{userData.nama?.charAt(0)?.toUpperCase() || 'A'}</div>
-                )}
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-slate-900"></span>
-              </button>
-              <div className={'flex-1 min-w-0 inline-block ' + txt + ' flex items-center gap-1'}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[13px] truncate text-white leading-tight">{userData.nama || 'User'}</p>
-                  <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{getRoleLabel()}</p>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); setProfileDropdown(!profileDropdown); }} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-700/60 transition-colors">
-                  <ChevronDown size={14} className={'transition-all duration-300 ' + (profileDropdown ? 'rotate-180 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.9)]' : 'text-slate-500')} />
-                </button>
-              </div>
-            </div>
-            {profileDropdown && (
-              <div className="mt-2 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-700/60 overflow-hidden shadow-2xl shadow-black/30" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => { setProfileDropdown(false); openProfileModal(); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors">
-                  <UserCircle size={15} className="text-blue-400" /> Profil Saya
-                </button>
-                <div className="border-t border-slate-700/40" />
-                <button onClick={() => { setProfileDropdown(false); handleLogout(); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
-                  <LogOut size={15} /> Logout
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 text-sm scrollbar-thin scrollbar-thumb-slate-700">
           {isLoggedIn && (
             <>
@@ -397,6 +363,7 @@ export default function AppShell({ children }) {
                 <SubLink icon={HeartPulse} title="Rekap Sakit & Izin" href="/wali-kelas/rekap-sakit-izin" />
                 <SubLink icon={CalendarDays} title="Rekap Kehadiran" href="/rekap-kehadiran" />
                 <SubLink icon={BarChart3} title="Rekap Kehadiran PKL" href="/wali-kelas/rekap-pkl" />
+                <SubLink icon={UserCog} title="Penanganan Siswa" href="/wali-kelas/penanganan" />
               </DropdownMenu>
             </>
           )}
@@ -445,9 +412,49 @@ export default function AppShell({ children }) {
             <Link href="/formulir" className="flex items-center gap-1 hover:text-white active:scale-90 active:text-blue-400 active:bg-white/10 rounded-lg px-2 py-1.5 transition-all duration-100"><ClipboardList size={18}/> <span className="hidden md:inline-block">Formulir</span></Link>
             {isLoggedIn && <NotificationCenter userId={userData?.id} userRole={userData?.role} />}
             {isLoggedIn ? (
-              <button onClick={handleLogout} className="flex items-center gap-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 active:scale-90 active:bg-red-800 transition-all duration-100">
-                <LogOut size={16}/> <span className="hidden md:inline-block">Logout</span>
-              </button>
+              <div className="relative" ref={profileDropdownRef}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setProfileDropdown(!profileDropdown); }}
+                  className="relative flex-shrink-0 active:scale-95 transition-transform duration-100"
+                >
+                  {userData.foto_url ? (
+                    <img src={userData.foto_url} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-blue-400/50 hover:border-blue-300 transition-colors" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow">{userData.nama?.charAt(0)?.toUpperCase() || 'A'}</div>
+                  )}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-slate-900"></span>
+                </button>
+                {profileDropdown && (
+                  <div
+                    className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in duration-150"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-4 py-3 flex items-center gap-3 cursor-default">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <UserCircle size={16} className="text-gray-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate leading-tight">{userData.nama || 'User'}</p>
+                        <p className="text-xs text-gray-500 font-medium mt-0.5 truncate leading-tight">{getRoleLabel()}</p>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-100" />
+                    <button
+                      onClick={() => { setProfileDropdown(false); openProfileModal(); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <UserCog size={15} className="text-blue-600" /> Profil Saya
+                    </button>
+                    <div className="border-t border-gray-100" />
+                    <button
+                      onClick={() => { setProfileDropdown(false); handleLogout(); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut size={15} /> Keluar
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link href="/login" className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 active:scale-90 active:bg-blue-800 transition-all duration-100">
                 <LogIn size={16}/> <span className="hidden md:inline-block">Login</span>

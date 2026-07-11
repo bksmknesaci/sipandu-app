@@ -273,42 +273,59 @@ export async function testWhatsAppConnection() {
 
 // ─── GET ALPHA STUDENTS WITH PARENT WA (1 query join) ──────────
 export async function getAlphaStudentsForWA(date, tingkat, jurusan) {
-  // Single query: INNER JOIN absensi → siswa, filter Alpha + parent_whatsapp not null
-  // Filter tingkat/jurusan di DB level (bukan di JS) — lebih efisien untuk dataset besar
+  // FIX: Hindari join syntax yang tidak dikenali PostgREST schema cache
+  // Gunakan 2 query terpisah (pattern konsisten dengan seluruh project)
   let query = supabaseAdmin
     .from('absensi')
-    .select('siswa_id, siswa!inner(id, nisn, nama, kelas, jurusan, parent_whatsapp)')
+    .select('siswa_id')
     .eq('tanggal', date)
     .eq('status', 'Alpha')
-    .not('siswa.parent_whatsapp', 'is', null)
 
-  if (tingkat) {
-    query = query.eq('siswa.kelas', tingkat)
+  const { data: absData, error: absError } = await query
+  if (absError) {
+    console.error('[getAlphaStudentsForWA] absensi query:', absError)
+    return { error: absError.message, students: [] }
   }
-  if (jurusan) {
-    query = query.eq('siswa.jurusan', jurusan)
+  if (!absData || absData.length === 0) return { students: [] }
+
+  const siswaIds = absData.map(a => a.siswa_id).filter(Boolean)
+  if (siswaIds.length === 0) return { students: [] }
+
+  // Query kedua: ambil data siswa termasuk parent_whatsapp
+  let siswaQuery = supabaseAdmin
+    .from('siswa')
+    .select('id, nisn, nama, kelas, jurusan, parent_whatsapp')
+    .in('id', siswaIds)
+
+  // Filter tambahan jika tersedia
+  if (tingkat) siswaQuery = siswaQuery.eq('kelas', tingkat.trim())
+  if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan.trim())
+
+  const { data: siswaData, error: siswaError } = await siswaQuery
+  if (siswaError) {
+    console.error('[getAlphaStudentsForWA] siswa query:', siswaError)
+    return { error: siswaError.message, students: [] }
   }
+  if (!siswaData || siswaData.length === 0) return { students: [] }
 
-  const { data } = await query
-
-  if (!data || data.length === 0) {
-    return { students: [], total: 0 }
-  }
-
-  const students = data.map(a => {
-    const s = a.siswa
+  const students = siswaData.map(s => {
+    let phone = (s.parent_whatsapp || '').trim()
+    // Normalisasi format Indonesia: 08xxx → 628xxx
+    if (phone.startsWith('08')) phone = '62' + phone.slice(1)
     return {
+      siswa_id: s.id,
       id: s.id,
       nisn: s.nisn,
       nama: s.nama,
       kelas: s.kelas,
       jurusan: s.jurusan,
-      phone: normalizePhone(s.parent_whatsapp),
-      phoneValid: isValidPhone(s.parent_whatsapp),
+      phone,
+      parent_whatsapp: phone,
+      phoneValid: phone.length >= 10 && phone.length <= 15
     }
   })
 
-  return { students, total: students.length }
+  return { students }
 }
 
 // ─── EXECUTE SEND WA (batch log insert) ────────────────────────

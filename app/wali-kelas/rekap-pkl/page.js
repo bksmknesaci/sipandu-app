@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { BarChart3, Filter, Download, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, HeartPulse, AlertTriangle, Clock, Printer, FileSpreadsheet, RotateCcw } from 'lucide-react'
+import { BarChart3, Filter, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, AlertTriangle, Printer, FileSpreadsheet, RotateCcw } from 'lucide-react'
 import { getPklFilters, getPklStats, getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklAttendanceDetail, resetAllPklData, cleanupOldPklSelfies } from '@/app/actions/pklActions'
 import { getWKKelasAssignment, getUserKelasInfo } from '@/app/actions/absensiActions'
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
@@ -72,7 +72,6 @@ export default function RekapPKL() {
   const [toast, setToast] = useState(null)
 
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('sv-SE'))
-
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
@@ -109,9 +108,7 @@ export default function RekapPKL() {
             setWkNeedsJurusanSelection(assignment.needsSelection || false)
             return
           }
-        } catch (e) {
-          console.error('[RekapPKL] Gagal ambil kelas assignment:', e)
-        }
+        } catch (e) { console.error('[RekapPKL] Gagal ambil kelas assignment:', e) }
         try {
           const dbInfo = await getUserKelasInfo(userData.id)
           if (dbInfo.kelas) {
@@ -119,9 +116,7 @@ export default function RekapPKL() {
             setWkNeedsJurusanSelection(!dbInfo.jurusan)
             return
           }
-        } catch (e2) {
-          console.error('[RekapPKL] Gagal ambil kelas info dari DB:', e2)
-        }
+        } catch (e2) { console.error('[RekapPKL] Gagal ambil kelas info dari DB:', e2) }
         setFilters(f => ({ ...f, kelas: userData.kelas || '', jurusan: userData.jurusan || '' }))
         setWkNeedsJurusanSelection(!userData.jurusan)
       }
@@ -144,7 +139,6 @@ export default function RekapPKL() {
     try {
       const statsRes = await getPklStats(filters)
       if (statsRes) setStats(statsRes)
-
       if (activeTab === 'harian') {
         const res = await getPklRekapHarian(selectedDate, filters)
         setData(res.students || [])
@@ -175,10 +169,7 @@ export default function RekapPKL() {
     }
   }, [filters, isWK])
 
-  const handleFilterChange = (key, val) => {
-    setFilters(f => ({ ...f, [key]: val }))
-  }
-
+  const handleFilterChange = (key, val) => { setFilters(f => ({ ...f, [key]: val })) }
   const showToast = (msg, type = 'success') => setToast({ message: msg, type, key: Date.now() })
 
   const openDetail = async (attId) => {
@@ -222,15 +213,20 @@ export default function RekapPKL() {
     } else if (activeTab === 'bulanan') {
       const header = 'No,NISN,Nama,L/P,Kelas,Jurusan,Pembimbing Industri,Guru Pembimbing,Perusahaan'
       const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => `Tgl ${i + 1}`).join(',')
-      csv = header + ',' + dayHeaders + ',Total H,Total S,Total I,Total A,Total T,Total L\n'
+      csv = header + ',' + dayHeaders + ',Hari Efektif,Total H,Total S,Total I,Total A,Total T,% Hadir\n'
       data.forEach((s, i) => {
         const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
-        const dayVals = s.days.map(d => {
+        let effectiveDays = 0
+        const dayVals = (s.days || []).map(d => {
+          // FIX: Hari efektif hanya dihitung sampai hari ini (realtime)
+          if (d.isWorkDay && d.inRange && d.isPastOrToday) effectiveDays++
           if (!d.status) return ''
           counts[d.status] = (counts[d.status] || 0) + 1
           return SC[d.status]?.label || d.status
         }).join(',')
-        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.industry_supervisor || ''}","${s.guru_pembimbing || ''}","${s.company_name || ''}",${dayVals},${counts.Hadir},${counts.Sakit},${counts.Izin},${counts.Alpha},${counts.Terlambat},${counts.Libur}\n`
+        const hadirTotal = counts.Hadir + counts.Terlambat
+        const pct = effectiveDays > 0 ? ((hadirTotal / effectiveDays) * 100).toFixed(1) : '0.0'
+        csv += `${i + 1},"${s.nisn || ''}","${s.nama || ''}","${s.jenis_kelamin === 'P' ? 'P' : 'L'}","${s.kelas || ''}","${s.jurusan || ''}","${s.industry_supervisor || ''}","${s.guru_pembimbing || ''}","${s.company_name || ''}",${dayVals},${effectiveDays},${counts.Hadir},${counts.Sakit},${counts.Izin},${counts.Alpha},${counts.Terlambat},"${pct}%"\n`
       })
     } else if (activeTab === 'semester') {
       csv = 'No,NISN,Nama,L/P,Kelas,Jurusan,Pembimbing Industri,Guru Pembimbing,Perusahaan,Hadir,Sakit,Izin,Alpha,Terlambat,Libur,Total Kerja,Persentase\n'
@@ -248,10 +244,8 @@ export default function RekapPKL() {
     if (data.length === 0) { showToast('Tidak ada data', 'error'); return }
     const w = window.open('', '_blank')
     if (!w) { showToast('Popup diblokir', 'error'); return }
-
     const kopSettings = await getKopSuratSettings()
     const kopHTML = await generateKopSuratHTML(kopSettings)
-
     let title = 'REKAP KEHADIRAN PKL'
     let subtitle = ''
     if (activeTab === 'harian') {
@@ -263,48 +257,57 @@ export default function RekapPKL() {
     }
     const kelasLabel = filters.kelas && filters.jurusan ? `Kelas: ${filters.kelas} ${filters.jurusan}` : (filters.kelas ? `Tingkat: ${filters.kelas}` : '')
     const companyLabel = filters.company ? `Perusahaan: ${filters.company}` : ''
-
     let tableHTML = ''
     let pageCss = ''
-
     if (activeTab === 'harian') {
-      tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th></tr></thead><tbody>`
+      tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th></tr></thead><tbody>`
       data.forEach((s, i) => {
         tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.industry_supervisor || ''}</td><td>${s.guru_pembimbing || ''}</td><td>${s.company_name || ''}</td><td>${s.attendance?.check_in_time || '-'}</td><td>${s.attendance?.check_out_time || '-'}</td><td>${s.computedStatus || '-'}</td></tr>`
       })
       tableHTML += '</tbody></table>'
     } else if (activeTab === 'bulanan') {
       pageCss = '@page{size:landscape}'
-      let hdr = '<th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th>'
-      for (let d = 1; d <= daysInMonth; d++) hdr += `<th style="font-size:9px;padding:3px">${d}</th>`
-      hdr += '<th>H</th><th>S</th><th>I</th><th>A</th><th>T</th><th>L</th>'
-      tableHTML = `<table border="1" cellpadding="4" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10px">
-        <thead><tr style="background:#f0f0f0">${hdr}</tr></thead><tbody>`
+      let hdr = '<th rowspan="2">No</th><th rowspan="2">NISN</th><th rowspan="2">Nama</th><th rowspan="2">L/P</th><th rowspan="2">Kelas</th><th rowspan="2">Jurusan</th><th rowspan="2">Pemb.Industri</th><th rowspan="2">Guru Pemb.</th><th rowspan="2">Perusahaan</th>'
+      hdr += `<th colspan="${daysInMonth}" style="text-align:center;font-size:10px">${monthName}</th>`
+      hdr += '<th rowspan="2" style="font-size:9px">Hari<br/>Efektif</th><th colspan="5" style="text-align:center;font-size:9px">Total</th><th rowspan="2" style="font-size:9px">% Hadir</th>'
+      let hdr2 = ''
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dt = new Date(selectedYear, selectedMonth - 1, d)
+        const dayName = DAY_NAMES[dt.getDay()]
+        const isWeekend = dt.getDay() === 0 || dt.getDay() === 6
+        hdr2 += `<th style="font-size:8px;padding:2px;text-align:center;${isWeekend ? 'background:#fecaca;color:#dc2626' : ''}">${d}<br/><span style="font-size:7px">${dayName}</span></th>`
+      }
+      hdr2 += '<th style="font-size:9px;text-align:center">H</th><th style="font-size:9px;text-align:center">S</th><th style="font-size:9px;text-align:center">I</th><th style="font-size:9px;text-align:center">A</th><th style="font-size:9px;text-align:center">T</th>'
+      tableHTML = `<table border="1" cellpadding="3" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:9px"><thead><tr style="background:#f0f0f0">${hdr}</tr><tr style="background:#f0f0f0">${hdr2}</tr></thead><tbody>`
       data.forEach((s, i) => {
         const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
-        let row = `<td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td style="font-size:9px">${s.industry_supervisor || ''}</td><td style="font-size:9px">${s.guru_pembimbing || ''}</td><td style="font-size:9px">${s.company_name || ''}</td>`
-        s.days.forEach(d => {
-          if (!d.status) { row += '<td style="background:#f9fafb">-</td>'; return }
+        let effectiveDays = 0
+        let row = `<td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td style="font-size:8px">${s.industry_supervisor || ''}</td><td style="font-size:8px">${s.guru_pembimbing || ''}</td><td style="font-size:8px">${s.company_name || ''}</td>`
+        ;(s.days || []).forEach(d => {
+          // FIX: Hari efektif hanya dihitung sampai hari ini (realtime)
+          if (d.isWorkDay && d.inRange && d.isPastOrToday) effectiveDays++
+          if (!d.status) { row += '<td style="background:#f9fafb;text-align:center">-</td>'; return }
           counts[d.status] = (counts[d.status] || 0) + 1
           const c = SC[d.status]
           const bg = d.status === 'Libur' ? '#ef4444' : (d.status === 'Alpha' ? '#fee2e2' : (c?.bg || '#fff'))
           const clr = d.status === 'Libur' ? '#fff' : (c?.color || '#333')
-          row += `<td style="background:${bg};color:${clr};text-align:center;font-weight:bold;font-size:9px;padding:2px">${c?.label || d.status}</td>`
+          row += `<td style="background:${bg};color:${clr};text-align:center;font-weight:bold;font-size:8px;padding:2px">${c?.label || d.status}</td>`
         })
-        row += `<td>${counts.Hadir}</td><td>${counts.Sakit}</td><td>${counts.Izin}</td><td>${counts.Alpha}</td><td>${counts.Terlambat}</td><td>${counts.Libur}</td>`
+        const hadirTotal = counts.Hadir + counts.Terlambat
+        const pct = effectiveDays > 0 ? ((hadirTotal / effectiveDays) * 100).toFixed(1) : '0.0'
+        row += `<td style="text-align:center;font-weight:bold">${effectiveDays}</td>`
+        row += `<td style="text-align:center">${counts.Hadir}</td><td style="text-align:center">${counts.Sakit}</td><td style="text-align:center">${counts.Izin}</td><td style="text-align:center">${counts.Alpha}</td><td style="text-align:center">${counts.Terlambat}</td>`
+        row += `<td style="text-align:center;font-weight:bold">${pct}%</td>`
         tableHTML += `<tr>${row}</tr>`
       })
       tableHTML += '</tbody></table>'
     } else {
-      tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>Terlambat</th><th>Libur</th><th>Total Kerja</th><th>%</th></tr></thead><tbody>`
+      tableHTML = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f0f0f0"><th>No</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Jurusan</th><th>Pemb.Industri</th><th>Guru Pemb.</th><th>Perusahaan</th><th>Hadir</th><th>Sakit</th><th>Izin</th><th>Alpha</th><th>Terlambat</th><th>Libur</th><th>Total Kerja</th><th>%</th></tr></thead><tbody>`
       data.forEach((s, i) => {
         tableHTML += `<tr><td>${i + 1}</td><td>${s.nisn || ''}</td><td>${s.nama || ''}</td><td>${s.jenis_kelamin === 'P' ? 'P' : 'L'}</td><td>${s.kelas || ''}</td><td>${s.jurusan || ''}</td><td>${s.industry_supervisor || ''}</td><td>${s.guru_pembimbing || ''}</td><td>${s.company_name || ''}</td><td>${s.Hadir || 0}</td><td>${s.Sakit || 0}</td><td>${s.Izin || 0}</td><td>${s.Alpha || 0}</td><td>${s.Terlambat || 0}</td><td>${s.Libur || 0}</td><td>${s.totalKerja || 0}</td><td>${s.persentase || '0.0'}%</td></tr>`
       })
       tableHTML += '</tbody></table>'
     }
-
     w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>${pageCss}body{font-family:Arial,sans-serif;padding:20px}h3{text-align:center;margin:0;font-size:14px;text-transform:uppercase}p.sub{text-align:center;color:#666;font-size:12px;margin:2px 0 16px}@media print{body{margin:0}}</style></head><body>${kopHTML}<div style="text-align:center"><h3>${title}</h3><p class="sub">${subtitle}</p>${kelasLabel ? `<p class="sub">${kelasLabel}</p>` : ''}${companyLabel ? `<p class="sub">${companyLabel}</p>` : ''}<p class="sub">Dicetak: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p></div>${tableHTML}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
     w.document.close()
   }
@@ -459,93 +462,114 @@ export default function RekapPKL() {
             <div className="p-8 space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="animate-pulse flex gap-3"><div className="h-4 bg-gray-100 rounded w-8" /><div className="h-4 bg-gray-100 rounded w-24" /><div className="h-4 bg-gray-100 rounded flex-1" /><div className="h-4 bg-gray-100 rounded w-16" /></div>)}</div>
           ) : data.length === 0 ? (
             <div className="text-center py-16"><Users size={48} className="mx-auto text-gray-200 mb-3" /><p className="text-gray-500 font-semibold">Tidak ada data siswa PKL</p><p className="text-gray-400 text-xs mt-1">{filterActive ? 'Coba ubah filter' : 'Pastikan ada siswa yang memiliki profil PKL'}</p></div>
-            ) : activeTab === 'harian' ? (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 border-b border-gray-200">
-                  <tr>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase w-10">No</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">NISN</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Nama</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-10">L/P</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Kelas</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Jurusan</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Pembimbing Industri</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Guru Pembimbing</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Perusahaan</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Masuk</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Pulang</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Status</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Terlambat</th>
-                    <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-12">Aksi</th>
+          ) : activeTab === 'harian' ? (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 border-b border-gray-200">
+                <tr>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase w-10">No</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">NISN</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Nama</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-10">L/P</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Kelas</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Jurusan</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Pembimbing Industri</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Guru Pembimbing</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase">Perusahaan</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Masuk</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Jam Pulang</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Status</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center">Terlambat</th>
+                  <th className="py-3 px-3 font-bold text-gray-700 text-xs uppercase text-center w-12">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.map((s, i) => (
+                  <tr key={s.student_id} className="hover:bg-blue-50/30 transition">
+                    <td className="py-3 px-3 text-gray-500 text-xs">{i + 1}</td>
+                    <td className="py-3 px-3 text-gray-600 font-mono text-xs">{s.nisn || '-'}</td>
+                    <td className="py-3 px-3 font-semibold text-gray-800">{s.nama}</td>
+                    <td className="py-3 px-3 text-center text-xs text-gray-600">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
+                    <td className="py-3 px-3 text-xs text-gray-600">{s.kelas || '-'}</td>
+                    <td className="py-3 px-3 text-xs text-gray-600">{s.jurusan || '-'}</td>
+                    <td className="py-3 px-3 text-gray-600 text-xs">{s.industry_supervisor || '-'}</td>
+                    <td className="py-3 px-3 text-gray-600 text-xs">{s.guru_pembimbing || '-'}</td>
+                    <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
+                    <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_in_time || '-'}</td>
+                    <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_out_time || '-'}</td>
+                    <td className="py-3 px-3 text-center">{statusBadge(s.computedStatus)}</td>
+                    <td className="py-3 px-3 text-center text-xs">{s.attendance?.is_late ? <span className="text-orange-600 font-bold">Ya</span> : <span className="text-gray-400">-</span>}</td>
+                    <td className="py-3 px-3 text-center">
+                      {s.attendance?.id && (
+                        <button onClick={() => openDetail(s.attendance.id)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center mx-auto transition" title="Lihat Detail"><Eye size={14} /></button>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {data.map((s, i) => (
-                    <tr key={s.student_id} className="hover:bg-blue-50/30 transition">
-                      <td className="py-3 px-3 text-gray-500 text-xs">{i + 1}</td>
-                      <td className="py-3 px-3 text-gray-600 font-mono text-xs">{s.nisn || '-'}</td>
-                      <td className="py-3 px-3 font-semibold text-gray-800">{s.nama}</td>
-                      <td className="py-3 px-3 text-center text-xs text-gray-600">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
-                      <td className="py-3 px-3 text-xs text-gray-600">{s.kelas || '-'}</td>
-                      <td className="py-3 px-3 text-xs text-gray-600">{s.jurusan || '-'}</td>
-                      <td className="py-3 px-3 text-gray-600 text-xs">{s.industry_supervisor || '-'}</td>
-                      <td className="py-3 px-3 text-gray-600 text-xs">{s.guru_pembimbing || '-'}</td>
-                      <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
-                      <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_in_time || '-'}</td>
-                      <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_out_time || '-'}</td>
-                      <td className="py-3 px-3 text-center">{statusBadge(s.computedStatus)}</td>
-                      <td className="py-3 px-3 text-center text-xs">{s.attendance?.is_late ? <span className="text-orange-600 font-bold">Ya</span> : <span className="text-gray-400">-</span>}</td>
-                      <td className="py-3 px-3 text-center">
-                        {s.attendance?.id && (
-                          <button onClick={() => openDetail(s.attendance.id)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center mx-auto transition" title="Lihat Detail"><Eye size={14} /></button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                ))}
+              </tbody>
+            </table>
           ) : activeTab === 'bulanan' ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs" style={{ minWidth: daysInMonth * 28 + 300 }}>
-                <thead className="bg-gray-100 border-b border-gray-200">
-                  <tr>
-                    <th className="py-2 px-2 font-bold text-gray-700 text-[10px] uppercase sticky left-0 bg-gray-100 z-10 min-w-[120px]">Nama</th>
-                    <th className="py-2 px-1 font-bold text-gray-700 text-[10px] uppercase text-center sticky left-[120px] bg-gray-100 z-10 min-w-[30px]">L/P</th>
+              <table className="w-full text-xs border-collapse" style={{ minWidth: daysInMonth * 28 + 480 }}>
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-300">
+                    <th rowSpan={2} className="py-2 px-1.5 font-bold text-gray-700 text-[10px] uppercase text-center border-r border-b border-gray-300 md:sticky left-0 bg-gray-100 z-20 w-8">No</th>
+                    <th rowSpan={2} className="py-2 px-2 font-bold text-gray-700 text-[10px] uppercase border-r border-b border-gray-300 md:sticky left-[32px] bg-gray-100 z-20 min-w-[120px]">Nama Siswa</th>
+                    <th rowSpan={2} className="py-2 px-1 font-bold text-gray-700 text-[10px] uppercase text-center border-r border-b border-gray-300 md:sticky left-[152px] bg-gray-100 z-20 min-w-[30px]">L/P</th>
+                    <th colSpan={daysInMonth} className="py-2 px-1 font-bold text-gray-700 text-[11px] uppercase text-center border-r border-b border-gray-300">{monthName}</th>
+                    <th rowSpan={2} className="py-2 px-1 font-bold text-gray-700 text-[10px] uppercase text-center border-r border-b border-gray-300 min-w-[36px]">Hari<br/>Efektif</th>
+                    <th colSpan={5} className="py-2 px-1 font-bold text-gray-700 text-[10px] uppercase text-center border-r border-b border-gray-300">Total</th>
+                    <th rowSpan={2} className="py-2 px-1 font-bold text-gray-700 text-[10px] uppercase text-center border-b border-gray-300 min-w-[52px]">% Hadir</th>
+                  </tr>
+                  <tr className="bg-gray-100 border-b border-gray-300">
                     {Array.from({ length: daysInMonth }, (_, i) => {
                       const d = new Date(selectedYear, selectedMonth - 1, i + 1)
                       const dayName = DAY_NAMES[d.getDay()]
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6
-                      return <th key={i} className={`py-2 px-0.5 font-bold text-[9px] uppercase text-center ${isWeekend ? 'bg-red-100 text-red-600' : 'text-gray-600'}`} style={{ minWidth: 26 }}>{i + 1}<br/><span className="text-[8px] opacity-60">{dayName}</span></th>
+                      return (
+                        <th key={i} className={`py-1 px-0.5 font-bold text-[9px] text-center border-r border-b border-gray-300 ${isWeekend ? 'bg-red-100 text-red-600' : 'text-gray-600'}`} style={{ minWidth: 26 }}>
+                          {i + 1}<br/><span className="text-[7px] opacity-60">{dayName}</span>
+                        </th>
+                      )
                     })}
-                    <th className="py-2 px-1 font-bold text-emerald-600 text-[10px] text-center">H</th>
-                    <th className="py-2 px-1 font-bold text-amber-600 text-[10px] text-center">S</th>
-                    <th className="py-2 px-1 font-bold text-blue-600 text-[10px] text-center">I</th>
-                    <th className="py-2 px-1 font-bold text-red-600 text-[10px] text-center">A</th>
-                    <th className="py-2 px-1 font-bold text-orange-600 text-[10px] text-center">T</th>
-                    <th className="py-2 px-1 font-bold text-gray-500 text-[10px] text-center">L</th>
+                    <th className="py-1 px-1 font-bold text-emerald-600 text-[9px] text-center border-r border-b border-gray-300">H</th>
+                    <th className="py-1 px-1 font-bold text-amber-600 text-[9px] text-center border-r border-b border-gray-300">S</th>
+                    <th className="py-1 px-1 font-bold text-blue-600 text-[9px] text-center border-r border-b border-gray-300">I</th>
+                    <th className="py-1 px-1 font-bold text-red-600 text-[9px] text-center border-r border-b border-gray-300">A</th>
+                    <th className="py-1 px-1 font-bold text-orange-600 text-[9px] text-center border-b border-gray-300">T</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-100">
                   {data.map((s, idx) => {
                     const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
+                    let effectiveDays = 0
+                    // FIX: Hitung counts dan effectiveDays sekali di sini saja
+                    ;(s.days || []).forEach(d => {
+                      if (d.isWorkDay && d.inRange && d.isPastOrToday) effectiveDays++
+                      if (d.status) counts[d.status] = (counts[d.status] || 0) + 1
+                    })
+                    const hadirTotal = counts.Hadir + counts.Terlambat
+                    const persentase = effectiveDays > 0 ? ((hadirTotal / effectiveDays) * 100).toFixed(1) : '0.0'
+                    const pctColor = parseFloat(persentase) >= 80 ? 'text-emerald-600' : parseFloat(persentase) >= 60 ? 'text-amber-600' : 'text-red-600'
                     return (
                       <tr key={s.student_id} className="hover:bg-blue-50/20">
-                        <td className="py-1.5 px-2 font-semibold text-gray-800 truncate max-w-[140px] sticky left-0 bg-white z-10">{s.nama}</td>
-                        <td className="py-1.5 px-1 text-center text-[10px] text-gray-600 sticky left-[120px] bg-white z-10">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
+                        <td className="py-1.5 px-1.5 text-center text-[10px] text-gray-500 border-r border-b border-gray-200 md:sticky left-0 bg-white z-10">{idx + 1}</td>
+                        <td className="py-1.5 px-2 font-semibold text-gray-800 text-[11px] truncate max-w-[140px] border-r border-b border-gray-200 md:sticky left-[32px] bg-white z-10">{s.nama}</td>
+                        <td className="py-1.5 px-1 text-center text-[10px] text-gray-600 border-r border-b border-gray-200 md:sticky left-[152px] bg-white z-10">{s.jenis_kelamin === 'P' ? 'P' : 'L'}</td>
                         {(s.days || []).map((d, di) => {
-                          if (!d.status) { counts.Libur++; return <td key={di} className="py-1 px-0.5 text-center bg-gray-50 text-gray-300">-</td> }
-                          counts[d.status] = (counts[d.status] || 0) + 1
+                          if (!d.status) return <td key={di} className="py-1 px-0.5 text-center border-r border-b border-gray-200 bg-gray-50 text-gray-300" style={{ minWidth: 26 }}>-</td>
+                          // FIX: HAPUS baris counts[d.status] yang menyebabkan double-counting
                           const c = SC[d.status]
                           const bg = d.status === 'Libur' ? '#ef4444' : (d.status === 'Alpha' ? '#fee2e2' : (c?.bg || '#fff'))
                           const clr = d.status === 'Libur' ? '#fff' : (c?.color || '#333')
-                          return <td key={di} className="py-1 px-0.5 text-center font-bold" style={{ backgroundColor: bg, color: clr, fontSize: 9 }}>{c?.label || d.status}</td>
+                          return <td key={di} className="py-1 px-0.5 text-center font-bold border-r border-b border-gray-200" style={{ backgroundColor: bg, color: clr, fontSize: 9, minWidth: 26 }}>{c?.label || d.status}</td>
                         })}
-                        <td className="py-1 px-1 text-center font-bold text-emerald-700">{counts.Hadir}</td>
-                        <td className="py-1 px-1 text-center font-bold text-amber-700">{counts.Sakit}</td>
-                        <td className="py-1 px-1 text-center font-bold text-blue-700">{counts.Izin}</td>
-                        <td className="py-1 px-1 text-center font-bold text-red-700">{counts.Alpha}</td>
-                        <td className="py-1 px-1 text-center font-bold text-orange-700">{counts.Terlambat}</td>
-                        <td className="py-1 px-1 text-center font-bold text-gray-500">{counts.Libur}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-gray-700 border-r border-b border-gray-200">{effectiveDays}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-emerald-700 border-r border-b border-gray-200">{counts.Hadir}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-amber-700 border-r border-b border-gray-200">{counts.Sakit}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-blue-700 border-r border-b border-gray-200">{counts.Izin}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-red-700 border-r border-b border-gray-200">{counts.Alpha}</td>
+                        <td className="py-1.5 px-1 text-center font-bold text-orange-700 border-b border-gray-200">{counts.Terlambat}</td>
+                        <td className={`py-1.5 px-1 text-center font-extrabold border-b border-gray-200 ${pctColor}`}>{persentase}%</td>
                       </tr>
                     )
                   })}
@@ -703,11 +727,11 @@ export default function RekapPKL() {
                   <h3 className="text-lg font-bold text-red-800">Konfirmasi Akhir</h3>
                   <p className="text-sm text-gray-600 mt-2">Ketik <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">HAPUS SEMUA</span> untuk mengkonfirmasi penghapusan.</p>
                 </div>
-                <input value={resetText} onChange={e => setResetText(e.target.value)} placeholder='HAPUS SEMUA' className="w-full px-4 py-3 rounded-xl border-2 border-red-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-center font-mono font-bold text-gray-800" />
+                <input value={resetText} onChange={e => setResetText(e.target.value)} placeholder="HAPUS SEMUA" className="w-full px-4 py-3 rounded-xl border-2 border-red-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-center font-mono font-bold text-gray-800" />
                 <div className="flex gap-3 mt-4">
                   <button onClick={() => { setResetStep(1); setResetText('') }} className="flex-1 py-3 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition" disabled={resetting}>Kembali</button>
-                  <button onClick={handleReset} disabled={resetText !== 'HAPUS SEMUA' || resetting} className="flex-1 py-3 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-                    {resetting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : '🗑 Hapus Sekarang'}
+                  <button onClick={handleReset} disabled={resetText !== 'HAPUS SEMUA' || resetting} className="flex-1 py-3 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    {resetting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : 'Hapus Semua'}
                   </button>
                 </div>
               </div>

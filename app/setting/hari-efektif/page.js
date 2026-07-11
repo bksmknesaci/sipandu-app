@@ -1,12 +1,14 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { getEffectiveDaysStats, getHolidays, saveHoliday, deleteHoliday, getAcademicCalendar, saveAcademicCalendar, getActivityLogs, resetAllEffectiveDays } from '@/app/actions/effectiveDaysActions'
-import { CalendarDays, Landmark, School, CalendarX, Save, Trash2, Pencil, Plus, Upload, Download, History, CalendarRange, ListChecks, CalendarClock } from 'lucide-react'
+import { getEffectiveDaysStats, getHolidays, saveHoliday, deleteHoliday, getAcademicCalendar, saveAcademicCalendar, getActivityLogs, resetAllEffectiveDays, importCSVEffectiveDays } from '@/app/actions/effectiveDaysActions'
+import { CalendarDays, Landmark, School, CalendarX, Save, Trash2, Pencil, Plus, Upload, Download, History, CalendarRange, ListChecks, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Swal from 'sweetalert2'
 
+const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+
 export default function HariEfektifPage() {
-  const [stats, setStats] = useState({ totalEfektif: 0, totalLiburNasional: 0, totalLiburSekolah: 0, totalNonEfektif: 0 })
+  const [stats, setStats] = useState({ totalEfektif: 0, totalNonEfektif: 0, totalNasional: 0, totalSekolah: 0, totalSemester: 0, totalUjian: 0, totalKegiatan: 0, totalKhusus: 0 })
   const [holidays, setHolidays] = useState([])
   const [calendars, setCalendars] = useState([])
   const [logs, setLogs] = useState([])
@@ -18,6 +20,18 @@ export default function HariEfektifPage() {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('Semua')
   const fileInputRef = useRef(null)
+  const [importing, setImporting] = useState(false)
+  const [previewMonth, setPreviewMonth] = useState(new Date().getMonth())
+  const [previewYear, setPreviewYear] = useState(new Date().getFullYear())
+
+  const changePreviewMonth = (dir) => {
+    let m = previewMonth + dir
+    let y = previewYear
+    if (m > 11) { m = 0; y++ }
+    if (m < 0) { m = 11; y-- }
+    setPreviewMonth(m)
+    setPreviewYear(y)
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -101,34 +115,48 @@ export default function HariEfektifPage() {
     link.click()
   }
 
-  const handleImportCSV = (e) => {
+  const handleImportCSV = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const text = event.target.result
+
+    setImporting(true)
+    try {
+      const text = await file.text()
       const lines = text.split('\n').filter(l => l.trim() !== '')
-      let successCount = 0
-      let errorCount = 0
+      const rows = []
 
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim())
         if (cols.length >= 3) {
-          const formData = new FormData()
-          formData.append('date', cols[0])
-          formData.append('holiday_name', cols[1])
-          formData.append('category', cols[2])
-          formData.append('description', cols[3] || '')
-          const res = await saveHoliday(formData)
-          if (res.success) successCount++
-          else errorCount++
+          rows.push({
+            date: cols[0],
+            holiday_name: cols[1],
+            category: cols[2],
+            description: cols[3] || '',
+          })
         }
       }
-      toast.success(`Import selesai! ${successCount} berhasil, ${errorCount} gagal.`)
-      fetchData()
+
+      if (rows.length === 0) {
+        toast.error('Tidak ada data valid dalam file CSV')
+        e.target.value = ''
+        setImporting(false)
+        return
+      }
+
+      const res = await importCSVEffectiveDays(rows)
+      if (res.error) {
+        toast.error(res.error)
+      } else {
+        toast.success(`Import selesai! ${res.successCount} berhasil, ${res.errorCount} gagal.`)
+        fetchData()
+      }
+    } catch (err) {
+      toast.error('Gagal membaca file CSV: ' + err.message)
     }
-    reader.readAsText(file)
-    e.target.value = '' 
+
+    e.target.value = ''
+    setImporting(false)
   }
 
   const filteredHolidays = holidays.filter(h => 
@@ -156,19 +184,22 @@ export default function HariEfektifPage() {
       </div>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         {[
-          { label: 'Hari Efektif', value: stats.totalEfektif, color: 'bg-green-500', icon: <ListChecks /> },
-          { label: 'Libur Nasional', value: stats.totalLiburNasional, color: 'bg-red-500', icon: <Landmark /> },
-          { label: 'Libur Sekolah', value: stats.totalLiburSekolah, color: 'bg-yellow-500', icon: <School /> },
-          { label: 'Total Hari Non-Efektif', value: stats.totalNonEfektif, color: 'bg-gray-500', icon: <CalendarX /> }
+          { label: 'Hari Efektif', value: stats.totalEfektif, color: 'bg-green-600', icon: <ListChecks size={22} /> },
+          { label: 'Nasional', value: stats.totalNasional, color: 'bg-red-500', icon: <Landmark size={22} /> },
+          { label: 'Sekolah', value: stats.totalSekolah, color: 'bg-yellow-500', icon: <School size={22} /> },
+          { label: 'Semester', value: stats.totalSemester, color: 'bg-purple-500', icon: <CalendarClock size={22} /> },
+          { label: 'Ujian', value: stats.totalUjian, color: 'bg-blue-500', icon: <CalendarDays size={22} /> },
+          { label: 'Kegiatan', value: stats.totalKegiatan, color: 'bg-teal-500', icon: <CalendarRange size={22} /> },
+          { label: 'Khusus', value: stats.totalKhusus, color: 'bg-gray-500', icon: <CalendarX size={22} /> },
         ].map((card, i) => (
-          <div key={i} className={`${card.color} text-white p-5 rounded-xl shadow-lg flex items-center justify-between`}>
+          <div key={i} className={`${card.color} text-white p-4 rounded-xl shadow-lg flex flex-col justify-between`}>
+            <div className="opacity-60 mb-1">{card.icon}</div>
             <div>
-              <p className="text-sm opacity-90">{card.label}</p>
-              <p className="text-3xl font-bold mt-1">{loading ? '...' : card.value}</p>
+              <p className="text-2xl font-bold">{loading ? '...' : card.value}</p>
+              <p className="text-[10px] opacity-80 mt-0.5">{card.label}</p>
             </div>
-            <div className="opacity-50 text-4xl">{card.icon}</div>
           </div>
         ))}
       </div>
@@ -225,14 +256,25 @@ export default function HariEfektifPage() {
               <div className="mt-6 border-t pt-4">
                 <input type="file" ref={fileInputRef} accept=".csv" className="hidden" onChange={handleImportCSV} />
                 <button onClick={handleDownloadTemplate} className="w-full bg-green-50 text-green-700 border border-green-200 py-2 rounded-lg flex items-center justify-center gap-2 mb-2 hover:bg-green-100"><Download size={16} /> Download Template CSV</button>
-                <button onClick={() => fileInputRef.current?.click()} className="w-full bg-orange-50 text-orange-700 border border-orange-200 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-orange-100"><Upload size={16} /> Import CSV Massal</button>
+                <button onClick={() => fileInputRef.current?.click()} disabled={importing} className="w-full bg-orange-50 text-orange-700 border border-orange-200 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-orange-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {importing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-orange-300 border-t-transparent rounded-full animate-spin" />
+                      Memuat...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} /> Import CSV Massal
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
             <div className="lg:col-span-2">
               <div className="flex justify-between mb-4">
                 <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="p-2 border rounded-lg text-sm text-black bg-white">
-                  <option>Semua</option><option>Nasional</option><option>Sekolah</option><option>Semester</option><option>Ujian</option>
+                  <option>Semua</option><option>Nasional</option><option>Sekolah</option><option>Semester</option><option>Ujian</option><option>Kegiatan Sekolah</option><option>Khusus</option>
                 </select>
                 <input type="text" placeholder="Cari libur..." value={search} onChange={e => setSearch(e.target.value)} className="p-2 border rounded-lg text-sm w-40 text-black bg-white" />
               </div>
@@ -251,7 +293,17 @@ export default function HariEfektifPage() {
                       <tr key={h.id} className="hover:bg-gray-50">
                         <td className="p-3 text-black font-medium">{new Date(h.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td>
                         <td className="p-3 font-bold text-black">{h.holiday_name}</td>
-                        <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${h.category === 'Nasional' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{h.category}</span></td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            h.category === 'Nasional' ? 'bg-red-100 text-red-700' :
+                            h.category === 'Sekolah' ? 'bg-yellow-100 text-yellow-700' :
+                            h.category === 'Semester' ? 'bg-purple-100 text-purple-700' :
+                            h.category === 'Ujian' ? 'bg-blue-100 text-blue-700' :
+                            h.category === 'Kegiatan Sekolah' ? 'bg-teal-100 text-teal-700' :
+                            h.category === 'Khusus' ? 'bg-indigo-100 text-indigo-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>{h.category}</span>
+                        </td>
                         <td className="p-3 flex gap-2">
                           <button onClick={() => setEditingHoliday(h)} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Pencil size={14} /></button>
                           <button onClick={() => handleDeleteHoliday(h.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={14} /></button>
@@ -314,42 +366,66 @@ export default function HariEfektifPage() {
         {/* TAB 3: PREVIEW KALENDER */}
         {activeTab === 'preview' && (
           <div className="bg-gray-50 p-4 md:p-6 rounded-lg border overflow-x-auto">
-            <div className="flex justify-between items-center mb-4 min-w-[280px]">
-              <h3 className="font-bold text-gray-800 whitespace-nowrap">Preview Kalender Bulan Ini</h3>
-              <div className="flex gap-2 md:gap-3 text-xs font-medium text-gray-800 whitespace-nowrap">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <button onClick={() => changePreviewMonth(-1)} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"><ChevronLeft size={18} className="text-gray-600" /></button>
+                <h3 className="font-bold text-gray-800 whitespace-nowrap min-w-[160px] text-center">{monthNames[previewMonth]} {previewYear}</h3>
+                <button onClick={() => changePreviewMonth(1)} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"><ChevronRight size={18} className="text-gray-600" /></button>
+              </div>
+              <div className="flex flex-wrap gap-2 md:gap-3 text-[10px] md:text-xs font-medium text-gray-800 whitespace-nowrap">
                 <span className="flex items-center gap-1"><div className="w-3 h-3 bg-green-200 rounded"></div> Efektif</span>
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-200 rounded"></div> Libur Nasional</span>
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-200 rounded"></div> Libur Sekolah</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-200 rounded"></div> Nasional</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-200 rounded"></div> Sekolah</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-purple-200 rounded"></div> Semester</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-200 rounded"></div> Ujian</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-teal-200 rounded"></div> Kegiatan</span>
                 <span className="flex items-center gap-1"><div className="w-3 h-3 bg-gray-300 rounded"></div> Sabtu/Minggu</span>
               </div>
             </div>
             
             <div className="grid grid-cols-7 gap-1.5 md:gap-2" style={{ minWidth: 420 }}>
               {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(d => <div key={d} className="text-center font-bold text-[10px] md:text-xs text-gray-800 pb-1.5">{d}</div>)}
-              {Array.from({length: 35}, (_, i) => {
-                const today = new Date()
-                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+              {(() => {
+                const startOfMonth = new Date(previewYear, previewMonth, 1)
                 const startDay = startOfMonth.getDay()
-                const dateObj = new Date(today.getFullYear(), today.getMonth(), i - startDay + 1)
-                const dateStr = dateObj.toISOString().split('T')[0]
-                
-                const isWeekendDay = dateObj.getDay() === 0 || dateObj.getDay() === 6
-                const holiday = holidays.find(h => h.date === dateStr)
-                
-                let bgColor = 'bg-white border-gray-100'
-                if (isWeekendDay) bgColor = 'bg-gray-200 border-gray-300 text-gray-800'
-                if (holiday) {
-                  bgColor = holiday.category === 'Nasional' ? 'bg-red-200 border-red-300' : 'bg-yellow-200 border-yellow-300'
+                const daysInMonth = new Date(previewYear, previewMonth + 1, 0).getDate()
+                const todayStr = new Date().toLocaleDateString('sv-SE')
+                const cells = []
+
+                // Kosong sebelum hari pertama
+                for (let i = 0; i < startDay; i++) {
+                  cells.push(<div key={`e${i}`} className="min-h-[56px] md:min-h-[80px]" />)
                 }
-                if (dateObj.getMonth() !== today.getMonth()) bgColor = 'opacity-0 pointer-events-none'
-                
-                return (
-                  <div key={i} className={`p-1.5 md:p-2 border rounded-lg min-h-[56px] md:min-h-[80px] ${bgColor}`}>
-                    <p className="text-[10px] md:text-xs font-bold text-gray-800">{dateObj.getDate()}</p>
-                    {holiday && <p className="text-[8px] md:text-[10px] mt-0.5 text-black font-bold truncate">{holiday.holiday_name}</p>}
-                  </div>
-                )
-              })}
+
+                // Hari-hari dalam bulan
+                for (let d = 1; d <= daysInMonth; d++) {
+                  const dateObj = new Date(previewYear, previewMonth, d)
+                  const dateStr = dateObj.toLocaleDateString('sv-SE')
+                  const isWeekendDay = dateObj.getDay() === 0 || dateObj.getDay() === 6
+                  const holiday = holidays.find(h => h.date === dateStr)
+                  const isToday = dateStr === todayStr
+
+                  let bgColor = 'bg-white border-gray-100'
+                  if (isWeekendDay) bgColor = 'bg-gray-200 border-gray-300 text-gray-800'
+                  if (holiday) {
+                    bgColor = holiday.category === 'Nasional' ? 'bg-red-200 border-red-300' :
+                              holiday.category === 'Sekolah' ? 'bg-yellow-200 border-yellow-300' :
+                              holiday.category === 'Semester' ? 'bg-purple-200 border-purple-300' :
+                              holiday.category === 'Ujian' ? 'bg-blue-200 border-blue-300' :
+                              holiday.category === 'Kegiatan Sekolah' ? 'bg-teal-200 border-teal-300' :
+                              'bg-gray-200 border-gray-300'
+                  }
+
+                  cells.push(
+                    <div key={d} title={holiday?.holiday_name || ''} className={`p-1.5 md:p-2 border rounded-lg min-h-[56px] md:min-h-[80px] ${bgColor} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                      <p className="text-[10px] md:text-xs font-bold text-gray-800">{d}</p>
+                      {holiday && <p className="text-[8px] md:text-[10px] mt-0.5 text-black font-bold truncate">{holiday.holiday_name}</p>}
+                    </div>
+                  )
+                }
+
+                return cells
+              })()}
             </div>
           </div>
         )}

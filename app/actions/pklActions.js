@@ -126,7 +126,6 @@ export async function getTodayPklAttendance(studentId) {
   return { attendance: data }
 }
 
-// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklCheckIn({ studentId, profile, photoBase64, latitude, longitude, address }) {
   const now = getWIBTime()
   const ws = profile.work_start_time
@@ -141,7 +140,6 @@ export async function submitPklCheckIn({ studentId, profile, photoBase64, latitu
 
   const today = getWIBDate()
 
-  // PARALEL: upload foto + cek record existing
   const [selfieResult, existingResult] = await Promise.all([
     (async () => {
       if (!photoBase64) return null
@@ -169,7 +167,6 @@ export async function submitPklCheckIn({ studentId, profile, photoBase64, latitu
   return { success: true, data, status, isLate }
 }
 
-// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklCheckOut({ studentId, profile, photoBase64, latitude, longitude, address }) {
   const now = getWIBTime()
   const we = profile.work_end_time
@@ -184,7 +181,6 @@ export async function submitPklCheckOut({ studentId, profile, photoBase64, latit
 
   const today = getWIBDate()
 
-  // PARALEL: upload foto + cek existing record
   const [selfieResult, existingResult] = await Promise.all([
     (async () => {
       if (!photoBase64) return null
@@ -211,13 +207,11 @@ export async function submitPklCheckOut({ studentId, profile, photoBase64, latit
   return { success: true, data }
 }
 
-// ── OPTIMASI: Upload foto + cek existing → PARALEL ──
 export async function submitPklSakitIzin({ studentId, type, photoBase64, note, latitude, longitude }) {
   if (!note || !note.trim()) return { error: 'Alasan wajib diisi untuk sakit/izin' }
 
   const today = getWIBDate()
 
-  // PARALEL: upload foto + cek existing
   const [selfieResult, existingResult] = await Promise.all([
     (async () => {
       if (!photoBase64) return null
@@ -247,7 +241,6 @@ export async function submitPklSakitIzin({ studentId, type, photoBase64, note, l
 
 // ═══════════════════ REKAP (WK/ADMIN) ═════════════════
 
-// ── OPTIMASI: 2 query sequential → PARALEL + cache 5 menit ──
 export async function getPklFilters() {
   return getCached('pkl_filters', async () => {
     const [profilesRes, siswaRes] = await Promise.all([
@@ -283,8 +276,11 @@ export async function getPklStudents(filters = {}) {
   const { data: siswaList } = await supabaseAdmin.from('siswa').select('id, nisn, nama, kelas, jurusan, jenis_kelamin').in('id', studentIds)
   const siswaMap = {}; (siswaList || []).forEach(s => { siswaMap[s.id] = s })
   let students = profiles.map(p => ({ ...p, ...(siswaMap[p.student_id] || {}), student_id: p.student_id }))
-  if (filters.kelas) students = students.filter(s => (s.kelas || '').includes(filters.kelas))
-  if (filters.jurusan) students = students.filter(s => (s.jurusan || '').includes(filters.jurusan))
+
+  // FIX: Gunakan exact match (===) bukan substring match (.includes())
+  if (filters.kelas) students = students.filter(s => (s.kelas || '').trim() === filters.kelas.trim())
+  if (filters.jurusan) students = students.filter(s => (s.jurusan || '').trim() === filters.jurusan.trim())
+
   students.sort((a, b) => (a.nama || '').localeCompare(b.nama || ''))
   return { students }
 }
@@ -318,6 +314,10 @@ export async function getPklRekapBulanan(year, month, filters = {}) {
   const attMap = {}
   ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
   const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+
+  // FIX REALTIME: Ambil tanggal hari ini WIB untuk batasi Alpha hanya sampai hari ini
+  const todayStr = getWIBDate()
+
   const merged = students.map(s => {
     const days = []
     for (let d = 1; d <= daysInMonth; d++) {
@@ -326,25 +326,30 @@ export async function getPklRekapBulanan(year, month, filters = {}) {
       const wd = s.work_days ? s.work_days.includes(dayName) : false
       const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
       const a = attMap[`${s.student_id}_${ds}`]
+
+      // FIX REALTIME: Alpha hanya dihitung untuk tanggal yang sudah lewat atau hari ini
+      // Tanggal masa depan yang belum terjadi tidak langsung di-mark Alpha
+      const isPastOrToday = ds <= todayStr
+
       let status
       if (!inRange) status = null
       else if (a) status = a.status
-      else if (wd) status = 'Alpha'
+      else if (wd && isPastOrToday) status = 'Alpha'
+      else if (wd) status = null // hari kerja masa depan — belum ada status
       else status = 'Libur'
-      days.push({ date: ds, day: d, dayName, isWorkDay: wd, inRange, attendance: a, status })
+
+      days.push({ date: ds, day: d, dayName, isWorkDay: wd, inRange, attendance: a, status, isPastOrToday })
     }
     return { ...s, days }
   })
   return { students: merged, year, month, monthName: monthNames[month], daysInMonth }
 }
 
-// ── OPTIMASI: Cache academic_calendar aktif ──
 export async function getPklRekapSemester(filters = {}) {
   const { students } = await getPklStudents(filters)
   if (students.length === 0) return { students: [], semesterInfo: null }
   let startDate, endDate, semesterLabel
 
-  // Cache kalender akademik aktif
   const cal = await getCached('academic_calendar_active', () =>
     supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
       .then(r => r.data || null),
@@ -363,6 +368,10 @@ export async function getPklRekapSemester(filters = {}) {
   const { data: att } = await supabaseAdmin.from('pkl_attendance').select('*').gte('attendance_date', startDate).lte('attendance_date', endDate).in('student_id', ids)
   const attMap = {}
   ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
+
+  // FIX REALTIME: Alpha semester juga hanya sampai hari ini
+  const todayStr = getWIBDate()
+
   const merged = students.map(s => {
     const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
     let totalKerja = 0
@@ -374,10 +383,15 @@ export async function getPklRekapSemester(filters = {}) {
       const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
       if (inRange) {
         if (wd) {
-          totalKerja++
+          // FIX REALTIME: hanya hitung hari kerja sampai hari ini
+          if (ds <= todayStr) totalKerja++
           const a = attMap[`${s.student_id}_${ds}`]
-          if (a) counts[a.status] = (counts[a.status] || 0) + 1
-          else counts.Alpha++
+          if (a) {
+            counts[a.status] = (counts[a.status] || 0) + 1
+          } else if (ds <= todayStr) {
+            counts.Alpha++
+          }
+          // hari kerja masa depan tanpa record = belum ada status, tidak dihitung
         } else {
           counts.Libur++
         }

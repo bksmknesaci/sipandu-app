@@ -62,7 +62,7 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     pelanggaranRes,
     msgRes,
     notifRes,
-    effectiveRes,  // Hanya 1 query untuk effective_days (sebelumnya 2)
+    allHolidaysRes,
     academicRes,
     pjRes,
     rankAllRes,
@@ -75,9 +75,9 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     supabaseAdmin.from('tb_pelanggaran_siswa').select('*').eq('nisn', nisValue).order('tanggal', { ascending: false }),
     supabaseAdmin.from('parent_messages').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(50),
     supabaseAdmin.from('parent_notifications').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(20),
-    // Cache effective_days per bulan — data libur jarang berubah
-    getCached(`effective_${currentYear}_${monthStr}`, () =>
-      supabaseAdmin.from('effective_days').select('*').gte('date', startDate).lte('date', endDate).then(r => r.data || []),
+    // Semua hari libur — untuk kalender navigasi antar bulan
+    getCached('holidays_all_portal', () =>
+      supabaseAdmin.from('effective_days').select('date, category, holiday_name').then(r => r.data || []),
       TTL.HARI_EFEKTIF
     ),
     // Cache kalender akademik — jarang berubah
@@ -102,7 +102,8 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const alpha = attData.filter(a => a.status === 'Alpha').length
 
   // ── OPTIMASI: Gunakan effectiveRes langsung (bukan calendarRes yang dihapus) ──
-  const holidays = (effectiveRes || []).map(d => d.date)
+  const allHolidays = allHolidaysRes || []
+  const holidays = allHolidays.map(d => d.date)
   let effectiveCount = 0
   for (let d = 1; d <= lastDay; d++) {
     const dt = new Date(currentYear, currentMonth - 1, d)
@@ -142,29 +143,6 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const waliKelas = pjRes?.wali || null
   const sekretaris = pjRes?.sekretaris || null
 
-  // ── Gunakan effectiveRes untuk kalender (sebelumnya pakai calendarRes) ──
-  const calEvents = effectiveRes || []
-  const calendarDays = []
-  for (let d = 1; d <= lastDay; d++) {
-    const dt = new Date(currentYear, currentMonth - 1, d)
-    const dateStr = dt.toLocaleDateString('sv-SE')
-    const day = dt.getDay()
-    let type = 'effective'
-    if (day === 0 || day === 6) {
-      type = 'weekend'
-    } else {
-      const holiday = calEvents.find(e => e.date === dateStr)
-      if (holiday) {
-        const cat = holiday.category
-        if (cat === 'Nasional') type = 'holiday_nasional'
-        else if (cat === 'Ujian') type = 'ujian'
-        else if (cat === 'Kegiatan Sekolah' || cat === 'Khusus') type = 'kegiatan'
-        else type = 'holiday_sekolah'
-      }
-    }
-    calendarDays.push({ day: d, date: dateStr, type, holiday: calEvents.find(e => e.date === dateStr)?.holiday_name || null })
-  }
-
   const academicYear = academicRes.data || null
 
   const messages = msgRes.data || []
@@ -193,7 +171,7 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     rewards, totalReward, rewardMonthly,
     pelanggaran, totalPelanggaran, pelanggaranMonthly,
     rank, waliKelas, sekretaris,
-    calendarDays, academicYear,
+    allHolidays, academicYear,
     messages, notifications, unreadMessages,
     attendanceTimeline, activities, radarData,
     penanganan,
@@ -254,7 +232,7 @@ export async function markNotificationRead(id) {
   await supabaseAdmin.from('parent_notifications').update({ is_read: true }).eq('id', id)
 }
 
-export async function deleteOldParentMessages(days = 10) {
+export async function deleteOldParentMessages(days = 7) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const ds = cutoff.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
@@ -264,7 +242,7 @@ export async function deleteOldParentMessages(days = 10) {
 }
 
 export async function getParentMessages(studentId) {
-  deleteOldParentMessages(10);
+  await deleteOldParentMessages(7);
   const { data, error } = await supabaseAdmin
     .from('parent_messages')
     .select('*')
@@ -273,6 +251,38 @@ export async function getParentMessages(studentId) {
     .limit(50)
   if (error) return { data: [], error: error.message }
   return { data: data || [], error: null }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PARENT NOTIFICATIONS (untuk lonceng notif di Portal Orang Tua)
+// ═══════════════════════════════════════════════════════════════
+export async function createParentNotification(studentId, title, message, type = 'system') {
+  const { data, error } = await supabaseAdmin.from('parent_notifications').insert({
+    student_id: studentId,
+    title,
+    message: message || null,
+    type,
+    is_read: false,
+  }).select().single();
+  if (error) console.error('[createParentNotification] Error:', error.message);
+  return { data, error };
+}
+
+export async function getParentNotifications(studentId) {
+  // Auto-hapus notif > 7 hari
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const ds = cutoff.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
+  await supabaseAdmin.from('parent_notifications').delete().lt('created_at', ds);
+
+  const { data, error } = await supabaseAdmin
+    .from('parent_notifications')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return { data: [], error: error.message };
+  return { data: data || [], error: null };
 }
 
 export async function sendWKReplyMessage(studentId, message, senderId) {
@@ -284,5 +294,27 @@ export async function sendWKReplyMessage(studentId, message, senderId) {
     is_read: false,
   })
   if (error) return { error: error.message }
+
+  // Kirim notifikasi ke orang tua
+  try {
+    const { data: studentInfo } = await supabaseAdmin
+      .from('siswa')
+      .select('nama')
+      .eq('id', studentId)
+      .single();
+
+    const preview = (message || '').substring(0, 80);
+    await createParentNotification(
+      studentId,
+      `💬 Balasan dari Wali Kelas`,
+      studentInfo
+        ? `Wali Kelas ${studentInfo.nama}: "${preview}${message.length > 80 ? '...' : ''}"`
+        : `Wali Kelas: "${preview}${message.length > 80 ? '...' : ''}"`,
+      'wk_reply'
+    );
+  } catch (notifErr) {
+    console.error('[sendWKReplyMessage] Gagal kirim notifikasi orang tua:', notifErr);
+  }
+
   return { success: true }
 }

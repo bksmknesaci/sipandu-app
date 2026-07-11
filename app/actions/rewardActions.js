@@ -42,18 +42,20 @@ export async function searchStudentsForReward(query, userRole, userKelas, userId
     .limit(10)
 
   if (userRole === 'Wali Kelas') {
-    let kelasAKurat = null
+    let kelasFromDB = null
+    let jurusanFromDB = null
     if (userId) {
-      const { data: userRow } = await supabaseAdmin.from('users').select('kelas').eq('id', userId).single()
-      kelasAKurat = userRow?.kelas
-    }
-    const kelasYangDigunakan = kelasAKurat || userKelas
-    if (kelasYangDigunakan) {
-      const parts = kelasYangDigunakan.trim().split(/\s+/)
-      if (parts.length >= 2) {
-        dbQuery = dbQuery.eq('kelas', parts[0]).eq('jurusan', parts.slice(1).join(' '))
+      const { data: userRow } = await supabaseAdmin.from('users').select('kelas, jurusan').eq('id', userId).single()
+      if (userRow) {
+        kelasFromDB = userRow.kelas || null
+        jurusanFromDB = userRow.jurusan || null
       }
     }
+    // users.kelas = "XI", users.jurusan = "RPL 2" (kolom terpisah)
+    const tingkat = kelasFromDB || (userKelas ? userKelas.trim().split(/\s+/)[0] : null)
+    const jurusan = jurusanFromDB || (userKelas && userKelas.trim().split(/\s+/).length > 1 ? userKelas.trim().split(/\s+/).slice(1).join(' ') : null)
+    if (tingkat) dbQuery = dbQuery.eq('kelas', tingkat)
+    if (jurusan) dbQuery = dbQuery.eq('jurusan', jurusan)
   }
 
   const { data, error } = await dbQuery
