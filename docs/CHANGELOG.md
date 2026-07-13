@@ -1,5 +1,69 @@
 # Changelog SIPANDU
 
+## 2026-07-20 (Perbaikan Warna Hari Libur Rekap Kehadiran)
+- Tab Bulanan: Blok warna hari libur mengikuti kategori dari Halaman Hari Efektif — Nasional (rose), Sekolah (amber), Semester (violet), Ujian (blue), Kegiatan Sekolah (teal), Khusus (gray). Sabtu & Minggu tetap merah pekat
+- Tab Bulanan: Header tanggal libur menggunakan warna gelap per kategori, sel data menggunakan warna terang per kategori (sebelumnya semua merah)
+- Tab Bulanan: Legenda hari libur di bawah tabel — kotak warna sesuai kategori + tanggal + nama libur dari database + baris Sabtu & Minggu
+- Tab Bulanan: Fix data hari libur tidak sinkron setelah admin edit di Halaman Hari Efektif — tambah usePathname listener untuk re-fetch saat navigasi balik + polling 15 detik untuk menangani cache server yang stale di lingkungan serverless Vercel
+- Export PDF Tab Bulanan: Warna blok hari libur di header dan sel data mengikuti kategori (sebelumnya semua #dc2626 merah)
+- Export PDF Tab Bulanan: Legenda hari libur ditambahkan di bawah tabel PDF — kotak warna + tanggal + nama libur dari database
+- File diubah: app/rekap-kehadiran/page.js
+
+## 2026-07-19 (Perbaikan Rekap Kehadiran PKL)
+- pklActions.js: Fix bug ReferenceError s is not defined di getPklRekapSemester baris 438 — seharusnya a.student_id bukan s.student_id dalam forEach loop
+- Rekap PKL Tab Harian: Modal detail absensi (ikon mata) sekarang menampilkan Profil PKL siswa — card gradient biru muda berisi perusahaan, alamat PKL, pembimbing industri, guru pembimbing, periode PKL, jam kerja, hari kerja, koordinat lokasi dengan link Google Maps, radius absensi, dan status PKL
+- pklActions.js: getPklAttendanceDetail tambah query ke tabel pkl_profiles berdasarkan student_id, return sebagai pklProfile di dalam objek detail
+- File diubah: app/actions/pklActions.js, app/wali-kelas/rekap-pkl/page.js
+
+## 2026-07-19 (Perbaikan Absensi PKL — Pecah Tombol, Jadwal, Auto-Daftar, Popup Panduan)
+- Absensi PKL: Pecah tombol Hadir menjadi 2 tombol terpisah — "Absen Masuk" (hijau/teal, ikon LogIn) dan "Absen Pulang" (biru/indigo, ikon LogOut), masing-masing punya flow GPS→Camera→Submit terpisah
+- Absensi PKL: Tombol otomatis berubah jadi "✅ Sudah Absen Masuk/Pulang (jam)" setelah berhasil, dengan pesan disabled menjelaskan alasan spesifik
+- Absensi PKL: Pindahkan tabel "Jadwal Absensi Hari Ini" ke atas tombol aksi — siswa tahu jadwal sebelum klik, berisi jam masuk/pulang, jendela waktu dengan dot indikator aktif, toleransi terlambat, hari kerja, jam saat ini realtime WIB
+- Absensi PKL: NISN belum terdaftar → auto-insert data siswa minimal (hanya NISN, field lain null) → langsung arahkan ke halaman setup profil PKL
+- Absensi PKL: Form Data Siswa (Nama, Tingkat, Jurusan, L/P) tampil hanya untuk siswa baru, savePklProfile otomatis update tabel siswa
+- Absensi PKL: Setup profil ditambahkan banner "Disarankan isi di tempat PKL" dan label "Radius: 50 meter (otomatis)"
+- Absensi PKL: Profil PKL ditampilkan prominent di depan halaman absensi — card gradient biru muda berisi semua detail (perusahaan, alamat, pembimbing, periode, jam, hari kerja, koordinat)
+- Absensi PKL: Tambah popup panduan tata cara absensi (5 langkah + info penting) sebelum input NISN, dengan tombol "Ya, Mengerti" dan checkbox "Jangan Tampilkan Lagi" (localStorage)
+- Absensi PKL: Perbaiki auto-hapus selfie — cleanupOldPklSelfies sekarang loop while(hasMore) sampai semua record > 1 hari terproses (sebelumnya sekali limit 200)
+- pklActions.js: Tambah fungsi getPklStudentData — gabungkan siswa + auto-update status profil + attendance hari ini dalam 1 panggilan, return sinyal NO_PROFILE jika belum punya profil
+- pklActions.js: Fix bug ReferenceError s is not defined di getPklRekapSemester baris 438 — seharusnya a.student_id bukan s.student_id
+- pklActions.js: savePklProfile otomatis update data siswa jika field student_nama/student_kelas/student_jurusan/student_jenis_kelamin dikirim
+- File diubah: app/absensi-pkl/page.js, app/actions/pklActions.js
+
+## 2026-07-19 (Perbaikan Portal Orang Tua & Rekap Pindah Keluar)
+- Portal Orang Tahun Pelajaran & Semester kosong: Akar masalah cache `academic_calendar_active` menyimpan nilai null dari sebelum kalender diaktifkan — hapus cache, query langsung ke academic_calendar agar selalu sinkron dengan DB
+- Portal Orang Tua: Tambahkan banner peringatan status non-aktif jika status siswa "Pindah" atau "Keluar" — muncul tepat di bawah Hero Header, sebelum 6 Summary Cards, dengan ikon AlertTriangle, label status merah, dan penjelasan singkat
+- Rekap Pindah & Keluar: Hapus kolom Dokumen dari tabel utama (dokumen pendukung masih bisa diakses melalui modal detail siswa)
+- File diubah: app/actions/parentPortalActions.js, app/portal-ortu/page.js, app/admin/siswa/pindah-keluar/page.js
+
+## 2026-07-19 (Perbaikan Multi-Halaman)
+- pelanggaranActions.js — Fix syntax error: kurung siku `]` hilang di akhir baris 197 menyebabkan build error "Expected ',', got 'if'"
+- pelanggaranActions.js — deleteAllPelanggaran: Fix `.neq('id', 0).delete()` yang error "neq is not a function" — di Supabase JS v2 filter wajib dipanggil SETELAH `.delete()`, bukan sebelumnya
+- pelanggaranActions.js — deleteAllPelanggaran: Simplifikasi reset total_pelanggaran — hapus logika kumpulkan NISN + batch `.in()`, ganti langsung `.update({ total_pelanggaran: 0 }).gte('total_pelanggaran', 1)` agar tidak gagal silent
+- Rekap Pelanggaran: Ganti konfirmasi `prompt()` dengan modal popup 2 langkah — Step 1 peringatan (jumlah siswa & poin), Step 2 ketik "HAPUS SEMUA", loading spinner, result sukses/gagal
+- Rekap Pelanggaran: Import baru ShieldAlert, Loader2 dari lucide-react; state baru showDeleteModal, deleteStep, deleteConfirmText, deleteResult, deleteInputRef
+- Penanganan Siswa: Ganti konfirmasi `confirm()` dengan modal popup 2 langkah — Step 1 peringatan detail (riwayat BK, SP, catatan, status Pindah/Keluar) + ringkasan jumlah per kategori, Step 2 ketik "HAPUS SEMUA", loading spinner, result sukses/gagal
+- Penanganan Siswa: Import baru X, ShieldAlert, Loader2 dari lucide-react; state baru showResetModal, resetStep, resetConfirmText, resetting, resetResult, resetInputRef
+- Penanganan Siswa: Modal reset menggunakan z-index z-[60] agar tidak tertutup modal detail (z-50)
+- Absensi Kehadiran: Sekretaris setelah klik "Kirim & Kunci Absensi" — jika ada siswa Alpha, modal konfirmasi WhatsApp otomatis terbuka (cukup 1x klik untuk kirim absen + WA)
+- Absensi Kehadiran: Tombol "Minta Persetujuan Edit" baru muncul setelah alur kirim absensi + modal WA selesai
+- Absensi Kehadiran: Modal WhatsApp — tombol "Batal" diganti "Lewati" agar sekretaris bisa skip pengiriman WA tanpa membatalkan absensi
+- Absensi Kehadiran: Modal WhatsApp — tambah empty state saat tidak ada siswa Alpha dengan nomor WA valid
+- Rekap Sakit & Izin: Fix filter Wali Kelas menampilkan semua jurusan — akar masalah u.kelas hanya berisi tingkat ("XII"), jurusan selalu kosong sehingga filter tidak efektif. Diganti prioritas ambil kelas+jurusan dari database via getUserKelasInfo(userId), fallback parse u.kelas
+- Rekap Sakit & Izin: Hapus duplikat useEffect fetchFilters yang menjalankan query 2x
+- Rekap Sakit & Izin: Tambah filter tanggal (date picker) untuk memfilter pengajuan per tanggal tertentu
+- Rekap Sakit & Izin: Tambah tombol "Semua Tanggal" untuk reset filter tanggal
+- Rekap Sakit & Izin: Tambah label info filter tanggal di bawah baris filter (nama hari lengkap + jumlah data ditemukan)
+- Rekap Sakit & Izin: Tambah kartu statistik "Pengajuan Hari Ini" (gradient biru, selalu hitung dari ALL data bukan filtered agar konsisten)
+- Rekap Sakit & Izin: Tambah icon mata (Eye) di kolom Aksi setiap baris data untuk melihat detail siswa
+- Rekap Sakit & Izin: Modal detail lengkap berisi header gradient + avatar inisial, info grid 4 kolom (jenis, status, tanggal lengkap, jam), alasan pengajuan, foto bukti (klik untuk zoom), lokasi GPS (latitude, longitude, akurasi, tombol Google Maps), catatan Wali Kelas jika ditolak, timestamp verifikasi
+- Rekap Sakit & Izin: Optimalisasi filteredData, stats, todayCount menggunakan useMemo agar tidak dihitung ulang setiap render
+- absensiActions.js — cleanupOldBuktiSakitIzin: Tambah hapus otomatis record yang sudah > 30 hari (hapus foto sisa di Storage + batch delete record dari tb_absensi_sakit_izin per 100 ID)
+- absensiActions.js — cleanupOldBuktiSakitIzin: Logika cleanup sekarang 2 tahap — >1 hari hapus foto saja, >30 hari hapus foto + record
+- Mobile Wali Kelas: Fix link "Rekap Kehadiran" dari /wali-kelas/rekap-kehadiran menjadi /rekap-kehadiran (sesuai lokasi file app/rekap-kehadiran/page.js)
+- Rekap Pindah & Keluar: Hapus kolom Dokumen dari tabel utama (dokumen pendukung masih bisa diakses melalui modal detail siswa)
+- File diubah: app/actions/pelanggaranActions.js, app/actions/absensiActions.js, app/wali-kelas/rekap-pelanggaran/page.js, app/admin/siswa/penanganan/page.js, app/absensi/page.js, app/wali-kelas/rekap-sakit-izin/page.js, app/mobile/wali-kelas/page.js, app/admin/siswa/pindah-keluar/page.js
+
 ## 2026-07-19 (Perbaikan Rekap Sakit & Izin)
 - Rekap Sakit & Izin: Fix filter Wali Kelas menampilkan semua jurusan — akar masalah u.kelas hanya berisi tingkat ("XII"), jurusan selalu kosong sehingga filter tidak efektif. Diganti prioritas ambil kelas+jurusan dari database via getUserKelasInfo(userId), fallback parse u.kelas
 - Rekap Sakit & Izin: Hapus duplikat useEffect fetchFilters yang menjalankan query 2x

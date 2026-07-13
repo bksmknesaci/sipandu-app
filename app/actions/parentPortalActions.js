@@ -52,8 +52,6 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const jurusan = studentJurusan
   const nisValue = studentNisn || ''
 
-  // ── OPTIMASI: Hapus 1 query duplikat (effectiveRes === calendarRes, keduanya query tabel sama) ──
-  // ── OPTIMASI: Cache effective_days per bulan & PJ lookup ──
   const [
     todayRes,
     attMonthRes,
@@ -75,17 +73,11 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     supabaseAdmin.from('tb_pelanggaran_siswa').select('*').eq('nisn', nisValue).order('tanggal', { ascending: false }),
     supabaseAdmin.from('parent_messages').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(50),
     supabaseAdmin.from('parent_notifications').select('*').eq('student_id', studentId).order('created_at', { ascending: false }).limit(20),
-    // Semua hari libur — untuk kalender navigasi antar bulan
     getCached('holidays_all_portal', () =>
       supabaseAdmin.from('effective_days').select('date, category, holiday_name').then(r => r.data || []),
       TTL.HARI_EFEKTIF
     ),
-    // Cache kalender akademik — jarang berubah
-    getCached('academic_calendar_active', () =>
-      supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).single().then(r => r.data),
-      TTL.HARI_EFEKTIF
-    ),
-    // Cache PJ lookup — data penanggung jawab jarang berubah
+    supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).single(),
     getCached(`pj_${kelas}_${jurusan}`, () =>
       getPJByClass(kelas, jurusan),
       TTL.PENANGGUNG_JAWAB
@@ -101,7 +93,6 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
   const sakit = attData.filter(a => a.status === 'Sakit').length
   const alpha = attData.filter(a => a.status === 'Alpha').length
 
-  // ── OPTIMASI: Gunakan effectiveRes langsung (bukan calendarRes yang dihapus) ──
   const allHolidays = allHolidaysRes || []
   const holidays = allHolidays.map(d => d.date)
   let effectiveCount = 0
@@ -181,7 +172,7 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
 
 export async function sendParentMessage(studentId, message) {
   const { error } = await supabaseAdmin.from('parent_messages').insert({
-    student_id: studentId, sender_type: 'Orang Tua', message
+    student_id: studentId, sender_type: 'Orang Tua', sender_id: null, message
   })
   if (error) return { error: error.message }
 

@@ -11,7 +11,7 @@ const MENUS = [
   { title: 'Entri Pelanggaran', desc: 'Input poin pelanggaran siswa', icon: AlertTriangle, href: '/wali-kelas/entri-pelanggaran', gradient: 'linear-gradient(135deg, #dc2626, #ef4444)', shadow: 'rgba(239,68,68,0.4)' },
   { title: 'Rekap Pelanggaran', desc: 'Data pelanggaran per siswa', icon: FileWarning, href: '/wali-kelas/rekap-pelanggaran', gradient: 'linear-gradient(135deg, #d97706, #f59e0b)', shadow: 'rgba(245,158,11,0.4)' },
   { title: 'Rekap Sakit & Izin', desc: 'Verifikasi pengajuan ketidakhadiran', icon: HeartPulse, href: '/wali-kelas/rekap-sakit-izin', gradient: 'linear-gradient(135deg, #db2777, #ec4899)', shadow: 'rgba(236,72,153,0.4)' },
-  { title: 'Rekap Kehadiran', desc: 'Data kehadiran harian & bulanan', icon: CalendarDays, href: '/wali-kelas/rekap-kehadiran', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)', shadow: 'rgba(59,130,246,0.4)' },
+  { title: 'Rekap Kehadiran', desc: 'Monitoring data kehadiran sekolah', icon: CalendarDays, href: '/rekap-kehadiran', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)', shadow: 'rgba(59,130,246,0.4)' },
   { title: 'Rekap Kehadiran PKL', desc: 'Data kehadiran siswa PKL', icon: BarChart3, href: '/wali-kelas/rekap-pkl', gradient: 'linear-gradient(135deg, #0891b2, #06b6d4)', shadow: 'rgba(6,182,212,0.4)' },
   { title: 'Penanganan Siswa', desc: 'Monitoring & tindak lanjut siswa', icon: Shield, href: '/wali-kelas/penanganan', gradient: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', shadow: 'rgba(139,92,246,0.4)' },
 ];

@@ -173,17 +173,17 @@ export default function RekapPindahKeluar() {
           <table className="w-full text-sm text-left">
             <thead className="bg-gray-50 border-b">
               <tr>
-                {['No', 'NISN', 'Nama Siswa', 'Kelas', 'Jurusan', 'L/P', 'Status', 'Tgl Keputusan', 'Alasan Pindah/Keluar', 'Dokumen', 'Aksi'].map(h => (
+                {['No', 'NISN', 'Nama Siswa', 'Kelas', 'Jurusan', 'L/P', 'Status', 'Tgl Keputusan', 'Alasan Pindah/Keluar', 'Aksi'].map(h => (
                   <th key={h} className="py-3 px-4 font-bold text-gray-600 text-xs uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y">
               {loading ? (
-                <tr><td colSpan="11" className="text-center py-8 text-gray-400 animate-pulse">Memuat data...</td></tr>
+                <tr><td colSpan="10" className="text-center py-8 text-gray-400 animate-pulse">Memuat data...</td></tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="text-center py-12">
+                  <td colSpan="10" className="text-center py-12">
                     <Package size={48} className="mx-auto text-gray-200 mb-3" />
                     <p className="text-gray-500 font-semibold">Belum ada data siswa pindah/keluar</p>
                     <p className="text-gray-400 text-xs mt-1">Data akan otomatis muncul saat siswa ditetapkan status Pindah/Keluar</p>
@@ -209,11 +209,6 @@ export default function RekapPindahKeluar() {
                     </td>
                     <td className="py-3 px-4 text-gray-600 text-xs whitespace-nowrap">{d.tanggal_keputusan}</td>
                     <td className="py-3 px-4 text-gray-600 text-xs max-w-[200px] truncate" title={d.alasan}>{d.alasan || '-'}</td>
-                    <td className="py-3 px-4">
-                      {d.tb_pindah_keluar_dokumen?.length > 0 ? (
-                        <span className="text-indigo-600 font-semibold text-xs flex items-center gap-1"><FileText size={12} /> {d.tb_pindah_keluar_dokumen.length} file</span>
-                      ) : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
                     <td className="py-3 px-4 text-center">
                       <button onClick={() => openDetail(d)} className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"><Eye size={16} /></button>
                     </td>

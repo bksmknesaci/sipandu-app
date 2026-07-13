@@ -63,11 +63,55 @@ export async function searchStudentForPkl(nisn) {
   return { student: data, profile }
 }
 
-export async function getPklProfile(studentId) {
-  if (!studentId) return { profile: null }
-  const { data: profile, error } = await supabaseAdmin.from('pkl_profiles').select('*').eq('student_id', studentId).maybeSingle()
-  if (error) return { error: error.message }
-  if (!profile) return { profile: null }
+/**
+ * Data lengkap siswa + profil PKL + attendance hari ini
+ * Jika NISN belum terdaftar, otomatis buat data siswa minimal
+ */
+export async function getPklStudentData(nisn) {
+  const trimmed = (nisn || '').trim()
+  if (!trimmed) return { error: 'NISN tidak boleh kosong' }
+
+  // 1. Cari siswa
+  let { data: siswa, error: errSiswa } = await supabaseAdmin
+    .from('siswa')
+    .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
+    .eq('nisn', trimmed)
+    .maybeSingle()
+
+  if (!siswa) {
+    const { data: d2 } = await supabaseAdmin
+      .from('siswa')
+      .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
+      .eq('nis', trimmed)
+      .maybeSingle()
+    if (d2) { siswa = d2; errSiswa = null }
+  }
+
+  // 2. Jika tidak ditemukan, buat data siswa baru (minimal: NISN saja)
+  if (!siswa) {
+    const { data: newSiswa, error: insertErr } = await supabaseAdmin
+      .from('siswa')
+      .insert([{ nisn: trimmed, nama: null, kelas: null, jurusan: null, status: 'Aktif', jenis_kelamin: null }])
+      .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
+      .single()
+    if (insertErr) return { error: 'Gagal mendaftarkan NISN. Silakan coba lagi.' }
+    siswa = newSiswa
+  }
+
+  if (errSiswa) return { error: errSiswa.message }
+  if (!siswa.nisn && siswa.nis) siswa.nisn = siswa.nis
+
+  // 3. Ambil profil PKL + auto-update status
+  const { data: profile, error: errProfile } = await supabaseAdmin
+    .from('pkl_profiles')
+    .select('*')
+    .eq('student_id', siswa.id)
+    .maybeSingle()
+
+  if (errProfile) return { error: errProfile.message }
+  if (!profile) return { error: 'NO_PROFILE', student: siswa } // Sinyal khusus: siswa ada tapi belum punya profil
+
+  // Auto-update status berdasarkan tanggal
   const today = getWIBDate()
   let ns = profile.status
   if (profile.start_date && profile.end_date) {
@@ -76,10 +120,23 @@ export async function getPklProfile(studentId) {
     else if (today > profile.end_date && ns !== 'Selesai') ns = 'Selesai'
   }
   if (ns !== profile.status) {
-    await supabaseAdmin.from('pkl_profiles').update({ status: ns, updated_at: new Date().toISOString() }).eq('student_id', studentId)
+    await supabaseAdmin.from('pkl_profiles').update({ status: ns, updated_at: new Date().toISOString() }).eq('student_id', siswa.id)
     profile.status = ns
   }
-  return { profile }
+
+  // 4. Ambil attendance hari ini
+  const { data: todayAtt } = await supabaseAdmin
+    .from('pkl_attendance')
+    .select('*')
+    .eq('student_id', siswa.id)
+    .eq('attendance_date', today)
+    .maybeSingle()
+
+  return {
+    student: siswa,
+    profile: profile,
+    todayAttendance: todayAtt || null
+  }
 }
 
 export async function savePklProfile(d) {
@@ -114,6 +171,17 @@ export async function savePklProfile(d) {
     res = await supabaseAdmin.from('pkl_profiles').insert([row]).select().single()
   }
   if (res.error) return { error: res.error.message }
+
+  // Update data siswa jika ada (untuk siswa yang baru terdaftar)
+  if (d.student_nama || d.student_kelas || d.student_jurusan || d.student_jenis_kelamin) {
+    const studentUpdate = {}
+    if (d.student_nama) studentUpdate.nama = d.student_nama
+    if (d.student_kelas) studentUpdate.kelas = d.student_kelas
+    if (d.student_jurusan) studentUpdate.jurusan = d.student_jurusan
+    if (d.student_jenis_kelamin) studentUpdate.jenis_kelamin = d.student_jenis_kelamin
+    await supabaseAdmin.from('siswa').update(studentUpdate).eq('id', d.student_id)
+  }
+
   return { success: true, profile: res.data }
 }
 
@@ -431,7 +499,19 @@ export async function getPklStats(filters = {}) {
 export async function getPklAttendanceDetail(id) {
   const { data, error } = await supabaseAdmin.from('pkl_attendance').select('*, siswa:student_id(nisn, nama, kelas, jurusan)').eq('id', id).maybeSingle()
   if (error) return { error: error.message }
-  return { detail: data }
+
+  // Ambil profil PKL siswa
+  let pklProfile = null
+  if (data?.student_id) {
+    const { data: profile } = await supabaseAdmin
+      .from('pkl_profiles')
+      .select('*')
+      .eq('student_id', data.student_id)
+      .maybeSingle()
+    if (profile) pklProfile = profile
+  }
+
+  return { detail: { ...data, pklProfile } }
 }
 
 // ═══════════════════ MAINTENANCE ═══════════════════
@@ -452,31 +532,60 @@ export async function resetAllPklData() {
   return { success: true }
 }
 
+/**
+ * Hapus foto selfie PKL yang sudah > 1 hari
+ * - Loop sampai semua record terproses (bukan sekali limit 200)
+ * - Hapus file dari Storage bucket 'pkl-selfies'
+ * - Set kolom URL menjadi null di database
+ */
 export async function cleanupOldPklSelfies() {
   try {
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 1)
-    const { data: old } = await supabaseAdmin.from('pkl_attendance')
-      .select('id, selfie_url, check_out_selfie_url')
-      .or(`selfie_url.is.not.null,check_out_selfie_url.is.not.null`)
-      .lt('created_at', cutoff.toISOString())
-      .limit(200)
-    if (!old || old.length === 0) return { deleted: 0 }
-    const paths = [], ids = []
-    old.forEach(r => {
-      const ex = (url) => { const m = url?.match(/\/pkl-selfies\/(.+)/); return m ? m[1] : null }
-      const p1 = ex(r.selfie_url), p2 = ex(r.check_out_selfie_url)
-      if (p1) paths.push(p1)
-      if (p2) paths.push(p2)
-      if (p1 || p2) ids.push(r.id)
-    })
-    let delCount = 0
-    if (paths.length > 0) {
-      const { error: delErr } = await supabaseAdmin.storage.from('pkl-selfies').remove(paths)
-      if (!delErr) delCount = paths.length
+    let totalDeleted = 0
+    let hasMore = true
+    while (hasMore) {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 1)
+      const { data: old } = await supabaseAdmin.from('pkl_attendance')
+        .select('id, selfie_url, check_out_selfie_url')
+        .or('selfie_url.is.not.null,check_out_selfie_url.is.not.null')
+        .lt('created_at', cutoff.toISOString())
+        .limit(200)
+
+      if (!old || old.length === 0) {
+        hasMore = false
+        break
+      }
+
+      const paths = [], ids = []
+      old.forEach(r => {
+        const ex = (url) => { const m = url?.match(/\/pkl-selfies\/(.+)/); return m ? m[1] : null }
+        const p1 = ex(r.selfie_url), p2 = ex(r.check_out_selfie_url)
+        if (p1) paths.push(p1)
+        if (p2) paths.push(p2)
+        if (p1 || p2) ids.push(r.id)
+      })
+
+      if (paths.length > 0) {
+        try {
+          const { error: delErr } = await supabaseAdmin.storage.from('pkl-selfies').remove(paths)
+          if (!delErr) totalDeleted += paths.length
+        } catch (e) {
+          console.error('[cleanupPklSelfies] Storage remove error:', e)
+        }
+      }
+
+      if (ids.length > 0) {
+        await supabaseAdmin.from('pkl_attendance')
+          .update({ selfie_url: null, check_out_selfie_url: null })
+          .in('id', ids)
+      }
+
+      // Jika hasil kurang dari limit, berarti sudah tidak ada lagi
+      if (old.length < 200) hasMore = false
     }
-    if (ids.length > 0) {
-      await supabaseAdmin.from('pkl_attendance').update({ selfie_url: null, check_out_selfie_url: null }).in('id', ids)
-    }
-    return { deleted: delCount }
-  } catch (e) { console.error('[cleanupPklSelfies]', e); return { deleted: 0 } }
+    return { deleted: totalDeleted }
+  } catch (e) {
+    console.error('[cleanupPklSelfies]', e)
+    return { deleted: 0 }
+  }
 }

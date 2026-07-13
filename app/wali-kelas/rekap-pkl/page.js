@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { BarChart3, Filter, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, AlertTriangle, Printer, FileSpreadsheet, RotateCcw } from 'lucide-react'
+import { BarChart3, Filter, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, AlertTriangle, Printer, FileSpreadsheet, RotateCcw, Building2 } from 'lucide-react'
 import { getPklFilters, getPklStats, getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklAttendanceDetail, resetAllPklData, cleanupOldPklSelfies } from '@/app/actions/pklActions'
 import { getWKKelasAssignment, getUserKelasInfo } from '@/app/actions/absensiActions'
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
@@ -667,6 +667,63 @@ export default function RekapPKL() {
                   <div>
                     <p className="text-xs font-semibold text-gray-500 mb-2">Foto Selfie Pulang</p>
                     <img src={detailData.check_out_selfie_url} alt="Selfie Pulang" className="w-full max-w-[200px] rounded-xl border" referrerPolicy="no-referrer" />
+                  </div>
+                )}
+                {/* Profil PKL Siswa */}
+                {detailData.pklProfile && (
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                    <h4 className="text-xs font-bold text-blue-800 uppercase mb-3 flex items-center gap-1.5">
+                      <Building2 size={13} className="text-blue-600" /> Profil PKL
+                      <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold ${detailData.pklProfile.status === 'Berjalan' ? 'bg-emerald-100 text-emerald-700' : detailData.pklProfile.status === 'Belum Mulai' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'}`}>
+                        {detailData.pklProfile.status}
+                      </span>
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Perusahaan</span>
+                        <p className="font-semibold text-gray-800">{detailData.pklProfile.company_name || '-'}</p>
+                      </div>
+                      {detailData.pklProfile.company_address && (
+                        <div className="col-span-2">
+                          <span className="text-gray-500">Alamat PKL</span>
+                          <p className="font-semibold text-gray-700">{detailData.pklProfile.company_address}</p>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-500">Pembimbing Industri</span>
+                        <p className="font-semibold text-gray-700">{detailData.pklProfile.industry_supervisor || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Guru Pembimbing</span>
+                        <p className="font-semibold text-gray-700">{detailData.pklProfile.guru_pembimbing || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Periode PKL</span>
+                        <p className="font-semibold text-gray-700">{detailData.pklProfile.start_date} s/d {detailData.pklProfile.end_date}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Jam Kerja</span>
+                        <p className="font-semibold text-gray-700">{detailData.pklProfile.work_start_time} - {detailData.pklProfile.work_end_time}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Hari Kerja</span>
+                        <p className="font-semibold text-gray-700">{detailData.pklProfile.work_days?.join(', ')}</p>
+                      </div>
+                      {detailData.pklProfile.latitude && detailData.pklProfile.longitude && (
+                        <div className="col-span-2 flex items-center gap-2">
+                          <span className="text-gray-500">Lokasi PKL</span>
+                          <a
+                            href={`https://www.google.com/maps?q=${detailData.pklProfile.latitude},${detailData.pklProfile.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 font-mono text-[10px] hover:underline"
+                          >
+                            {Number(detailData.pklProfile.latitude).toFixed(6)}, {Number(detailData.pklProfile.longitude).toFixed(6)}
+                          </a>
+                          <span className="text-gray-400 text-[10px]">· Radius: {detailData.pklProfile.radius_meter || 50}m</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 {(detailData.check_in_latitude || detailData.check_in_address) && (

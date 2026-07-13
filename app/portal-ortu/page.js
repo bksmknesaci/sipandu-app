@@ -456,9 +456,26 @@ export default function PortalOrtu() {
           <p className="relative z-10 mt-4 text-blue-100 text-xs md:text-sm leading-relaxed">
             Pantau perkembangan akademik, kedisiplinan, dan kehadiran putra-putri Anda secara real-time.
           </p>
-        </div>
+      </div>
 
-        {/* ===== 6 SUMMARY CARDS ===== */}
+      {/* Banner Status Non-Aktif */}
+      {(student.status || '').trim() === 'Pindah' || (student.status || '').trim() === 'Keluar' ? (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-red-700">
+              Status Non-Aktif: {(student.status || '').trim()}
+            </p>
+            <p className="text-xs text-red-600 mt-0.5">
+              {(student.status || '').trim() === 'Pindah'
+                ? 'Siswa ini sudah pindah ke sekolah lain.'
+                : 'Siswa ini sudah keluar dari sekolah.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ===== 6 SUMMARY CARDS ===== */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           {[
             { label: 'Kehadiran', value: `${data.persentase}%`, icon: <CheckCircle size={20} />, gradient: 'from-green-500 to-emerald-600', sub: `${data.hadir}/${data.effectiveCount} hari` },

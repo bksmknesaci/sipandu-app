@@ -1,10 +1,13 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
-import { MapPin, Camera, Search, CheckCircle, XCircle, Clock, Building2, User, GraduationCap, Loader2, ChevronRight, AlertTriangle, LogOut } from 'lucide-react'
-import { searchStudentForPkl, getPklProfile, savePklProfile, getTodayPklAttendance, submitPklCheckIn, submitPklCheckOut, submitPklSakitIzin } from '@/app/actions/pklActions'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { MapPin, Camera, Search, CheckCircle, XCircle, Clock, Building2, User, GraduationCap, Loader2, ChevronRight, AlertTriangle, LogOut, LogIn, FileText, Calendar, Timer } from 'lucide-react'
+import { getPklStudentData, savePklProfile, submitPklCheckIn, submitPklCheckOut, submitPklSakitIzin, cleanupOldPklSelfies } from '@/app/actions/pklActions'
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+const DAY_NAMES_GETDAY = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+const TINGKAT_OPTIONS = ['X', 'XI', 'XII']
+const JK_OPTIONS = ['Laki-laki', 'Perempuan']
 
 function compressImage(b64, maxW = 800, q = 0.7) {
   return new Promise(resolve => {
@@ -53,11 +56,14 @@ function statusColor(s) {
   return m[s] || 'bg-gray-100 text-gray-600'
 }
 
-const typeOptions = [
-  { type: 'Hadir', emoji: '✅', desc: 'Absen masuk dan pulang dengan validasi GPS & selfie', bg: '#D1FAE5', border: '#6EE7B7', textColor: '#065F46' },
-  { type: 'Sakit', emoji: '🤒', desc: 'Wajib lampirkan foto selfie & alasan', bg: '#FEF3C7', border: '#FDE68A', textColor: '#92400E' },
-  { type: 'Izin', emoji: '📝', desc: 'Wajib lampirkan foto selfie & alasan', bg: '#DBEAFE', border: '#93C5FD', textColor: '#1E40AF' },
-]
+function getWIBNowMin() {
+  const now = new Date()
+  return ((now.getUTCHours() + 7) % 24) * 60 + now.getUTCMinutes()
+}
+
+function getWIBDateStr() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })
+}
 
 export default function AbsensiPKL() {
   const [step, setStep] = useState('search')
@@ -66,6 +72,8 @@ export default function AbsensiPKL() {
   const [profile, setProfile] = useState(null)
   const [todayAtt, setTodayAtt] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [dontShowAgain, setDontShowAgain] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
   const [attStep, setAttStep] = useState('choose')
@@ -75,8 +83,15 @@ export default function AbsensiPKL() {
   const [gpsData, setGpsData] = useState(null)
   const [gpsStatus, setGpsStatus] = useState('')
   const [gpsValid, setGpsValid] = useState(null)
+  const [nowMin, setNowMin] = useState(getWIBNowMin)
 
-  const [form, setForm] = useState({ company_name: '', company_address: '', industry_supervisor: '', guru_pembimbing: '', start_date: '', end_date: '', work_start_time: '', work_end_time: '', work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'], latitude: '', longitude: '', radius_meter: '50' })
+  const [form, setForm] = useState({
+    company_name: '', company_address: '', industry_supervisor: '', guru_pembimbing: '',
+    start_date: '', end_date: '', work_start_time: '', work_end_time: '',
+    work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'],
+    latitude: '', longitude: '', radius_meter: '50',
+    student_nama: '', student_kelas: '', student_jurusan: '', student_jenis_kelamin: ''
+  })
   const [savingProfile, setSavingProfile] = useState(false)
 
   const videoRef = useRef(null)
@@ -84,8 +99,27 @@ export default function AbsensiPKL() {
   const [cameraStream, setCameraStream] = useState(null)
   const [cameraActive, setCameraActive] = useState(false)
 
+  // ── Timers & Cleanup ──────────────────────────────────────────
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t) } }, [toast])
   useEffect(() => { return () => stopCamera() }, [])
+  useEffect(() => { cleanupOldPklSelfies().catch(() => {}) }, [])
+  useEffect(() => {
+    const iv = setInterval(() => setNowMin(getWIBNowMin()), 30000)
+    return () => clearInterval(iv)
+  }, [])
+
+  useEffect(() => {
+    const iv = setInterval(() => setNowMin(getWIBNowMin()), 30000)
+    return () => clearInterval(iv)
+  }, [])
+
+  // Cek apakah panduan sudah pernah di-dismiss
+  useEffect(() => {
+    const dismissed = localStorage.getItem('pkl_guide_dismissed')
+    if (dismissed !== 'true') {
+      setShowGuide(true)
+    }
+  }, [])
 
   const stopCamera = () => {
     if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); setCameraStream(null); setCameraActive(false) }
@@ -110,37 +144,110 @@ export default function AbsensiPKL() {
     stopCamera()
   }
 
+  // ── Computed: Jadwal & Disabled Logic ─────────────────────────
+  const todayDayName = DAY_NAMES_GETDAY[new Date().getDay()]
+  const todayStr = getWIBDateStr()
+  const isWorkDay = profile?.work_days?.includes(todayDayName)
+  const isNewStudent = !student?.nama
+
+  const masukOpen = profile?.work_start_time ? timeToMin(profile.work_start_time) - 60 : null
+  const masukClose = profile?.work_start_time ? timeToMin(profile.work_start_time) + 180 : null
+  const pulangOpen = profile?.work_end_time ? timeToMin(profile.work_end_time) - 60 : null
+  const pulangClose = profile?.work_end_time ? timeToMin(profile.work_end_time) + 120 : null
+  const lateThreshold = profile?.work_start_time ? timeToMin(profile.work_start_time) + 15 : null
+
+  const isInMasukWindow = masukOpen !== null && masukClose !== null && nowMin >= masukOpen && nowMin <= masukClose
+  const isInPulangWindow = pulangOpen !== null && pulangClose !== null && nowMin >= pulangOpen && nowMin <= pulangClose
+  const willBeLate = lateThreshold !== null && masukClose !== null && nowMin > lateThreshold && nowMin <= masukClose
+
+  const hasCheckedIn = !!todayAtt?.check_in_time
+  const hasCheckedOut = !!todayAtt?.check_out_time
+  const hasSakitIzin = todayAtt && (todayAtt.status === 'Sakit' || todayAtt.status === 'Izin')
+
+  const masukDisabled = hasCheckedIn || hasSakitIzin || !isWorkDay || !isInMasukWindow || profile?.status !== 'Berjalan'
+  const pulangDisabled = !hasCheckedIn || hasCheckedOut || hasSakitIzin || !isWorkDay || !isInPulangWindow || profile?.status !== 'Berjalan'
+  const siDisabled = (hasCheckedIn || hasCheckedOut || hasSakitIzin) || profile?.status !== 'Berjalan'
+
+  const isGpsMasuk = attStep === 'gps_masuk'
+  const gpsFlowLabel = isGpsMasuk ? 'Masuk' : 'Pulang'
+  const gpsNextStep = isGpsMasuk ? 'photo_masuk' : 'photo_pulang'
+  const isPhotoMasuk = attStep === 'photo_masuk'
+  const photoFlowLabel = isPhotoMasuk ? 'Masuk' : 'Pulang'
+  const photoBackStep = isPhotoMasuk ? 'gps_masuk' : 'gps_pulang'
+
+  function getMasukReason() {
+    if (profile?.status !== 'Berjalan') return `PKL ${profile?.status || 'tidak aktif'}`
+    if (!isWorkDay) return `Hari ini (${todayDayName}) bukan hari kerja`
+    if (hasCheckedIn) return 'Sudah absen masuk hari ini'
+    if (hasSakitIzin) return 'Sudah mengajukan sakit/izin hari ini'
+    if (masukOpen === null || masukClose === null) return 'Jam kerja belum diatur'
+    if (!isInMasukWindow) return `Di luar jadwal (${formatMinToTime(masukOpen)} – ${formatMinToTime(masukClose)})`
+    return ''
+  }
+
+  function getPulangReason() {
+    if (profile?.status !== 'Berjalan') return `PKL ${profile?.status || 'tidak aktif'}`
+    if (!isWorkDay) return `Hari ini (${todayDayName}) bukan hari kerja`
+    if (!hasCheckedIn) return 'Belum absen masuk'
+    if (hasCheckedOut) return 'Sudah absen pulang hari ini'
+    if (hasSakitIzin) return 'Sudah mengajukan sakit/izin hari ini'
+    if (pulangOpen === null || pulangClose === null) return 'Jam pulang belum diatur'
+    if (!isInPulangWindow) return `Di luar jadwal (${formatMinToTime(pulangOpen)} – ${formatMinToTime(pulangClose)})`
+    return ''
+  }
+
+  // ── Handlers ──────────────────────────────────────────────────
+
   const handleSearch = async () => {
     if (!nisn.trim()) { showToast('Masukkan NISN', 'error'); return }
     setLoading(true)
-    const res = await searchStudentForPkl(nisn.trim())
+    const res = await getPklStudentData(nisn.trim())
     setLoading(false)
-    if (res.error) { showToast(res.error, 'error'); return }
-    setStudent(res.student); setProfile(res.profile)
-    if (res.profile) {
-      const attRes = await getTodayPklAttendance(res.student.id)
-      setTodayAtt(attRes.attendance)
+    if (res.error && res.error !== 'NO_PROFILE') { showToast(res.error, 'error'); return }
+    setStudent(res.student)
+    if (res.error === 'NO_PROFILE') {
+      // Siswa ada/telah dibuat tapi belum punya profil PKL → ke setup
+      setForm(f => ({ ...f, start_date: '', end_date: '', work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'], student_nama: res.student?.nama || '', student_kelas: res.student?.kelas || '', student_jurusan: res.student?.jurusan || '', student_jenis_kelamin: res.student?.jenis_kelamin || '' }))
+      setStep('setup')
+    } else {
+      setProfile(res.profile)
+      setTodayAtt(res.todayAttendance || null)
       if (res.profile.status === 'Berjalan') {
-        if (attRes.attendance) {
-          setAttStep(attRes.attendance.check_out_time ? 'done' : 'checkout')
-        } else { setAttStep('choose') }
+        setAttStep(res.todayAttendance?.check_out_time ? 'done' : 'choose')
       } else { setAttStep('inactive') }
       setStep('attendance')
-    } else {
-      setForm(f => ({ ...f, start_date: '', end_date: '', work_days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] }))
-      setStep('setup')
     }
   }
 
   const handleSaveProfile = async () => {
+    // Validasi data siswa jika baru
+    if (isNewStudent && !form.student_nama.trim()) { showToast('Nama lengkap wajib diisi', 'error'); return }
+    if (isNewStudent && !form.student_kelas) { showToast('Tingkat kelas wajib dipilih', 'error'); return }
+    if (isNewStudent && !form.student_jurusan.trim()) { showToast('Jurusan wajib diisi', 'error'); return }
     if (!form.company_name.trim()) { showToast('Nama perusahaan wajib diisi', 'error'); return }
     if (!form.start_date || !form.end_date) { showToast('Tanggal mulai dan selesai wajib diisi', 'error'); return }
     if (!form.work_start_time || !form.work_end_time) { showToast('Jam kerja wajib diisi', 'error'); return }
     setSavingProfile(true)
-    const res = await savePklProfile({ ...form, student_id: student.id })
+    const res = await savePklProfile({
+      ...form,
+      student_id: student.id,
+      student_nama: form.student_nama || undefined,
+      student_kelas: form.student_kelas || undefined,
+      student_jurusan: form.student_jurusan || undefined,
+      student_jenis_kelamin: form.student_jenis_kelamin || undefined,
+    })
     setSavingProfile(false)
     if (res.error) { showToast(res.error, 'error'); return }
-    setProfile(res.profile); setStep('attendance'); setAttStep('choose')
+    // Refresh data untuk dapat info siswa yang baru diupdate
+    const fresh = await getPklStudentData(nisn.trim())
+    if (!fresh.error) {
+      setStudent(fresh.student)
+      setProfile(fresh.profile)
+      setTodayAtt(fresh.todayAttendance || null)
+    } else {
+      setProfile(res.profile)
+    }
+    setStep('attendance'); setAttStep('choose')
     showToast('Profil PKL berhasil disimpan!')
   }
 
@@ -154,7 +261,6 @@ export default function AbsensiPKL() {
     } catch (e) { setGpsStatus('error'); showToast('Gagal mendapatkan lokasi GPS', 'error') }
   }
 
-  // ═══════════ FIX: Hapus guard clause yang salah ═══════════
   const handleValidateGPS = async () => {
     if (!profile) return
     setGpsStatus('validating'); setGpsValid(null)
@@ -174,7 +280,6 @@ export default function AbsensiPKL() {
     } catch (e) { setGpsStatus('error'); showToast('Gagal mendapatkan lokasi GPS', 'error') }
   }
 
-  // ═══════════ NEW: Ambil GPS untuk Sakit/Izin (tanpa validasi radius) ═══════════
   const handleCaptureGPSSakitIzin = async () => {
     setGpsStatus('getting')
     try {
@@ -183,15 +288,6 @@ export default function AbsensiPKL() {
       setGpsStatus('done')
       showToast('Lokasi berhasil diambil', 'success')
     } catch (e) { setGpsStatus('error'); showToast('Gagal mendapatkan lokasi GPS', 'error') }
-  }
-
-  const handleChooseType = (type) => {
-    setSelectedType(type); setNote(''); setCapturedPhoto(null); setGpsData(null); setGpsValid(null); setGpsStatus('')
-    if (type === 'Hadir') {
-      setAttStep('gps')
-    } else {
-      setAttStep('gps_sakit')
-    }
   }
 
   const handleCheckIn = async () => {
@@ -204,8 +300,12 @@ export default function AbsensiPKL() {
     })
     setSubmitting(false)
     if (res.error) { showToast(res.error, 'error'); return }
-    setTodayAtt(res.data); setAttStep('checkout')
+    const fresh = await getPklStudentData(nisn.trim())
+    if (!fresh.error) { setTodayAtt(fresh.todayAttendance) }
+    setAttStep('choose')
+    setCapturedPhoto(null); setGpsValid(null); setGpsStatus(''); setGpsData(null)
     showToast(`Absensi masuk berhasil! Status: ${res.status}${res.isLate ? ' (Terlambat)' : ''}`)
+    cleanupOldPklSelfies().catch(() => {})
   }
 
   const handleCheckOut = async () => {
@@ -218,8 +318,12 @@ export default function AbsensiPKL() {
     })
     setSubmitting(false)
     if (res.error) { showToast(res.error, 'error'); return }
-    setTodayAtt(res.data); setAttStep('done')
+    const fresh = await getPklStudentData(nisn.trim())
+    if (!fresh.error) { setTodayAtt(fresh.todayAttendance) }
+    setAttStep('done')
+    setCapturedPhoto(null); setGpsValid(null); setGpsStatus(''); setGpsData(null)
     showToast('Absensi pulang berhasil!')
+    cleanupOldPklSelfies().catch(() => {})
   }
 
   const handleSakitIzin = async () => {
@@ -232,8 +336,17 @@ export default function AbsensiPKL() {
     })
     setSubmitting(false)
     if (res.error) { showToast(res.error, 'error'); return }
-    setTodayAtt(res.data); setAttStep('done')
+    const fresh = await getPklStudentData(nisn.trim())
+    if (!fresh.error) { setTodayAtt(fresh.todayAttendance) }
+    setAttStep('done')
+    setCapturedPhoto(null); setGpsData(null); setGpsStatus('')
     showToast(`Absensi ${selectedType.toLowerCase()} berhasil dicatat!`)
+    cleanupOldPklSelfies().catch(() => {})
+  }
+
+  const handleSakitIzinClick = (type) => {
+    setSelectedType(type); setNote(''); setCapturedPhoto(null); setGpsData(null); setGpsValid(null); setGpsStatus('')
+    setAttStep('gps_sakit')
   }
 
   const handleReset = () => {
@@ -243,34 +356,36 @@ export default function AbsensiPKL() {
 
   const showToast = (message, type = 'success') => setToast({ message, type, key: Date.now() })
 
+  const handleCloseGuide = () => {
+    if (dontShowAgain) {
+      localStorage.setItem('pkl_guide_dismissed', 'true')
+    }
+    setShowGuide(false)
+  }
+
   const handleEditProfile = () => {
     if (!profile) return
     setForm({
-      company_name: profile.company_name || '',
-      company_address: profile.company_address || '',
-      industry_supervisor: profile.industry_supervisor || '',
-      guru_pembimbing: profile.guru_pembimbing || '',
-      start_date: profile.start_date || '',
-      end_date: profile.end_date || '',
-      work_start_time: profile.work_start_time || '',
-      work_end_time: profile.work_end_time || '',
+      company_name: profile.company_name || '', company_address: profile.company_address || '',
+      industry_supervisor: profile.industry_supervisor || '', guru_pembimbing: profile.guru_pembimbing || '',
+      start_date: profile.start_date || '', end_date: profile.end_date || '',
+      work_start_time: profile.work_start_time || '', work_end_time: profile.work_end_time || '',
       work_days: profile.work_days || ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'],
-      latitude: profile.latitude ? String(profile.latitude) : '',
-      longitude: profile.longitude ? String(profile.longitude) : '',
+      latitude: profile.latitude ? String(profile.latitude) : '', longitude: profile.longitude ? String(profile.longitude) : '',
       radius_meter: 50,
+      student_nama: student?.nama || '', student_kelas: student?.kelas || '',
+      student_jurusan: student?.jurusan || '', student_jenis_kelamin: student?.jenis_kelamin || '',
     })
-    if (profile.latitude && profile.longitude) {
-      setGpsData({ lat: profile.latitude, lng: profile.longitude, accuracy: 0 })
-      setGpsStatus('done')
-    } else {
-      setGpsData(null); setGpsStatus('')
-    }
+    if (profile.latitude && profile.longitude) { setGpsData({ lat: profile.latitude, lng: profile.longitude, accuracy: 0 }); setGpsStatus('done') }
+    else { setGpsData(null); setGpsStatus('') }
     setStep('setup')
   }
 
   const toggleWorkDay = (day) => {
     setForm(f => ({ ...f, work_days: f.work_days.includes(day) ? f.work_days.filter(d => d !== day) : [...f.work_days, day] }))
   }
+
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -297,6 +412,111 @@ export default function AbsensiPKL() {
 
       <div className="max-w-2xl mx-auto p-4 space-y-4">
 
+      {/* ═══════════ POPUP PANDUAN ABSENSI PKL ═══════════ */}
+      {showGuide && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) handleCloseGuide() }}>
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+
+          {/* Card */}
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[85vh] overflow-y-auto animate-fadeIn">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-5 py-4 rounded-t-2xl text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl">📋</div>
+                <div>
+                  <h2 className="font-bold text-base">Tata Cara Absensi PKL</h2>
+                  <p className="text-blue-200 text-xs">Baca dengan seksama sebelum memulai</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              {/* Step 1 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Masukkan NISN</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Ketik NISN Anda pada kolom pencarian, lalu klik "Cari". Jika NISN belum terdaftar, Anda akan diminta melengkapi data diri dan profil PKL terlebih dahulu.</p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Cek Jadwal Absensi</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Perhatikan tabel jadwal yang tampil. Pastikan Anda berada di <strong>hari kerja</strong> dan dalam <strong>waktu yang ditentukan</strong>. Dot hijau menandakan jendela absensi sedang aktif.</p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Absen Masuk</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Klik tombol <strong>"Absen Masuk"</strong> (hijau) → Sistem memvalidasi lokasi GPS Anda (harus dalam radius 50m dari lokasi PKL) → Ambil foto selfie → Kirim.</p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Absen Pulang</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Setelah selesai bekerja, klik tombol <strong>"Absen Pulang"</strong> (biru) → Validasi GPS → Foto selfie → Kirim.</p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">5</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Sakit / Izin</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Jika tidak bisa masuk, gunakan tombol <strong>"Sakit"</strong> atau <strong>"Izin"</strong>. Wajib lampirkan foto selfie dan isi alasan. Lokasi GPS opsional.</p>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 space-y-1.5">
+                <p className="font-semibold flex items-center gap-1.5"><AlertTriangle size={13} className="shrink-0" /> Penting:</p>
+                <ul className="list-disc list-inside space-y-0.5 pl-1">
+                  <li>Absensi <strong>wajib dilakukan di lokasi PKL</strong> agar GPS terdeteksi dalam radius 50 meter.</li>
+                  <li>Foto selfie <strong>wajib dari kamera langsung</strong> (tidak boleh dari galeri).</li>
+                  <li>Jika terlambat lebih dari <strong>15 menit</strong> dari jam masuk, status otomatis "Terlambat".</li>
+                  <li>Setelah absen masuk berhasil, tombol akan berubah jadi <strong>"✅ Sudah Absen Masuk"</strong>.</li>
+                  <li>Profil PKL disarankan diatur <strong>di tempat PKL</strong> agar koordinat lokasi akurat.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-5 space-y-3">
+              {/* Checkbox */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none group" onClick={() => setDontShowAgain(!dontShowAgain)}>
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                  dontShowAgain ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-blue-400'
+                }`}>
+                  {dontShowAgain && (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  )}
+                </div>
+                <span className="text-sm text-gray-600">Jangan tampilkan lagi</span>
+              </label>
+
+              {/* Button */}
+              <button
+                onClick={handleCloseGuide}
+                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition shadow-lg active:scale-[0.98]"
+              >
+                Ya, Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         {/* ═══════════ STEP: SEARCH ═══════════ */}
         {step === 'search' && (
           <div className="bg-white rounded-2xl shadow-sm border p-6 mt-8 animate-fadeIn">
@@ -317,23 +537,65 @@ export default function AbsensiPKL() {
         {/* ═══════════ STEP: SETUP PROFILE ═══════════ */}
         {step === 'setup' && student && (
           <div className="space-y-4 animate-fadeIn">
+            {/* Student Info Card */}
             <div className="bg-white rounded-2xl shadow-sm border p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">{student.nama?.[0]}</div>
-                <div><p className="font-bold text-gray-800">{student.nama}</p><p className="text-xs text-gray-500">{student.nisn} · {student.kelas} {student.jurusan}</p></div>
+                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">{student.nama?.[0] || '?'}</div>
+                <div>
+                  <p className="font-bold text-gray-800">{student.nama || 'Belum diisi'}</p>
+                  <p className="text-xs text-gray-500">NISN: {student.nisn}{student.kelas ? ` · ${student.kelas} ${student.jurusan || ''}` : ''}</p>
+                </div>
               </div>
             </div>
-            {!profile ? (
+
+            {/* Banner: Data Siswa Belum Lengkap */}
+            {isNewStudent && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800">
-                <p className="font-semibold">📝 Profil PKL Belum Ada</p>
-                <p className="text-xs mt-1">Lengkapi data di bawah ini untuk mengaktifkan absensi PKL, dan lakukan pengisian di tempat PKL.</p>
-              </div>
-            ) : (
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
-                <p className="font-semibold">⚙️ Atur Ulang Profil PKL</p>
-                <p className="text-xs mt-1">Perbaiki data di bawah ini. Setelah disimpan, Anda akan kembali ke halaman absensi.</p>
+                <p className="font-semibold">👤 Data Siswa Belum Lengkap</p>
+                <p className="text-xs mt-1">NISN Anda baru terdaftar. Lengkapi data diri terlebih dahulu, lalu isi profil PKL di bawahnya.</p>
               </div>
             )}
+
+            {/* Banner: Atur Ulang / Baru */}
+            {!isNewStudent && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
+                <p className="font-semibold">⚙️ Atur Ulang Profil PKL</p>
+                <p className="text-xs mt-1">Perbaiki data di bawah ini. Disarankan lakukan pengisian di tempat PKL agar koordinat lokasi akurat.</p>
+              </div>
+            )}
+
+            {/* ── Form Data Siswa (hanya jika baru) ── */}
+            {isNewStudent && (
+              <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><User size={18} className="text-blue-600" /> Data Siswa</h3>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 block mb-1">Nama Lengkap *</label>
+                  <input value={form.student_nama} onChange={e => setForm(f => ({ ...f, student_nama: e.target.value }))} placeholder="Masukkan nama lengkap" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">Tingkat *</label>
+                    <select value={form.student_kelas} onChange={e => setForm(f => ({ ...f, student_kelas: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800 bg-white">
+                      <option value="">Pilih</option>
+                      {TINGKAT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">Jurusan *</label>
+                    <input value={form.student_jurusan} onChange={e => setForm(f => ({ ...f, student_jurusan: e.target.value }))} placeholder="Contoh: RPL 2" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">L/P</label>
+                    <select value={form.student_jenis_kelamin} onChange={e => setForm(f => ({ ...f, student_jenis_kelamin: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800 bg-white">
+                      <option value="">Pilih</option>
+                      {JK_OPTIONS.map(j => <option key={j} value={j}>{j}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Form Profil PKL ── */}
             <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
               <h3 className="font-bold text-gray-800 flex items-center gap-2"><Building2 size={18} className="text-blue-600" /> Informasi Perusahaan</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -366,6 +628,10 @@ export default function AbsensiPKL() {
             </div>
             <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
               <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> Lokasi PKL</h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <p><strong>Disarankan isi di tempat PKL</strong> agar koordinat lokasi akurat. Radius absensi otomatis <strong>50 meter</strong> dari titik ini.</p>
+              </div>
               <button onClick={handleGetLocation} disabled={gpsStatus === 'getting'} className="w-full px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl text-blue-700 font-semibold text-sm hover:bg-blue-100 transition flex items-center justify-center gap-2">
                 {gpsStatus === 'getting' ? <><Loader2 size={16} className="animate-spin" /> Mendapatkan Lokasi...</> : <><MapPin size={16} /> Ambil Lokasi GPS Sekarang</>}
               </button>
@@ -374,7 +640,7 @@ export default function AbsensiPKL() {
                   <div className="bg-gray-50 rounded-lg p-2"><span className="text-gray-500">Latitude:</span> <span className="font-mono font-bold">{gpsData.lat?.toFixed(7)}</span></div>
                   <div className="bg-gray-50 rounded-lg p-2"><span className="text-gray-500">Longitude:</span> <span className="font-mono font-bold">{gpsData.lng?.toFixed(7)}</span></div>
                   <div className="bg-gray-50 rounded-lg p-2"><span className="text-gray-500">Akurasi:</span> <span className="font-bold">{Math.round(gpsData.accuracy)}m</span></div>
-                  <div className="bg-gray-50 rounded-lg p-2"><span className="text-gray-500">Radius Absensi:</span> <span className="font-bold text-blue-700">50 meter (tetap)</span></div>
+                  <div className="bg-gray-50 rounded-lg p-2"><span className="text-gray-500">Radius Absensi:</span> <span className="font-bold text-blue-700">50 meter (otomatis)</span></div>
                 </div>
               )}
             </div>
@@ -387,37 +653,65 @@ export default function AbsensiPKL() {
         {/* ═══════════ STEP: ATTENDANCE ═══════════ */}
         {step === 'attendance' && student && profile && (
           <div className="space-y-4 animate-fadeIn">
-            {/* Student Card */}
+
+            {/* Student Card (kompak) */}
             <div className="bg-white rounded-2xl shadow-sm border p-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">{student.nama?.[0]}</div>
+                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">{student.nama?.[0] || '?'}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-800 truncate">{student.nama}</p>
-                  <p className="text-xs text-gray-500">{student.nisn} · {student.kelas} {student.jurusan}</p>
+                  <p className="font-bold text-gray-800 truncate">{student.nama || 'Belum diisi'}</p>
+                  <p className="text-xs text-gray-500">{student.nisn}{student.kelas ? ` · ${student.kelas} ${student.jurusan || ''}` : ''}</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColor(profile.status)}`}>{profile.status}</span>
               </div>
-              {profile.company_name && (
-                <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-gray-400">Perusahaan:</span> <span className="font-semibold text-gray-700">{profile.company_name}</span></div>
-                  <div><span className="text-gray-400">Jam:</span> <span className="font-semibold text-gray-700">{profile.work_start_time} - {profile.work_end_time}</span></div>
-                </div>
-              )}
             </div>
 
-            {/* Tombol Atur Ulang — HANYA muncul jika profil sudah ada */}
-            {profile && attStep === 'choose' && (
-              <button onClick={handleEditProfile} className="bg-white rounded-2xl shadow-sm border p-4 flex items-center gap-3 hover:shadow-md hover:border-blue-300 transition group">
-                <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition text-lg">
-                  ⚙️
+            {/* ── PKL Profile Card (tampil didepan) ── */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <Building2 size={16} className="text-blue-600" /> Profil PKL
+                </h3>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColor(profile.status)}`}>{profile.status}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <div className="col-span-2">
+                  <span className="text-gray-500">Perusahaan</span>
+                  <p className="font-semibold text-gray-800 text-sm">{profile.company_name || '-'}</p>
                 </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold text-gray-800 text-sm group-hover:text-blue-700 transition">Atur Ulang Profil PKL</p>
-                  <p className="text-[10px] text-gray-500">Perbaiki data perusahaan, jam kerja, hari kerja, atau lokasi</p>
+                {profile.company_address && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Alamat PKL</span>
+                    <p className="font-semibold text-gray-700">{profile.company_address}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-500">Pembimbing Industri</span>
+                  <p className="font-semibold text-gray-700">{profile.industry_supervisor || '-'}</p>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-blue-500 transition"><path d="m9 18 6-6-6-6"/></svg>
-              </button>
-            )}
+                <div>
+                  <span className="text-gray-500">Guru Pembimbing</span>
+                  <p className="font-semibold text-gray-700">{profile.guru_pembimbing || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Periode PKL</span>
+                  <p className="font-semibold text-gray-700">{profile.start_date} s/d {profile.end_date}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Jam Kerja</span>
+                  <p className="font-semibold text-gray-700">{profile.work_start_time} - {profile.work_end_time}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-500">Hari Kerja</span>
+                  <p className="font-semibold text-gray-700">{profile.work_days?.join(', ')}</p>
+                </div>
+                {profile.latitude && profile.longitude && (
+                  <div className="col-span-2 flex items-center gap-2">
+                    <MapPin size={12} className="text-blue-500 shrink-0" />
+                    <span className="font-mono text-[10px] text-gray-600">Lat: {Number(profile.latitude).toFixed(6)}, Lng: {Number(profile.longitude).toFixed(6)} · Radius: 50m</span>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Inactive */}
             {attStep === 'inactive' && (
@@ -444,170 +738,165 @@ export default function AbsensiPKL() {
               </div>
             )}
 
-            {/* Choose Type — FIXED: inline style agar text hitam */}
+            {/* ═══════════ CHOOSE: Jadwal + 2 Tombol + Sakit/Izin ═══════════ */}
             {attStep === 'choose' && (
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-700">Pilih Jenis Absensi:</p>
-                {typeOptions.map(item => (
-                  <button key={item.type} onClick={() => handleChooseType(item.type)}
-                    className="w-full p-4 rounded-2xl flex items-center gap-4 hover:shadow-lg transition text-left border-2"
-                    style={{ backgroundColor: item.bg, borderColor: item.border, color: item.textColor }}>
-                    <span className="text-3xl">{item.emoji}</span>
-                    <div className="flex-1"><p className="font-bold text-base">{item.type}</p><p className="text-xs opacity-80">{item.desc}</p></div>
-                    <ChevronRight size={20} style={{ opacity: 0.5 }} />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* ═══════════ GPS VALIDATION (Hadir) — FIXED ═══════════ */}
-            {attStep === 'gps' && (
-              <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> Validasi Lokasi GPS</h3>
-                <p className="text-xs text-gray-500">Pastikan Anda berada di lokasi PKL ({profile.company_name}) — Radius: 50m</p>
-
-                {/* Info Waktu Absensi */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-                  <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><Clock size={13} /> Jadwal Absensi Hari Ini</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-                      <p className="text-blue-500 font-semibold text-[10px] uppercase">Jam Masuk</p>
-                      <p className="font-bold text-gray-800 text-base">{profile.work_start_time || '-'}</p>
-                      <p className="text-[10px] text-gray-400">Buka {formatMinToTime(timeToMin(profile.work_start_time) - 60)} s.d. {formatMinToTime(timeToMin(profile.work_start_time) + 180)}</p>
+                {/* Jadwal Absensi Hari Ini */}
+                <div className="bg-white rounded-2xl shadow-sm border p-4">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
+                    <Calendar size={16} className="text-indigo-600" />
+                    Jadwal Absensi Hari Ini
+                    <span className="ml-auto text-xs font-normal text-gray-400">{todayDayName}, {todayStr}</span>
+                  </h3>
+                  {!isWorkDay && (
+                    <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs flex items-center gap-2">
+                      <AlertTriangle size={14} className="shrink-0" />
+                      Hari ini ({todayDayName}) bukan hari kerja PKL Anda.
                     </div>
-                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
-                      <p className="text-blue-500 font-semibold text-[10px] uppercase">Jam Pulang</p>
-                      <p className="font-bold text-gray-800 text-base">{profile.work_end_time || '-'}</p>
-                      <p className="text-[10px] text-gray-400">Buka {formatMinToTime(timeToMin(profile.work_end_time) - 60)} s.d. {formatMinToTime(timeToMin(profile.work_end_time) + 120)}</p>
-                    </div>
+                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 text-gray-500 font-medium flex items-center gap-1.5"><LogIn size={14} className="text-emerald-500" /> Jam Masuk</td>
+                          <td className="py-2 text-gray-800 font-bold text-right">{profile.work_start_time || '-'}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-1.5 pl-5 text-gray-400 text-xs">Buka Absen Masuk</td>
+                          <td className="py-1.5 text-gray-600 text-right text-xs">
+                            {masukOpen !== null ? formatMinToTime(masukOpen) : '-'} — {masukClose !== null ? formatMinToTime(masukClose) : '-'}
+                            <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${isInMasukWindow ? 'bg-emerald-500' : 'bg-gray-300'}`}></span>
+                          </td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 text-gray-500 font-medium flex items-center gap-1.5"><LogOut size={14} className="text-blue-500" /> Jam Pulang</td>
+                          <td className="py-2 text-gray-800 font-bold text-right">{profile.work_end_time || '-'}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-1.5 pl-5 text-gray-400 text-xs">Buka Absen Pulang</td>
+                          <td className="py-1.5 text-gray-600 text-right text-xs">
+                            {pulangOpen !== null ? formatMinToTime(pulangOpen) : '-'} — {pulangClose !== null ? formatMinToTime(pulangClose) : '-'}
+                            <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${isInPulangWindow ? 'bg-emerald-500' : 'bg-gray-300'}`}></span>
+                          </td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 text-gray-500 font-medium flex items-center gap-1.5"><Timer size={14} className="text-orange-500" /> Toleransi Terlambat</td>
+                          <td className="py-2 text-orange-600 font-bold text-right">15 menit</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 text-gray-500 font-medium">Hari Kerja</td>
+                          <td className="py-2 text-gray-700 text-right text-xs font-medium">{profile.work_days?.join(', ')}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
-                    <span className="text-amber-600 text-sm">⏰</span>
-                    <div className="text-xs">
-                      <p className="font-semibold text-amber-800">Toleransi Terlambat: 15 menit</p>
-                      <p className="text-amber-600">Jika absen setelah <span className="font-bold">{formatMinToTime(timeToMin(profile.work_start_time) + 15)}</span>, status otomatis <span className="font-bold text-orange-600">Terlambat</span></p>
-                    </div>
+                  <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Jam saat ini</span>
+                    <span className="font-mono font-bold text-gray-700 text-sm">{formatMinToTime(nowMin)} WIB</span>
                   </div>
                 </div>
 
-                {gpsStatus === '' && (
-                  <button onClick={handleValidateGPS} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md">
-                    <MapPin size={16} /> Ambil & Validasi Lokasi
+                {/* Status Hari Ini */}
+                {todayAtt && (
+                  <div className={`rounded-2xl p-4 border ${todayAtt.status === 'Hadir' || todayAtt.status === 'Terlambat' ? 'bg-emerald-50 border-emerald-200' : todayAtt.status === 'Sakit' || todayAtt.status === 'Izin' ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-1.5"><CheckCircle size={15} className="text-emerald-600" /><span className="font-semibold text-gray-800 text-sm">Status Hari Ini</span></div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${todayAtt.status === 'Hadir' ? 'bg-emerald-200 text-emerald-800' : todayAtt.status === 'Terlambat' ? 'bg-orange-200 text-orange-800' : todayAtt.status === 'Sakit' ? 'bg-yellow-200 text-yellow-800' : todayAtt.status === 'Izin' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-800'}`}>{todayAtt.status}</span>
+                      {todayAtt.check_in_time && <span className="text-gray-500 text-xs">Masuk: {todayAtt.check_in_time}</span>}
+                      {todayAtt.check_out_time && <span className="text-gray-500 text-xs">Pulang: {todayAtt.check_out_time}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tombol Absen Masuk */}
+                <button onClick={() => { setGpsValid(null); setGpsStatus(''); setGpsData(null); setAttStep('gps_masuk') }} disabled={masukDisabled} className="w-full">
+                  <div className={`w-full py-4 px-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all duration-200 ${hasCheckedIn ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300 cursor-default' : masukDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-transparent' : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-300 active:scale-[0.98] border-2 border-transparent'}`}>
+                    {hasCheckedIn ? (<><CheckCircle size={22} /> Sudah Absen Masuk <span className="text-xs font-normal opacity-75 ml-0.5">({todayAtt.check_in_time})</span></>) : (<><LogIn size={22} /> Absen Masuk {willBeLate && (<span className="text-xs bg-orange-400 text-white px-2 py-0.5 rounded-full ml-0.5">Terlambat</span>)}</>)}
+                  </div>
+                  {!hasCheckedIn && masukDisabled && getMasukReason() && (<p className="text-xs text-gray-400 text-center mt-1.5 px-2">{getMasukReason()}</p>)}
+                </button>
+
+                {/* Tombol Absen Pulang */}
+                <button onClick={() => { setGpsValid(null); setGpsStatus(''); setGpsData(null); setAttStep('gps_pulang') }} disabled={pulangDisabled} className="w-full">
+                  <div className={`w-full py-4 px-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all duration-200 ${hasCheckedOut ? 'bg-blue-100 text-blue-700 border-2 border-blue-300 cursor-default' : pulangDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-transparent' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 active:scale-[0.98] border-2 border-transparent'}`}>
+                    {hasCheckedOut ? (<><CheckCircle size={22} /> Sudah Absen Pulang <span className="text-xs font-normal opacity-75 ml-0.5">({todayAtt.check_out_time})</span></>) : (<><LogOut size={22} /> Absen Pulang</>)}
+                  </div>
+                  {!hasCheckedOut && pulangDisabled && getPulangReason() && (<p className="text-xs text-gray-400 text-center mt-1.5 px-2">{getPulangReason()}</p>)}
+                </button>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 py-0.5">
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                  <span className="text-xs text-gray-400 font-medium">atau</span>
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                </div>
+
+                {/* Sakit / Izin */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => handleSakitIzinClick('Sakit')} disabled={siDisabled} className="p-3.5 rounded-2xl flex items-center gap-3 hover:shadow-lg transition text-left border-2 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: siDisabled ? '#f3f4f6' : '#FEF3C7', borderColor: siDisabled ? '#e5e7eb' : '#FDE68A', color: siDisabled ? '#9ca3af' : '#92400E' }}>
+                    <span className="text-2xl">🤒</span>
+                    <div><p className="font-bold text-sm">Sakit</p><p className="text-[10px] opacity-80">Foto & alasan wajib</p></div>
                   </button>
-                )}
-
-                {gpsStatus === 'validating' && (
-                  <div className="text-center py-8"><Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-2" /><p className="text-sm text-gray-600 font-medium">Memvalidasi lokasi...</p></div>
-                )}
-
-                {gpsStatus === 'valid' && gpsValid && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                    <CheckCircle size={32} className="mx-auto text-emerald-500 mb-2" />
-                    <p className="font-bold text-emerald-800">✅ Lokasi Terverifikasi</p>
-                    <p className="text-xs text-emerald-600 mt-1">Jarak: {Math.round(gpsData.currentDist)}m (batas: 50m)</p>
-                    <p className="text-[10px] text-emerald-500 mt-1 font-mono">Lat: {gpsData.lat?.toFixed(6)}, Lng: {gpsData.lng?.toFixed(6)}</p>
-                  </div>
-                )}
-
-                {gpsStatus === 'invalid' && gpsValid === false && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                    <XCircle size={32} className="mx-auto text-red-500 mb-2" />
-                    <p className="font-bold text-red-800">❌ Di Luar Area PKL</p>
-                    <p className="text-xs text-red-600 mt-1">Jarak Anda: {Math.round(gpsData.currentDist)}m (batas: 50m)</p>
-                    <button onClick={handleValidateGPS} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button>
-                  </div>
-                )}
-
-                {gpsStatus === 'error' && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                    <AlertTriangle size={32} className="mx-auto text-red-500 mb-2" />
-                    <p className="font-bold text-red-800">Gagal Mendapatkan Lokasi</p>
-                    <p className="text-xs text-red-600 mt-1">Pastikan GPS aktif dan izin lokasi diizinkan</p>
-                    <button onClick={handleValidateGPS} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button>
-                  </div>
-                )}
-
-                {gpsValid && (
-                  <button onClick={() => setAttStep('photo_hadir')} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2">
-                    <Camera size={16} /> Lanjut Ambil Foto Selfie →
+                  <button onClick={() => handleSakitIzinClick('Izin')} disabled={siDisabled} className="p-3.5 rounded-2xl flex items-center gap-3 hover:shadow-lg transition text-left border-2 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: siDisabled ? '#f3f4f6' : '#DBEAFE', borderColor: siDisabled ? '#e5e7eb' : '#93C5FD', color: siDisabled ? '#9ca3af' : '#1E40AF' }}>
+                    <span className="text-2xl">📝</span>
+                    <div><p className="font-bold text-sm">Izin</p><p className="text-[10px] opacity-80">Foto & alasan wajib</p></div>
                   </button>
-                )}
+                </div>
+
+                {/* Atur Ulang Profil */}
+                <button onClick={handleEditProfile} className="bg-white rounded-2xl shadow-sm border p-3.5 flex items-center gap-3 hover:shadow-md hover:border-blue-300 transition group">
+                  <div className="w-9 h-9 rounded-xl bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition text-base">⚙️</div>
+                  <div className="flex-1 text-left">
+                    <p className="font-semibold text-gray-800 text-sm group-hover:text-blue-700 transition">Atur Ulang Profil PKL</p>
+                    <p className="text-[10px] text-gray-500">Perbaiki data perusahaan, jam kerja, hari kerja, atau lokasi</p>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-blue-500 transition"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            )}
+
+            {/* ═══════════ GPS VALIDATION (Masuk / Pulang) ═══════════ */}
+            {(attStep === 'gps_masuk' || attStep === 'gps_pulang') && (
+              <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> Validasi Lokasi GPS — Absen {gpsFlowLabel}</h3>
+                <p className="text-xs text-gray-500">Pastikan Anda berada di lokasi PKL ({profile.company_name}) — Radius: 50m</p>
+                {gpsStatus === '' && (<button onClick={handleValidateGPS} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md"><MapPin size={16} /> Ambil & Validasi Lokasi</button>)}
+                {gpsStatus === 'validating' && (<div className="text-center py-8"><Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-2" /><p className="text-sm text-gray-600 font-medium">Memvalidasi lokasi...</p></div>)}
+                {gpsStatus === 'valid' && gpsValid && (<div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center"><CheckCircle size={32} className="mx-auto text-emerald-500 mb-2" /><p className="font-bold text-emerald-800">✅ Lokasi Terverifikasi</p><p className="text-xs text-emerald-600 mt-1">Jarak: {Math.round(gpsData.currentDist)}m (batas: 50m)</p><p className="text-[10px] text-emerald-500 mt-1 font-mono">Lat: {gpsData.lat?.toFixed(6)}, Lng: {gpsData.lng?.toFixed(6)}</p></div>)}
+                {gpsStatus === 'invalid' && gpsValid === false && (<div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center"><XCircle size={32} className="mx-auto text-red-500 mb-2" /><p className="font-bold text-red-800">❌ Di Luar Area PKL</p><p className="text-xs text-red-600 mt-1">Jarak Anda: {Math.round(gpsData.currentDist)}m (batas: 50m)</p><button onClick={handleValidateGPS} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button></div>)}
+                {gpsStatus === 'error' && (<div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center"><AlertTriangle size={32} className="mx-auto text-red-500 mb-2" /><p className="font-bold text-red-800">Gagal Mendapatkan Lokasi</p><p className="text-xs text-red-600 mt-1">Pastikan GPS aktif dan izin lokasi diizinkan</p><button onClick={handleValidateGPS} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button></div>)}
+                {gpsValid && (<button onClick={() => { setCapturedPhoto(null); setCameraActive(false); setAttStep(gpsNextStep) }} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><Camera size={16} /> Lanjut Ambil Foto Selfie →</button>)}
                 <button onClick={() => { setAttStep('choose'); setGpsValid(null); setGpsStatus(''); setGpsData(null) }} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">← Kembali</button>
               </div>
             )}
 
-            {/* ═══════════ GPS CAPTURE (Sakit/Izin) — NEW ═══════════ */}
+            {/* ═══════════ PHOTO: MASUK / PULANG ═══════════ */}
+            {(attStep === 'photo_masuk' || attStep === 'photo_pulang') && (
+              <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Foto Selfie — Absen {photoFlowLabel}</h3>
+                {!cameraActive && !capturedPhoto && (<button onClick={startCamera} className="w-full py-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl text-blue-700 font-semibold text-sm hover:bg-blue-100 transition flex items-center justify-center gap-2"><Camera size={20} /> Buka Kamera</button>)}
+                <div className={`relative rounded-xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`}>
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
+                  {cameraActive && (<button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95"><div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" /></button>)}
+                </div>
+                {capturedPhoto && (<div className="space-y-3"><img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" /><button onClick={() => setCapturedPhoto(null)} className="w-full py-2 text-red-500 text-sm font-semibold hover:bg-red-50 rounded-lg transition">📷 Ambil Ulang</button></div>)}
+                <canvas ref={canvasRef} className="hidden" />
+                {capturedPhoto && (<button onClick={isPhotoMasuk ? handleCheckIn : handleCheckOut} disabled={submitting} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">{submitting ? <><Loader2 size={18} className="animate-spin" /> Memproses...</> : `✅ Kirim Absen ${photoFlowLabel}`}</button>)}
+                <button onClick={() => { stopCamera(); setCapturedPhoto(null); setAttStep(photoBackStep) }} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">← Kembali</button>
+              </div>
+            )}
+
+            {/* ═══════════ GPS CAPTURE (Sakit/Izin) ═══════════ */}
             {attStep === 'gps_sakit' && (
               <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> Ambil Lokasi Anda</h3>
                 <p className="text-xs text-gray-500">Sistem akan merekam titik koordinat tempat Anda saat ini (tanpa validasi radius)</p>
-
-                {gpsStatus === '' && (
-                  <button onClick={handleCaptureGPSSakitIzin} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md">
-                    <MapPin size={16} /> Ambil Lokasi GPS
-                  </button>
-                )}
-
-                {gpsStatus === 'getting' && (
-                  <div className="text-center py-8"><Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-2" /><p className="text-sm text-gray-600 font-medium">Mengambil lokasi...</p></div>
-                )}
-
-                {gpsStatus === 'done' && gpsData && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-                    <CheckCircle size={32} className="mx-auto text-blue-500 mb-2" />
-                    <p className="font-bold text-blue-800">✅ Lokasi Berhasil Diambil</p>
-                    <p className="text-xs text-blue-600 mt-1 font-mono">Lat: {gpsData.lat?.toFixed(6)}, Lng: {gpsData.lng?.toFixed(6)}</p>
-                    <p className="text-[10px] text-blue-500 mt-1">Akurasi: {Math.round(gpsData.accuracy)}m</p>
-                  </div>
-                )}
-
-                {gpsStatus === 'error' && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                    <AlertTriangle size={32} className="mx-auto text-red-500 mb-2" />
-                    <p className="font-bold text-red-800">Gagal Mendapatkan Lokasi</p>
-                    <button onClick={handleCaptureGPSSakitIzin} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button>
-                  </div>
-                )}
-
-                {gpsStatus === 'done' && (
-                  <button onClick={() => setAttStep('photo_sakit')} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2">
-                    <Camera size={16} /> Lanjut Ambil Foto Selfie →
-                  </button>
-                )}
+                {gpsStatus === '' && (<button onClick={handleCaptureGPSSakitIzin} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md"><MapPin size={16} /> Ambil Lokasi GPS</button>)}
+                {gpsStatus === 'getting' && (<div className="text-center py-8"><Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-2" /><p className="text-sm text-gray-600 font-medium">Mengambil lokasi...</p></div>)}
+                {gpsStatus === 'done' && gpsData && (<div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center"><CheckCircle size={32} className="mx-auto text-blue-500 mb-2" /><p className="font-bold text-blue-800">✅ Lokasi Berhasil Diambil</p><p className="text-xs text-blue-600 mt-1 font-mono">Lat: {gpsData.lat?.toFixed(6)}, Lng: {gpsData.lng?.toFixed(6)}</p><p className="text-[10px] text-blue-500 mt-1">Akurasi: {Math.round(gpsData.accuracy)}m</p></div>)}
+                {gpsStatus === 'error' && (<div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center"><AlertTriangle size={32} className="mx-auto text-red-500 mb-2" /><p className="font-bold text-red-800">Gagal Mendapatkan Lokasi</p><button onClick={handleCaptureGPSSakitIzin} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Coba Lagi</button></div>)}
+                {gpsStatus === 'done' && (<button onClick={() => { setCapturedPhoto(null); setCameraActive(false); setAttStep('photo_sakit') }} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><Camera size={16} /> Lanjut Ambil Foto Selfie →</button>)}
                 <button onClick={() => { setAttStep('choose'); setGpsStatus(''); setGpsData(null) }} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">← Kembali</button>
-              </div>
-            )}
-
-            {/* ═══════════ PHOTO: HADIR (Check-in / Check-out) ═══════════ */}
-            {(attStep === 'photo_hadir') && (
-              <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Foto Selfie — Absen {todayAtt?.check_in_time ? 'Pulang' : 'Masuk'}</h3>
-                {!cameraActive && !capturedPhoto && (
-                  <button onClick={startCamera} className="w-full py-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl text-blue-700 font-semibold text-sm hover:bg-blue-100 transition flex items-center justify-center gap-2">
-                    <Camera size={20} /> Buka Kamera
-                  </button>
-                )}
-                <div className={`relative rounded-xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`}>
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
-                  {cameraActive && (
-                    <button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95">
-                      <div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" />
-                    </button>
-                  )}
-                </div>
-                {capturedPhoto && (
-                  <div className="space-y-3">
-                    <img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" />
-                    <button onClick={() => { setCapturedPhoto(null) }} className="w-full py-2 text-red-500 text-sm font-semibold hover:bg-red-50 rounded-lg transition">📷 Ambil Ulang</button>
-                  </div>
-                )}
-                <canvas ref={canvasRef} className="hidden" />
-                {capturedPhoto && (
-                  <button onClick={todayAtt?.check_in_time ? handleCheckOut : handleCheckIn} disabled={submitting} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
-                    {submitting ? <><Loader2 size={18} className="animate-spin" /> Memproses...</> : `✅ Kirim Absensi ${todayAtt?.check_in_time ? 'Pulang' : 'Masuk'}`}
-                  </button>
-                )}
-                <button onClick={() => { stopCamera(); setCapturedPhoto(null); setAttStep('gps') }} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">← Kembali</button>
               </div>
             )}
 
@@ -615,59 +904,17 @@ export default function AbsensiPKL() {
             {attStep === 'photo_sakit' && (
               <div className="bg-white rounded-2xl shadow-sm border p-5 space-y-4">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Foto Selfie — {selectedType}</h3>
-                {gpsData && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[10px] text-blue-600 font-mono">
-                    📍 Lokasi: Lat {gpsData.lat?.toFixed(6)}, Lng {gpsData.lng?.toFixed(6)} (Akurasi: {Math.round(gpsData.accuracy)}m)
-                  </div>
-                )}
-                {!cameraActive && !capturedPhoto && (
-                  <button onClick={startCamera} className="w-full py-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl text-blue-700 font-semibold text-sm hover:bg-blue-100 transition flex items-center justify-center gap-2">
-                    <Camera size={20} /> Buka Kamera
-                  </button>
-                )}
+                {gpsData && (<div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[10px] text-blue-600 font-mono">📍 Lokasi: Lat {gpsData.lat?.toFixed(6)}, Lng {gpsData.lng?.toFixed(6)} (Akurasi: {Math.round(gpsData.accuracy)}m)</div>)}
+                {!cameraActive && !capturedPhoto && (<button onClick={startCamera} className="w-full py-4 bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl text-blue-700 font-semibold text-sm hover:bg-blue-100 transition flex items-center justify-center gap-2"><Camera size={20} /> Buka Kamera</button>)}
                 <div className={`relative rounded-xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`}>
                   <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-[4/3] object-cover" />
-                  {cameraActive && (
-                    <button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95">
-                      <div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" />
-                    </button>
-                  )}
+                  {cameraActive && (<button onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition active:scale-95"><div className="w-12 h-12 bg-red-500 rounded-full border-4 border-white" /></button>)}
                 </div>
-                {capturedPhoto && (
-                  <div className="space-y-3">
-                    <img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" />
-                    <button onClick={() => setCapturedPhoto(null)} className="w-full py-2 text-red-500 text-sm font-semibold hover:bg-red-50 rounded-lg transition">📷 Ambil Ulang</button>
-                  </div>
-                )}
+                {capturedPhoto && (<div className="space-y-3"><img src={capturedPhoto} alt="Selfie" className="w-full rounded-xl border" /><button onClick={() => setCapturedPhoto(null)} className="w-full py-2 text-red-500 text-sm font-semibold hover:bg-red-50 rounded-lg transition">📷 Ambil Ulang</button></div>)}
                 <canvas ref={canvasRef} className="hidden" />
-                {capturedPhoto && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 block mb-1">Alasan {selectedType} *</label>
-                    <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Contoh: Sedang demam tinggi..." className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800 resize-none" />
-                  </div>
-                )}
-                {capturedPhoto && (
-                  <button onClick={handleSakitIzin} disabled={submitting} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
-                    {submitting ? <><Loader2 size={18} className="animate-spin" /> Memproses...</> : `📋 Kirim Absensi ${selectedType}`}
-                  </button>
-                )}
+                {capturedPhoto && (<div><label className="text-xs font-semibold text-gray-500 block mb-1">Alasan {selectedType} *</label><textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Contoh: Sedang demam tinggi..." className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-800 resize-none" /></div>)}
+                {capturedPhoto && (<button onClick={handleSakitIzin} disabled={submitting} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">{submitting ? <><Loader2 size={18} className="animate-spin" /> Memproses...</> : `📋 Kirim Absensi ${selectedType}`}</button>)}
                 <button onClick={() => { stopCamera(); setCapturedPhoto(null); setAttStep('gps_sakit') }} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">← Kembali</button>
-              </div>
-            )}
-
-            {/* Checkout prompt */}
-            {attStep === 'checkout' && todayAtt && !todayAtt.check_out_time && (
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><CheckCircle size={20} className="text-blue-600" /></div>
-                  <div>
-                    <p className="font-bold text-blue-800">Sudah Absen Masuk</p>
-                    <p className="text-xs text-blue-600">Jam: {todayAtt.check_in_time} · Status: {todayAtt.status}</p>
-                  </div>
-                </div>
-                <button onClick={() => { setCapturedPhoto(null); setGpsValid(null); setGpsStatus(''); setGpsData(null); setAttStep('gps') }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md">
-                  <MapPin size={16} /> Absen Pulang
-                </button>
               </div>
             )}
           </div>

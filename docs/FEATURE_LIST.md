@@ -344,6 +344,7 @@ Status: ACTIVE
 - Filter Dinamis (Status, Kelas, Jurusan, Pencarian)
 - Export CSV & Cetak Data (Print Browser dengan format tabel rapi)
 - Modal Detail Siswa (Profil, Alasan, Dokumen Pendukung, Total Pelanggaran/Reward)
+- Hapus kolom Dokumen dari tabel utama (dokumen pendukung masih bisa diakses melalui modal detail siswa)
 
 Status: ACTIVE
 
@@ -537,6 +538,8 @@ Status: ACTIVE
 - Auto-hapus pesan chat diubah dari 10 hari menjadi 7 hari
 - Kalender Akademik: Navigasi bulan lalu/depan sekarang menampilkan hari libur yang benar  sebelumnya hanya fetch data libur bulan ini sehingga bulan lain kosong
 - Kalender Akademik: Cache key disesuaikan agar otomatis ter-clear saat Admin menambah/edit/hapus hari libur di halaman Hari Efektif
+- Fix Tahun Pelajaran & Semester kosong: Hapus cache yang menyimpan null lama, query langsung ke academic_calendar agar selalu sinkron dengan DB
+- Tambahkan banner peringatan status non-aktif jika status siswa "Pindah" atau "Keluar" — muncul tepat di bawah Hero Header, sebelum Summary Cards
 
 Status: ACTIVE
 
@@ -760,6 +763,7 @@ Status: ACTIVE
 - Akses control: halaman menampilkan "Akses Ditolak" jika role tidak sesuai
 - Tap feedback: active:scale-95 pada setiap kartu
 - Tombol navigasi bawah hanya muncul sesuai role (Sekretaris/OSIS/Wali/Admin)
+- Fix link "Rekap Kehadiran" di halaman Mobile Wali Kelas: dari /wali-kelas/rekap-kehadiran menjadi /rekap-kehadiran (sesuai lokasi file sebenarnya)
 
 Status: ACTIVE
 
@@ -780,6 +784,12 @@ Status: ACTIVE
 - Siswa Kritis: Horizontal bar chart Top 10 siswa alpha tertinggi dengan gradient warna berbeda per level (merah tua/merah/oranye muda)
 - Siswa Kritis: Tabel detail lengkap dengan badge severity, baris berwarna merah untuk sangat kritis
 - Siswa Kritis: Jika tidak ada siswa alpha > 3, tampil pesan hijau "Tidak Ada Siswa Kritis Bulan Ini" sebagai indikator visual
+- Tab Bulanan: Blok warna hari libur mengikuti kategori dari Halaman Hari Efektif — Nasional (rose/merah muda), Sekolah (amber/kuning), Semester (violet/ungu), Ujian (blue/biru), Kegiatan Sekolah (teal/hijau), Khusus (gray/abu). Sabtu & Minggu tetap merah pekat
+- Tab Bulanan: Header tabel tanggal libur menggunakan warna gelap sesuai kategori, sel data menggunakan warna terang sesuai kategori
+- Tab Bulanan: Legenda hari libur ditampilkan di bawah tabel — kotak warna sesuai kategori + tanggal + nama libur dari database + baris Sabtu & Minggu
+- Tab Bulanan: Auto-sync data hari libur saat admin edit di Halaman Hari Efektif — menggunakan usePathname listener + polling 15 detik untuk menangani cache server di lingkungan serverless (Vercel)
+- Export PDF Tab Bulanan: Warna blok hari libur di header dan sel data mengikuti kategori (sama dengan tampilan aplikasi)
+- Export PDF Tab Bulanan: Legenda hari libur ditambahkan di bawah tabel PDF — kotak warna + tanggal + nama libur
 
 Status: ACTIVE
 
@@ -1386,5 +1396,32 @@ Status: ACTIVE
 - Fix double-counting: Angka status di kolom Total tab bulanan akurat (sebelumnya terhitung 2x karena increment di loop pre-calculation DAN di JSX render)
 - Export CSV/PDF tab bulanan: Kolom Hari Efektif dan % Hadir sudah termasuk
 - Tab Semester: Alpha juga menggunakan batasan realtime (hanya sampai hari ini)
+- Tab Harian: Modal detail absensi sekarang menampilkan Profil PKL siswa — card gradient biru muda berisi: perusahaan, alamat PKL, pembimbing industri, guru pembimbing, periode PKL, jam kerja, hari kerja, koordinat lokasi (klik untuk buka Google Maps), radius, status PKL
+- getPklAttendanceDetail: Tambah query ke tabel pkl_profiles berdasarkan student_id, return sebagai pklProfile di dalam detail
+
+Status: ACTIVE
+
+## Absensi PKL (Update — 2026-07-19)
+- Tombol Hadir dipecah menjadi 2 tombol terpisah: "Absen Masuk" (gradient emerald-teal, ikon LogIn) dan "Absen Pulang" (gradient blue-indigo, ikon LogOut)
+- Masing-masing tombol punya flow terpisah: GPS Validasi → Camera Selfie → Submit → Result
+- Tombol otomatis berubah jadi "✅ Sudah Absen Masuk/Pulang (jam)" berwarna solid setelah berhasil
+- Badge "Terlambat" muncul otomatis di tombol masuk jika melebihi toleransi 15 menit
+- Pesan disabled menjelaskan alasan spesifik di bawah setiap tombol (belum masuk, di luar jadwal, sudah absen, dll)
+- Tabel "Jadwal Absensi Hari Ini" ditampilkan sebelum tombol aksi, berisi: jam masuk, jendela buka absen masuk, jam pulang, jendela buka absen pulang, toleransi terlambat, hari kerja
+- Dot indikator hijau/abu di samping jendela absen menunjukkan apakah sedang aktif
+- Jam saat ini realtime WIB ditampilkan di bawah tabel jadwal
+- Banner kuning peringatan jika hari ini bukan hari kerja
+- NISN yang belum terdaftar otomatis membuat data siswa minimal (hanya NISN) dan mengarahkan ke halaman setup profil PKL
+- Form Data Siswa (Nama, Tingkat dropdown, Jurusan, L/P) tampil hanya untuk siswa yang baru terdaftar
+- Setup profil disarankan dilakukan di tempat PKL agar koordinat lokasi akurat, dengan banner informasi dan label "Radius: 50 meter (otomatis)"
+- Setelah simpan profil, data siswa otomatis terupdate dan halaman langsung menampilkan absensi
+- Profil PKL ditampilkan prominent di depan halaman absensi (card gradient biru muda) berisi: perusahaan, alamat, pembimbing industri, guru pembimbing, periode PKL, jam kerja, hari kerja, koordinat GPS + radius
+- Popup panduan tata cara absensi PKL muncul sebelum input NISN (5 langkah + info penting)
+- Popup memiliki tombol "Ya, Mengerti" dan checkbox "Jangan Tampilkan Lagi" (disimpan di localStorage)
+- Auto-hapus foto selfie PKL yang sudah > 1 hari: loop sampai semua record terproses, hapus file dari Storage bucket pkl-selfies, set kolom URL jadi null
+- pklActions.js: Tambah fungsi getPklStudentData (gabungkan siswa + profil + attendance hari ini dalam 1 panggilan)
+- pklActions.js: Perbaiki cleanupOldPklSelfies menggunakan loop while(hasMore) bukan sekali limit 200
+- pklActions.js: Fix bug ReferenceError s is not defined di getPklRekapSemester — seharusnya a.student_id bukan s.student_id
+- pklActions.js: savePklProfile otomatis update data siswa jika field student_nama/student_kelas/student_jurusan/student_jenis_kelamin dikirim
 
 Status: ACTIVE

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Award, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 const MENUS = [
-  { title: 'Entri Reward', desc: 'Input poin penghargaan siswa', icon: Award, href: '/osis/entri-reward', gradient: 'linear-gradient(135deg, #059669, #10b981)', shadow: 'rgba(16,185,129,0.4)' },
+  { title: 'Entri Reward', desc: 'Input poin penghargaan siswa', icon: Award, href: '/osis/entri-reward', gradient: 'linear-gradient(135deg, #d97706, #f59e0b)', shadow: 'rgba(245,158,11,0.4)' },
   { title: 'Entri Pelanggaran', desc: 'Input poin pelanggaran siswa', icon: AlertTriangle, href: '/osis/entri-pelanggaran', gradient: 'linear-gradient(135deg, #dc2626, #ef4444)', shadow: 'rgba(239,68,68,0.4)' },
 ];
 

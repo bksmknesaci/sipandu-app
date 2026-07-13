@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   RefreshCw, CheckCircle, AlertTriangle, Info,
   Activity, Search, FileText, FileSpreadsheet, X,
@@ -23,6 +24,50 @@ const ALL_MONTHS = [
 
 const DAY_NAMES_SHORT = ['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB']
 const BULAN_NAMES = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+
+// ── Warna Header Hari Libur per Kategori (gelap, untuk header tabel bulanan) ──
+const HOLIDAY_HEADER_BG = {
+  'Nasional': 'bg-rose-500',
+  'Sekolah': 'bg-amber-500',
+  'Semester': 'bg-violet-500',
+  'Ujian': 'bg-blue-500',
+  'Kegiatan Sekolah': 'bg-teal-500',
+  'Khusus': 'bg-gray-400',
+}
+const WEEKEND_HEADER_BG = 'bg-red-700'
+
+// ── Warna Body Hari Libur per Kategori (terang, untuk sel data bulanan) ──
+const HOLIDAY_BODY_BG = {
+  'Nasional': 'bg-rose-100',
+  'Sekolah': 'bg-amber-100',
+  'Semester': 'bg-violet-100',
+  'Ujian': 'bg-blue-100',
+  'Kegiatan Sekolah': 'bg-teal-100',
+  'Khusus': 'bg-gray-200',
+}
+const WEEKEND_BODY_BG = 'bg-red-700'
+
+// ── Warna Teks Inisial Hari di Body per Kategori ──
+const HOLIDAY_BODY_TEXT = {
+  'Nasional': 'text-rose-300',
+  'Sekolah': 'text-amber-400',
+  'Semester': 'text-violet-300',
+  'Ujian': 'text-blue-300',
+  'Kegiatan Sekolah': 'text-teal-300',
+  'Khusus': 'text-gray-400',
+}
+const WEEKEND_BODY_TEXT = 'text-red-200'
+
+// ── Warna Hari Libur untuk Export PDF ──
+const HOLIDAY_PDF_COLORS = {
+  'Nasional':         { headerBg: '#f43f5e', headerText: '#ffffff', bodyBg: '#ffe4e6', bodyText: '#9f1239' },
+  'Sekolah':          { headerBg: '#f59e0b', headerText: '#ffffff', bodyBg: '#fef3c7', bodyText: '#92400e' },
+  'Semester':         { headerBg: '#8b5cf6', headerText: '#ffffff', bodyBg: '#ede9fe', bodyText: '#5b21b6' },
+  'Ujian':            { headerBg: '#3b82f6', headerText: '#ffffff', bodyBg: '#dbeafe', bodyText: '#1e40af' },
+  'Kegiatan Sekolah': { headerBg: '#14b8a6', headerText: '#ffffff', bodyBg: '#ccfbf1', bodyText: '#115e59' },
+  'Khusus':           { headerBg: '#9ca3af', headerText: '#ffffff', bodyBg: '#f3f4f6', bodyText: '#374151' },
+}
+const WEEKEND_PDF_COLORS = { headerBg: '#b91c1c', headerText: '#ffffff', bodyBg: '#b91c1c', bodyText: '#fecaca' }
 
 function CountUp({ end, duration = 1200 }) {
   const [count, setCount] = useState(0)
@@ -89,6 +134,7 @@ export default function RekapKehadiran() {
   const [excelTingkat, setExcelTingkat] = useState('')
   const [excelLoading, setExcelLoading] = useState(false)
   const [loadedTabs, setLoadedTabs] = useState(new Set(['harian']))
+  const pathname = usePathname()
 
   const blackText = { color: '#1f2937' }
   const tingkatOptions = [...new Set(kelasJurusanList.map(c => c.kelas))].sort()
@@ -133,7 +179,19 @@ export default function RekapKehadiran() {
     }
   }, [])
 
-  useEffect(() => { const f = async () => { const h = await getHolidays(); if (h) setHolidays(h) }; f() }, [])
+  // ── Fetch holidays + auto-sync saat admin edit di Halaman Hari Efektif ──
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      const h = await getHolidays()
+      if (h) setHolidays(h)
+    }
+    // Fetch langsung saat pertama kali / navigasi kembali
+    fetchHolidays()
+    // Polling setiap 15 detik — menangani cache server yang belum ter-invalidate
+    // di lingkungan serverless (Vercel) dimana cold start bisa pakai instance berbeda
+    const interval = setInterval(fetchHolidays, 15000)
+    return () => clearInterval(interval)
+  }, [pathname]) // Re-run saat user navigasi kembali ke halaman ini
   useEffect(() => { const f = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; f() }, [])
 
   const fetchData = useCallback(async () => {
@@ -226,6 +284,15 @@ useEffect(() => {
     const day = new Date(dateStr + 'T00:00:00').getDay()
     if (day === 0 || day === 6) return true
     return useHol.some(h => h.date === dateStr)
+  }
+
+    // ── Dapatkan info libur per tanggal: weekend atau kategori + nama ──
+  const getHolidayInfo = (dateStr) => {
+    const day = new Date(dateStr + 'T00:00:00').getDay()
+    if (day === 0 || day === 6) return { type: 'weekend' }
+    const holi = holidays.find(h => h.date === dateStr)
+    if (holi) return { type: 'holiday', category: holi.category, holiday_name: holi.holiday_name }
+    return null
   }
 
   const getEffectiveDaysInMonth = (monthStr, holData = null) => {
@@ -376,26 +443,41 @@ useEffect(() => {
       subtitle = `${bulanName} ${filterYear} — Kelas: ${kelasLabel}`
       pageCss = '@page{size:landscape}'
       const effDays = getEffectiveDaysInMonth(dateFilter.substring(0, 7))
+      // ── Header PDF: warna per kategori ──
       let dayHeaders = ''
       for (let d = 1; d <= daysInMonth; d++) {
         const dayStr = d < 10 ? `0${d}` : `${d}`
         const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
-        const holi = isHoliday(dateStr)
-        dayHeaders += `<th style="border:1px solid #000;padding:2px;font-size:8px;width:22px;${holi ? 'background:#dc2626;color:#fff' : ''}">${d}<br/><span style="font-size:6px">${DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</span></th>`
+        const holiInfo = getHolidayInfo(dateStr)
+        if (holiInfo) {
+          const pc = holiInfo.type === 'weekend' ? WEEKEND_PDF_COLORS : (HOLIDAY_PDF_COLORS[holiInfo.category] || HOLIDAY_PDF_COLORS['Khusus'])
+          dayHeaders += `<th style="border:1px solid #000;padding:2px;font-size:8px;width:22px;background:${pc.headerBg};color:${pc.headerText}">${d}<br/><span style="font-size:6px;opacity:0.8">${DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</span></th>`
+        } else {
+          dayHeaders += `<th style="border:1px solid #000;padding:2px;font-size:8px;width:22px">${d}<br/><span style="font-size:6px">${DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</span></th>`
+        }
       }
+      // ── Body PDF: warna per kategori ──
       const rowsHtml = filteredStudents.map((s, idx) => {
         let cH = 0, cS = 0, cI = 0, cA = 0, dayCells = ''
         for (let d = 1; d <= daysInMonth; d++) {
           const dayStr = d < 10 ? `0${d}` : `${d}`
           const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
-          const holi = isHoliday(dateStr)
-          if (holi) { dayCells += `<td style="border:1px solid #000;padding:1px;text-align:center;background:#fecaca;font-size:7px;color:#991b1b">${DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</td>` }
-          else {
+          const holiInfo = getHolidayInfo(dateStr)
+          if (holiInfo) {
+            const pc = holiInfo.type === 'weekend' ? WEEKEND_PDF_COLORS : (HOLIDAY_PDF_COLORS[holiInfo.category] || HOLIDAY_PDF_COLORS['Khusus'])
+            dayCells += `<td style="border:1px solid #000;padding:1px;text-align:center;background:${pc.bodyBg};font-size:7px;color:${pc.bodyText}">${DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</td>`
+          } else {
             const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
             let val = '', color = '#9ca3af'
             if (dateStr <= today) {
-              if (att) { if (att.status === 'Hadir') { val = 'H'; color = '#047857'; cH++ } else if (att.status === 'Sakit') { val = 'S'; color = '#b45309'; cS++ } else if (att.status === 'Izin') { val = 'I'; color = '#1d4ed8'; cI++ } else { val = 'A'; color = '#b91c1c'; cA++ } }
-              else { val = 'A'; color = '#b91c1c'; cA++ }
+              if (att) {
+                if (att.status === 'Hadir') { val = 'H'; color = '#047857'; cH++ }
+                else if (att.status === 'Sakit') { val = 'S'; color = '#b45309'; cS++ }
+                else if (att.status === 'Izin') { val = 'I'; color = '#1d4ed8'; cI++ }
+                else { val = 'A'; color = '#b91c1c'; cA++ }
+              } else {
+                val = 'A'; color = '#b91c1c'; cA++
+              }
             }
             dayCells += `<td style="border:1px solid #000;padding:1px;text-align:center;font-size:9px;font-weight:bold;color:${color}">${val}</td>`
           }
@@ -403,7 +485,21 @@ useEffect(() => {
         const pct = effDays > 0 ? Math.round((cH / effDays) * 100) : 0
         return `<tr><td style="border:1px solid #000;padding:3px;text-align:center;font-size:9px">${idx + 1}</td><td style="border:1px solid #000;padding:3px;font-size:9px;font-weight:bold">${s.nama}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-size:9px">${s.jenis_kelamin}</td>${dayCells}<td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold;background:#f3f4f6">${effDays}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold;color:#047857">${cH}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold;color:#b45309">${cS}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold;color:#1d4ed8">${cI}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold;color:#b91c1c">${cA}</td><td style="border:1px solid #000;padding:3px;text-align:center;font-weight:bold">${pct}%</td></tr>`
       }).join('')
-      bodyContent = `<table><thead><tr><th rowspan="2" style="border:1px solid #000;padding:4px;width:25px;font-size:9px">No</th><th rowspan="2" style="border:1px solid #000;padding:4px;font-size:9px;min-width:120px">Nama Siswa</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:25px;font-size:9px">L/P</th><th colspan="${daysInMonth}" style="border:1px solid #000;padding:4px;font-size:10px;background:#eff6ff">${bulanName}</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:30px;font-size:8px;background:#f3f4f6">Hari<br/>Efektif</th><th colspan="4" style="border:1px solid #000;padding:4px;font-size:9px">Total</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:30px;font-size:9px">%H</th></tr><tr>${dayHeaders}<th style="border:1px solid #000;padding:3px;font-size:8px;color:#047857;width:28px">H</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#b45309;width:28px">S</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#1d4ed8;width:28px">I</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#b91c1c;width:28px">A</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
+      // ── Legenda Hari Libur PDF ──
+      let legendHtml = ''
+      if (monthHolidays.length > 0 || hasWeekendsInMonth) {
+        legendHtml = '<div style="margin-top:14px;font-size:9px;line-height:2"><b>Keterangan Hari Libur:</b><br/>'
+        monthHolidays.forEach(h => {
+          const pc = HOLIDAY_PDF_COLORS[h.category] || HOLIDAY_PDF_COLORS['Khusus']
+          const dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+          legendHtml += `<span style="display:inline-block;width:12px;height:12px;background:${pc.headerBg};border:1px solid #999;margin-right:4px;vertical-align:middle"></span><span style="margin-right:14px">${dateLabel} — ${h.holiday_name}</span>`
+        })
+        if (hasWeekendsInMonth) {
+          legendHtml += `<span style="display:inline-block;width:12px;height:12px;background:${WEEKEND_PDF_COLORS.headerBg};border:1px solid #999;margin-right:4px;vertical-align:middle"></span><span>Sabtu & Minggu</span>`
+        }
+        legendHtml += '</div>'
+      }
+      bodyContent = `<table><thead><tr><th rowspan="2" style="border:1px solid #000;padding:4px;width:25px;font-size:9px">No</th><th rowspan="2" style="border:1px solid #000;padding:4px;font-size:9px;min-width:120px">Nama Siswa</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:25px;font-size:9px">L/P</th><th colspan="${daysInMonth}" style="border:1px solid #000;padding:4px;font-size:10px;background:#eff6ff">${bulanName}</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:30px;font-size:8px;background:#f3f4f6">Hari<br/>Efektif</th><th colspan="4" style="border:1px solid #000;padding:4px;font-size:9px">Total</th><th rowspan="2" style="border:1px solid #000;padding:4px;width:30px;font-size:9px">%H</th></tr><tr>${dayHeaders}<th style="border:1px solid #000;padding:3px;font-size:8px;color:#047857;width:28px">H</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#b45309;width:28px">S</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#1d4ed8;width:28px">I</th><th style="border:1px solid #000;padding:3px;font-size:8px;color:#b91c1c;width:28px">A</th></tr></thead><tbody>${rowsHtml}</tbody></table>${legendHtml}`
     } else if (activeTab === 'semester') {
       title = 'REKAP KEHADIRAN SISWA'
       subtitle = `Semester ${semNum} Tahun Ajaran ${academicStartYear}/${academicStartYear + 1} — Kelas: ${kelasLabel}`
@@ -591,6 +687,23 @@ useEffect(() => {
 
   const isFilterEmpty = !tingkatFilter || !jurusanFilter
   const bulananEffDays = getEffectiveDaysInMonth(dateFilter.substring(0, 7))
+
+    // ── Data hari libur bulan ini untuk legenda ──
+  const monthHolidays = useMemo(() => {
+    const monthStr = dateFilter.substring(0, 7)
+    return holidays
+      .filter(h => h.date.startsWith(monthStr))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [holidays, dateFilter])
+
+  const hasWeekendsInMonth = useMemo(() => {
+    const dim = new Date(filterYear, filterMonth, 0).getDate()
+    for (let d = 1; d <= dim; d++) {
+      const day = new Date(filterYear, filterMonth - 1, d).getDay()
+      if (day === 0 || day === 6) return true
+    }
+    return false
+  }, [filterYear, filterMonth])
 
   // ================================================================
   // DATA SISWA KRITIS — hitung SEMUA inline tanpa fungsi eksternal
@@ -973,91 +1086,135 @@ useEffect(() => {
 
                 {/* ===== TAB BULANAN ===== */}
                 {activeTab === 'bulanan' && (
-                  <div className="overflow-auto max-h-[70vh]">
-                    <table className="w-full text-sm text-left border-separate border-spacing-0">
-                      <thead className="sticky top-0 z-20">
-                        <tr className="bg-gray-100">
-                          <th rowSpan={2} className="py-2 px-2 font-bold text-[10px] text-gray-600 text-center md:sticky md:left-0 md:bg-gray-100 md:z-30 w-[36px] border-b border-r border-gray-300">No</th>
-                          <th rowSpan={2} className="py-2 px-3 font-bold text-[10px] text-gray-600 md:sticky md:left-[36px] md:bg-gray-100 md:z-30 min-w-[160px] border-b border-r border-gray-300 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.08)] text-left">Nama Siswa</th>
-                          <th rowSpan={2} className="py-2 px-1 font-bold text-[10px] text-gray-600 text-center md:sticky md:left-[196px] md:bg-gray-100 md:z-30 w-[32px] border-b border-r border-gray-300 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.08)]">L/P</th>
-                          <th colSpan={daysInMonth} className="py-2 px-2 font-bold text-xs text-center text-gray-800 border-b border-r border-gray-300 bg-gradient-to-r from-blue-50 to-indigo-50">{bulanName}</th>
-                          <th rowSpan={2} className="py-2 px-2 font-bold text-[9px] text-center text-gray-800 bg-gray-200 w-[52px] border-b border-r border-gray-300 leading-tight">Hari<br/>Efektif</th>
-                          <th colSpan={4} className="py-1.5 px-2 font-bold text-[10px] text-center text-gray-700 border-b border-r border-gray-300">Total</th>
-                          <th rowSpan={2} className="py-2 px-2 font-bold text-[10px] text-center text-indigo-600 w-[46px] border-b border-gray-300">% Hadir</th>
-                        </tr>
-                        <tr className="bg-gray-100">
-                          {Array.from({ length: daysInMonth }, (_, i) => {
-                            const d = i + 1
-                            const dayStr = d < 10 ? `0${d}` : `${d}`
-                            const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
-                            const dayOfWeek = new Date(dateStr + 'T00:00:00').getDay()
-                            const dayName = DAY_NAMES_SHORT[dayOfWeek]
-                            const holiday = isHoliday(dateStr)
+                  <div className="space-y-4">
+                    <div className="overflow-auto max-h-[70vh]">
+                      <table className="w-full text-sm text-left border-separate border-spacing-0">
+                        <thead className="sticky top-0 z-20">
+                          <tr className="bg-gray-100">
+                            <th rowSpan={2} className="py-2 px-2 font-bold text-[10px] text-gray-600 text-center md:sticky md:left-0 md:bg-gray-100 md:z-30 w-[36px] border-b border-r border-gray-300">No</th>
+                            <th rowSpan={2} className="py-2 px-3 font-bold text-[10px] text-gray-600 md:sticky md:left-[36px] md:bg-gray-100 md:z-30 min-w-[160px] border-b border-r border-gray-300 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.08)] text-left">Nama Siswa</th>
+                            <th rowSpan={2} className="py-2 px-1 font-bold text-[10px] text-gray-600 text-center md:sticky md:left-[196px] md:bg-gray-100 md:z-30 w-[32px] border-b border-r border-gray-300 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.08)]">L/P</th>
+                            <th colSpan={daysInMonth} className="py-2 px-2 font-bold text-xs text-center text-gray-800 border-b border-r border-gray-300 bg-gradient-to-r from-blue-50 to-indigo-50">{bulanName}</th>
+                            <th rowSpan={2} className="py-2 px-2 font-bold text-[9px] text-center text-gray-800 bg-gray-200 w-[52px] border-b border-r border-gray-300 leading-tight">Hari<br/>Efektif</th>
+                            <th colSpan={4} className="py-1.5 px-2 font-bold text-[10px] text-center text-gray-700 border-b border-r border-gray-300">Total</th>
+                            <th rowSpan={2} className="py-2 px-2 font-bold text-[10px] text-center text-indigo-600 w-[46px] border-b border-gray-300">% Hadir</th>
+                          </tr>
+                          <tr className="bg-gray-100">
+                            {Array.from({ length: daysInMonth }, (_, i) => {
+                              const d = i + 1
+                              const dayStr = d < 10 ? `0${d}` : `${d}`
+                              const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
+                              const dayOfWeek = new Date(dateStr + 'T00:00:00').getDay()
+                              const dayName = DAY_NAMES_SHORT[dayOfWeek]
+                              const holiInfo = getHolidayInfo(dateStr)
+                              const isHoli = !!holiInfo
+                              const headerBg = holiInfo
+                                ? (holiInfo.type === 'weekend' ? WEEKEND_HEADER_BG : (HOLIDAY_HEADER_BG[holiInfo.category] || HOLIDAY_HEADER_BG['Khusus']))
+                                : ''
+                              const numColor = isHoli ? 'text-white' : 'text-gray-600'
+                              const nameColor = holiInfo
+                                ? (holiInfo.type === 'weekend' ? 'text-red-200' : 'text-white/70')
+                                : 'text-gray-400'
+                              return (
+                                <th key={d} className={`py-0.5 px-0 text-center w-[30px] border-b border-r border-gray-300 ${headerBg}`}>
+                                  <div className={`text-[10px] font-bold leading-tight ${numColor}`}>{d}</div>
+                                  <div className={`text-[7px] font-semibold leading-tight ${nameColor}`}>{dayName}</div>
+                                </th>
+                              )
+                            })}
+                            <th className="py-1.5 px-2 font-bold text-[9px] text-emerald-600 text-center w-[38px] border-b border-r border-gray-300">Total H</th>
+                            <th className="py-1.5 px-2 font-bold text-[9px] text-amber-600 text-center w-[38px] border-b border-r border-gray-300">Total S</th>
+                            <th className="py-1.5 px-2 font-bold text-[9px] text-blue-600 text-center w-[38px] border-b border-r border-gray-300">Total I</th>
+                            <th className="py-1.5 px-2 font-bold text-[9px] text-red-600 text-center w-[38px] border-b border-r border-gray-300">Total A</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredStudents.length === 0 ? (
+                            <tr><td colSpan={3 + daysInMonth + 6} className="text-center py-12 text-gray-400 border-b border-gray-200">Tidak ada data</td></tr>
+                          ) : filteredStudents.map((s, idx) => {
+                            let cH = 0, cS = 0, cI = 0, cA = 0
+                            const dayCells = Array.from({ length: daysInMonth }, (_, i) => {
+                              const d = i + 1
+                              const dayStr = d < 10 ? `0${d}` : `${d}`
+                              const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
+                              const holiInfo = getHolidayInfo(dateStr)
+                              const isFuture = dateStr > today
+                              let cellContent = null
+                              let cellBg = ''
+                              if (holiInfo) {
+                                cellBg = holiInfo.type === 'weekend'
+                                  ? WEEKEND_BODY_BG
+                                  : (HOLIDAY_BODY_BG[holiInfo.category] || HOLIDAY_BODY_BG['Khusus'])
+                                const textColor = holiInfo.type === 'weekend'
+                                  ? WEEKEND_BODY_TEXT
+                                  : (HOLIDAY_BODY_TEXT[holiInfo.category] || HOLIDAY_BODY_TEXT['Khusus'])
+                                cellContent = <span className={`${textColor} text-[8px] font-bold leading-tight`}>{DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</span>
+                              } else if (!isFuture) {
+                                const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
+                                if (att) {
+                                  if (att.status === 'Hadir') { cellContent = <span className="text-emerald-700 font-bold text-[11px]">H</span>; cH++ }
+                                  else if (att.status === 'Sakit') { cellContent = <span className="text-amber-700 font-bold text-[11px]">S</span>; cS++ }
+                                  else if (att.status === 'Izin') { cellContent = <span className="text-blue-700 font-bold text-[11px]">I</span>; cI++ }
+                                  else { cellContent = <span className="text-red-700 font-bold text-[11px]">A</span>; cA++ }
+                                } else {
+                                  cellContent = <span className="text-red-700 font-bold text-[11px]">A</span>
+                                  cA++
+                                }
+                              }
+                              return (
+                                <td key={d} className={`py-0.5 px-0 text-center w-[30px] border-b border-r border-gray-200 ${cellBg}`}>
+                                  {cellContent}
+                                </td>
+                              )
+                            })
+                            const pctHadir = bulananEffDays > 0 ? Math.round((cH / bulananEffDays) * 100) : 0
                             return (
-                              <th key={d} className={`py-0.5 px-0 text-center w-[30px] border-b border-r border-gray-300 ${holiday ? 'bg-red-600' : ''}`}>
-                                <div className={`text-[10px] font-bold leading-tight ${holiday ? 'text-white' : 'text-gray-600'}`}>{d}</div>
-                                <div className={`text-[7px] font-semibold leading-tight ${holiday ? 'text-red-200' : 'text-gray-400'}`}>{dayName}</div>
-                              </th>
+                              <tr key={s.id} className="hover:bg-blue-50/30 cursor-pointer" onClick={() => setSelectedStudent(s)}>
+                                <td className="py-2 px-2 text-gray-500 text-[10px] md:sticky md:left-0 md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 text-center">{idx + 1}</td>
+                                <td className="py-2 px-3 font-semibold text-gray-800 text-[11px] md:sticky md:left-[36px] md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.06)]">{s.nama}</td>
+                                <td className="py-2 px-1 text-gray-600 text-[10px] md:sticky md:left-[196px] md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.06)] text-center">{s.jenis_kelamin}</td>
+                                {dayCells}
+                                <td className="py-2 px-2 text-center font-bold text-gray-800 bg-gray-50/50 border-b border-r border-gray-200 text-[10px]">{bulananEffDays}</td>
+                                <td className="py-2 px-2 text-center font-bold text-emerald-600 bg-emerald-50/50 border-b border-r border-gray-200 text-[10px]">{cH}</td>
+                                <td className="py-2 px-2 text-center font-bold text-amber-600 bg-amber-50/50 border-b border-r border-gray-200 text-[10px]">{cS}</td>
+                                <td className="py-2 px-2 text-center font-bold text-blue-600 bg-blue-50/50 border-b border-r border-gray-200 text-[10px]">{cI}</td>
+                                <td className="py-2 px-2 text-center font-bold text-red-600 bg-red-50/50 border-b border-r border-gray-200 text-[10px]">{cA}</td>
+                                <td className="py-2 px-2 text-center font-bold text-indigo-600 bg-indigo-50/50 border-b border-gray-200 text-[10px]">{pctHadir}%</td>
+                              </tr>
                             )
                           })}
-                          <th className="py-1.5 px-2 font-bold text-[9px] text-emerald-600 text-center w-[38px] border-b border-r border-gray-300">Total H</th>
-                          <th className="py-1.5 px-2 font-bold text-[9px] text-amber-600 text-center w-[38px] border-b border-r border-gray-300">Total S</th>
-                          <th className="py-1.5 px-2 font-bold text-[9px] text-blue-600 text-center w-[38px] border-b border-r border-gray-300">Total I</th>
-                          <th className="py-1.5 px-2 font-bold text-[9px] text-red-600 text-center w-[38px] border-b border-r border-gray-300">Total A</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredStudents.length === 0 ? (
-                          <tr><td colSpan={3 + daysInMonth + 6} className="text-center py-12 text-gray-400 border-b border-gray-200">Tidak ada data</td></tr>
-                        ) : filteredStudents.map((s, idx) => {
-                          let cH = 0, cS = 0, cI = 0, cA = 0
-                          const dayCells = Array.from({ length: daysInMonth }, (_, i) => {
-                            const d = i + 1
-                            const dayStr = d < 10 ? `0${d}` : `${d}`
-                            const dateStr = `${dateFilter.substring(0, 7)}-${dayStr}`
-                            const holiday = isHoliday(dateStr)
-                            const isFuture = dateStr > today
-                            let cellContent = null
-                            let cellBg = ''
-                            if (holiday) {
-                              cellBg = 'bg-red-100'
-                              cellContent = <span className="text-red-300 text-[8px] font-bold leading-tight">{DAY_NAMES_SHORT[new Date(dateStr + 'T00:00:00').getDay()]}</span>
-                            } else if (!isFuture) {
-                              const att = attendance.find(a => a.siswa_id === s.id && a.tanggal === dateStr)
-                              if (att) {
-                                if (att.status === 'Hadir') { cellContent = <span className="text-emerald-700 font-bold text-[11px]">H</span>; cH++ }
-                                else if (att.status === 'Sakit') { cellContent = <span className="text-amber-700 font-bold text-[11px]">S</span>; cS++ }
-                                else if (att.status === 'Izin') { cellContent = <span className="text-blue-700 font-bold text-[11px]">I</span>; cI++ }
-                                else { cellContent = <span className="text-red-700 font-bold text-[11px]">A</span>; cA++ }
-                              } else {
-                                cellContent = <span className="text-red-700 font-bold text-[11px]">A</span>
-                                cA++
-                              }
-                            }
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* ── Legenda Hari Libur Bulanan ── */}
+                    {(monthHolidays.length > 0 || hasWeekendsInMonth) && (
+                      <div className="p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+                        <h4 className="text-xs font-bold text-gray-600 mb-2.5 flex items-center gap-1.5">
+                          <span>📅</span> Keterangan Hari Libur {bulanName} {filterYear}
+                        </h4>
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                          {monthHolidays.map((h, idx) => {
+                            const bgBlock = HOLIDAY_HEADER_BG[h.category] || HOLIDAY_HEADER_BG['Khusus']
+                            const dateLabel = new Date(h.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
                             return (
-                              <td key={d} className={`py-0.5 px-0 text-center w-[30px] border-b border-r border-gray-200 ${cellBg}`}>
-                                {cellContent}
-                              </td>
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <div className={`w-3.5 h-3.5 rounded-sm ${bgBlock} flex-shrink-0`}></div>
+                                <span className="text-[11px] text-gray-600">
+                                  <span className="font-medium">{dateLabel}</span> — {h.holiday_name}
+                                </span>
+                              </div>
                             )
-                          })
-                          const pctHadir = bulananEffDays > 0 ? Math.round((cH / bulananEffDays) * 100) : 0
-                          return (
-                            <tr key={s.id} className="hover:bg-blue-50/30 cursor-pointer" onClick={() => setSelectedStudent(s)}>
-                              <td className="py-2 px-2 text-gray-500 text-[10px] md:sticky md:left-0 md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 text-center">{idx + 1}</td>
-                              <td className="py-2 px-3 font-semibold text-gray-800 text-[11px] md:sticky md:left-[36px] md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.06)]">{s.nama}</td>
-                              <td className="py-2 px-1 text-gray-600 text-[10px] md:sticky md:left-[196px] md:bg-white md:hover:bg-blue-50/30 md:z-10 border-b border-r border-gray-200 md:shadow-[3px_0_5px_-3px_rgba(0,0,0,0.06)] text-center">{s.jenis_kelamin}</td>
-                              {dayCells}
-                              <td className="py-2 px-2 text-center font-bold text-gray-800 bg-gray-50/50 border-b border-r border-gray-200 text-[10px]">{bulananEffDays}</td>
-                              <td className="py-2 px-2 text-center font-bold text-emerald-600 bg-emerald-50/50 border-b border-r border-gray-200 text-[10px]">{cH}</td>
-                              <td className="py-2 px-2 text-center font-bold text-amber-600 bg-amber-50/50 border-b border-r border-gray-200 text-[10px]">{cS}</td>
-                              <td className="py-2 px-2 text-center font-bold text-blue-600 bg-blue-50/50 border-b border-r border-gray-200 text-[10px]">{cI}</td>
-                              <td className="py-2 px-2 text-center font-bold text-red-600 bg-red-50/50 border-b border-r border-gray-200 text-[10px]">{cA}</td>
-                              <td className="py-2 px-2 text-center font-bold text-indigo-600 bg-indigo-50/50 border-b border-gray-200 text-[10px]">{pctHadir}%</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                          })}
+                          {hasWeekendsInMonth && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-3.5 h-3.5 rounded-sm bg-red-700 flex-shrink-0"></div>
+                              <span className="text-[11px] text-gray-600">Sabtu & Minggu</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

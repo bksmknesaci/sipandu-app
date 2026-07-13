@@ -486,3 +486,8 @@ Catatan Penggunaan Nilai (Value Constraints)
 * Kolom jurusan di tabel users berisi nama jurusan (contoh: "KL 2"), terpisah dari kolom kelas
 * Server action getUserKelasInfo(userId) mengambil kedua kolom secara terpisah dari tabel users untuk keperluan filter
 * Filter Sekretaris/Wali Kelas di halaman Absensi dan Rekap Kehadiran wajib menggunakan data dari database (bukan localStorage) agar mendapat kelas+jurusan yang lengkap
+
+## Catatan Penggunaan Nilai (Update — 2026-07-19)
+* siswa
+* Kolom nama, kelas, jurusan, jenis_kelamin memperbolehkan nilai NULL — digunakan saat siswa mendaftar sendiri via halaman Absensi PKL dengan NISN saja, data lengkap diisi kemudian melalui form setup profil
+* Kolom status default 'Aktif' saat auto-insert dari halaman Absensi PKL

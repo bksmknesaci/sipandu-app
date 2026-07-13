@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ClipboardList, ArrowLeft } from 'lucide-react';
 
 const MENUS = [
-  { title: 'Absensi Kelas', desc: 'Input kehadiran siswa harian', icon: ClipboardList, href: '/absensi', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)', shadow: 'rgba(59,130,246,0.4)' },
+  { title: 'Absensi Kelas', desc: 'Input kehadiran siswa harian', icon: ClipboardList, href: '/absensi', gradient: 'linear-gradient(135deg, #059669, #10b981)', shadow: 'rgba(16,185,129,0.4)' },
 ];
 
 export default function MobileSekretaris() {
