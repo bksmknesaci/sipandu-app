@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GraduationCap, Briefcase, University, BarChart3, Search, Eye, Download, Printer, X, FileText, Trash2, EyeOff, Star, Pin, Check, XCircle } from 'lucide-react';
+import { GraduationCap, Briefcase, University, BarChart3, Search, Eye, Download, Printer, X, FileText, Trash2, EyeOff, Star, Pin, Check, XCircle, ShieldAlert, Loader2 } from 'lucide-react';
 import { getFormulirStats, getRekapFormulir, resetAllFormulirAction } from '@/app/actions/formulirActions';
 import { toggleAlumniPublish, toggleAlumniFeatured, toggleAlumniPin } from '@/app/actions/alumniActions';
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
@@ -31,6 +31,8 @@ export default function RekapFormulirPage() {
   const [showDetail, setShowDetail] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
 
   useEffect(() => { loadStats(); }, []);
 
@@ -60,7 +62,6 @@ export default function RekapFormulirPage() {
   };
 
   const handleResetAll = async () => {
-    if (!confirm('⚠️ PERHATIAN!\n\nSemua data formulir (Tracer Studi, Pemetaan Karir, SNBP/SNBP/SNBT) akan dihapus permanen.\n\nLanjutkan?')) return;
     setResetting(true);
     const res = await resetAllFormulirAction();
     if (res.error) {
@@ -68,6 +69,8 @@ export default function RekapFormulirPage() {
     } else {
       loadStats();
       fetchData();
+      setShowResetModal(false);
+      setResetConfirmText('');
     }
     setResetting(false);
   };
@@ -171,7 +174,7 @@ export default function RekapFormulirPage() {
           </div>
           <button onClick={handleExportCSV} className="p-2.5 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 border border-green-200" title="Export CSV"><Download size={16}/></button>
           <button onClick={handlePrint} className="p-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 border border-gray-200" title="Cetak"><Printer size={16}/></button>
-          <button onClick={handleResetAll} disabled={resetting} className="flex items-center gap-1 bg-red-600 text-white px-3 py-2.5 rounded-xl text-xs font-semibold hover:bg-red-700 transition border border-red-600 shadow-sm disabled:opacity-50">
+          <button onClick={() => { setShowResetModal(true); setResetConfirmText('') }} disabled={resetting} className="flex items-center gap-1 bg-red-600 text-white px-3 py-2.5 rounded-xl text-xs font-semibold hover:bg-red-700 transition border border-red-600 shadow-sm disabled:opacity-50">
             <Trash2 size={14}/> {resetting ? '⏳' : 'Reset Semua'}
           </button>
         </div>
@@ -300,6 +303,45 @@ export default function RekapFormulirPage() {
                   <a href={showDetail.bukti_file_url} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1"><FileText size={14}/> Lihat Bukti</a>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL RESET SEMUA FORMULIR ═══ */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowResetModal(false); setResetConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center shrink-0"><ShieldAlert size={24} className="text-red-500" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">Reset Semua Formulir</h3>
+                  <p className="text-sm text-gray-500">Hapus seluruh data formulir SIPANDU</p>
+                </div>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4 space-y-2">
+                <p className="text-sm text-red-700 font-semibold">⚠️ Data yang akan dihapus:</p>
+                <ul className="text-xs text-red-600 list-disc pl-4 space-y-0.5">
+                  <li>Semua data Tracer Studi Lulusan</li>
+                  <li>Semua data Pemetaan Karir Siswa</li>
+                  <li>Semua data Pendataan SNBP & SNBT</li>
+                  <li>Data tidak dapat dikembalikan setelah direset</li>
+                </ul>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold tracking-wider">HAPUS SEMUA</span> untuk konfirmasi</label>
+                <input type="text" value={resetConfirmText} onChange={e => setResetConfirmText(e.target.value)} placeholder="HAPUS SEMUA"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowResetModal(false); setResetConfirmText('') }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleResetAll} disabled={resetConfirmText !== 'HAPUS SEMUA' || resetting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                  {resetting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Hapus Semua</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

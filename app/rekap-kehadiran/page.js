@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   RefreshCw, CheckCircle, AlertTriangle, Info,
   Activity, Search, FileText, FileSpreadsheet, X,
-  GraduationCap, Trash2, Download
+  GraduationCap, Trash2, Download, Loader2, ShieldAlert
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { getRekapKehadiran, resetSemesterAbsensi, resetAllAbsensi } from '@/app/actions/rekapActions'
@@ -133,6 +133,9 @@ export default function RekapKehadiran() {
   const [excelModalOpen, setExcelModalOpen] = useState(false)
   const [excelTingkat, setExcelTingkat] = useState('')
   const [excelLoading, setExcelLoading] = useState(false)
+  const [showResetSemesterModal, setShowResetSemesterModal] = useState(false)
+  const [showResetAllModal, setShowResetAllModal] = useState(false)
+  const [resetConfirmText, setResetConfirmText] = useState('')
   const [loadedTabs, setLoadedTabs] = useState(new Set(['harian']))
   const pathname = usePathname()
 
@@ -317,19 +320,21 @@ useEffect(() => {
   }
 
   const handleResetSemester = async () => {
-    if (!confirm('PERHATIAN!\nSemua data absensi SEMESTER ini akan dihapus permanen.\nLanjutkan?')) return
     setResetting(true)
     const res = await resetSemesterAbsensi({ date: dateFilter, tingkat: tingkatFilter, jurusan: jurusanFilter, userRole: user?.role, userId: user?.id })
     if (res.error) { showToast(res.error, 'error') } else { showToast('Data absensi semester berhasil direset!'); fetchData() }
     setResetting(false)
+    setShowResetSemesterModal(false)
+    setResetConfirmText('')
   }
 
   const handleResetAll = async () => {
-    if (!confirm('PERHATIAN!\nSemua data absensi TAHUN AJARAN ini akan dihapus permanen.\nLanjutkan?')) return
     setResettingAll(true)
     const res = await resetAllAbsensi({ tingkat: tingkatFilter, jurusan: jurusanFilter, userRole: user?.role, userId: user?.id })
     if (res.error) { showToast(res.error, 'error') } else { showToast('Semua data absensi berhasil direset!'); fetchData() }
     setResettingAll(false)
+    setShowResetAllModal(false)
+    setResetConfirmText('')
   }
 
   // ================================================================
@@ -1027,8 +1032,8 @@ useEffect(() => {
               {user?.role === 'Administrator' && (
                 <>
                   <button onClick={() => setExcelModalOpen(true)} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-2 rounded-xl text-xs font-semibold hover:bg-blue-100 transition border border-blue-200" title="Unduh Excel multi-sheet per jurusan"><Download size={14} /> Excel</button>
-                  <button onClick={handleResetSemester} disabled={resetting} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-gray-900 transition shadow-sm disabled:opacity-50"><Trash2 size={14} /> {resetting ? '⏳' : 'Reset Semester'}</button>
-                  <button onClick={handleResetAll} disabled={resettingAll} className="flex items-center gap-1 bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-800 transition shadow-sm disabled:opacity-50"><AlertTriangle size={14} /> {resettingAll ? '⏳' : 'Reset Semua (Tahunan)'}</button>
+                  <button onClick={() => { setShowResetSemesterModal(true); setResetConfirmText('') }} disabled={resetting} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-gray-900 transition shadow-sm disabled:opacity-50"><Trash2 size={14} /> {resetting ? '⏳' : 'Reset Semester'}</button>
+                  <button onClick={() => { setShowResetAllModal(true); setResetConfirmText('') }} disabled={resettingAll} className="flex items-center gap-1 bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-semibold hover:bg-red-800 transition shadow-sm disabled:opacity-50"><AlertTriangle size={14} /> {resettingAll ? '⏳' : 'Reset Semua (Tahunan)'}</button>
                 </>
               )}
             </div>
@@ -1327,6 +1332,81 @@ useEffect(() => {
             </div>
           )}
         </>
+      )}
+
+      {/* ═══ MODAL RESET SEMESTER ═══ */}
+      {showResetSemesterModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowResetSemesterModal(false); setResetConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center shrink-0"><ShieldAlert size={24} className="text-red-500" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">Reset Data Semester</h3>
+                  <p className="text-sm text-gray-500">Semester {semNum} Tahun Ajaran {academicStartYear}/{academicStartYear + 1}</p>
+                </div>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4 space-y-2">
+                <p className="text-sm text-red-700 font-semibold">⚠️ Data yang akan dihapus:</p>
+                <ul className="text-xs text-red-600 list-disc pl-4 space-y-0.5">
+                  <li>Semua record absensi semester <span className="font-bold">{tingkatFilter} {jurusanFilter}</span></li>
+                  <li>Data tidak dapat dikembalikan setelah direset</li>
+                </ul>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold tracking-wider">RESET SEMESTER</span> untuk konfirmasi</label>
+                <input type="text" value={resetConfirmText} onChange={e => setResetConfirmText(e.target.value)} placeholder="RESET SEMESTER"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowResetSemesterModal(false); setResetConfirmText('') }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleResetSemester} disabled={resetConfirmText !== 'RESET SEMESTER' || resetting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                  {resetting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Reset Semester</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL RESET TAHUNAN ═══ */}
+      {showResetAllModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowResetAllModal(false); setResetConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center shrink-0"><ShieldAlert size={24} className="text-red-500" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">Reset Semua Data</h3>
+                  <p className="text-sm text-gray-500">Tahunan Tahun Ajaran {academicStartYear}/{academicStartYear + 1}</p>
+                </div>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4 space-y-2">
+                <p className="text-sm text-red-700 font-semibold">⚠️ Data yang akan dihapus:</p>
+                <ul className="text-xs text-red-600 list-disc pl-4 space-y-0.5">
+                  <li>Semua record absensi tahunan <span className="font-bold">{tingkatFilter} {jurusanFilter}</span></li>
+                  <li>Termasuk data semester 1 dan semester 2</li>
+                  <li>Data tidak dapat dikembalikan setelah direset</li>
+                </ul>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold tracking-wider">RESET TAHUNAN</span> untuk konfirmasi</label>
+                <input type="text" value={resetConfirmText} onChange={e => setResetConfirmText(e.target.value)} placeholder="RESET TAHUNAN"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowResetAllModal(false); setResetConfirmText('') }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleResetAll} disabled={resetConfirmText !== 'RESET TAHUNAN' || resettingAll}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                  {resettingAll ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Reset Tahunan</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

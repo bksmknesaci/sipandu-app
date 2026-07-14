@@ -1,5 +1,26 @@
 # Changelog SIPANDU
 
+## 2026-07-25 (Perbaikan Konfirmasi Hapus Daftar Siswa)
+- Daftar Siswa: Ganti confirm() browser bawaan dengan modal popup modern untuk Hapus Siswa per-baris — tampil nama & NISN siswa di card merah, ketik "HAPUS", tombol disabled sampai teks cocok persis
+- Daftar Siswa: Ganti confirm() 2x bertumpuk dengan modal popup modern untuk Hapus Semua Data — daftar 5 dampak penghapusan (data siswa, absensi, pelanggaran, reward, formulir), ketik "HAPUS SEMUA", tombol disabled sampai teks cocok persis
+- Daftar Siswa: Loading spinner "Menghapus..." pada tombol eksekusi hapus
+Daftar Siswa: Modal hapus menggunakan z-index z-[60] agar tidak tertutup modal tambah/edit (z-50)
+- File diubah: app/admin/siswa/page.js
+
+## 2026-07-24 (Perbaikan UI Header HP)
+- AppShell: Perbaiki logo di header terlalu besar di layar HP — ukuran logo disamakan dengan logo di sidebar (h-10 w-10 rounded-xl)
+- AppShell: Header HP lebih ramping (py-3, ikon hamburger size-22) tanpa terlalu tipis
+- File diubah: app/components/AppShell.js
+
+## 2026-07-23 (Perbaikan Konfirmasi Reset)
+- Rekap Kehadiran: Ganti confirm() browser bawaan dengan modal popup modern untuk Reset Semester — Step 1 peringatan detail (kelas, semester, tahun ajaran) → Step 2 ketik "RESET SEMESTER", tombol disabled sampai teks cocok persis
+- Rekap Kehadiran: Ganti confirm() browser bawaan dengan modal popup modern untuk Reset Semua (Tahunan) — Step 1 peringatan detail (kelas, semester 1 & 2) → Step 2 ketik "RESET TAHUNAN", tombol disabled sampai teks cocok persis
+- Rekap Kehadiran: Modal reset menggunakan z-index z-[60] agar tidak tertutup modal detail siswa (z-50)
+- Rekap Kehadiran: Loading spinner "Menghapus..." pada tombol eksekusi reset
+- Rekap Formulir: Ganti confirm() browser bawaan dengan modal popup modern untuk Reset Semua Data Formulir — peringatan detail 3 jenis formulir (Tracer Studi, Pemetaan Karir, SNBP/SNBT) → ketik "HAPUS SEMUA", tombol disabled sampai teks cocok persis
+- Rekap Formulir: Loading spinner "Menghapus..." pada tombol eksekusi reset
+- File diubah: app/rekap-kehadiran/page.js, app/admin/rekap-formulir/page.js
+
 ## 2026-07-22 (Perbaikan Multi-Halaman)
 - Entri Pelanggaran: Fix key prop duplikat pada dropdown Jenis Pelanggaran — 4 item di kategoriPelanggaran menggunakan properti "name" bukan "nama" menyebabkan key="undefined" dan item tidak tampil
 - Entri Pelanggaran: Fix dropdown Jenis Pelanggaran kosong untuk kategori Sedang (3 item: Bolos Sekolah, Bolos Pelajaran, Mencoret Seragam)

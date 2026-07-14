@@ -5,7 +5,8 @@ import { fetchSiswaAction, saveSiswaAction, deleteSiswaAction, deleteAllSiswaAct
 import {
   Users, School, Award, UserCheck, UserX, Plus, Download, Upload, Printer,
   Search, Filter, Edit3, Trash2, X, CheckCircle, XCircle, AlertTriangle,
-  ChevronLeft, ChevronRight, GraduationCap, ArrowUpCircle, Save
+  ChevronLeft, ChevronRight, GraduationCap, ArrowUpCircle, Save,
+  ShieldAlert, Loader2
 } from 'lucide-react';
 
 // [WA] Helper validasi nomor HP Indonesia
@@ -51,6 +52,11 @@ export default function ManajemenSiswa() {
   const printRef = useRef(null);
 
   const [toast, setToast] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(null);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   useEffect(() => { fetchSiswa(); }, []);
   const fetchSiswa = async () => { setLoading(true); const result = await fetchSiswaAction(); if (result.data) setSiswa(result.data); if (result.error) console.error('Fetch error:', result.error); setLoading(false); };
@@ -97,8 +103,27 @@ export default function ManajemenSiswa() {
     } catch (error) { console.error('Save error:', error); alert('Terjadi kesalahan saat menyimpan data. Coba lagi.'); }
   };
 
-  const handleDelete = async (id) => { if (confirm('Yakin ingin menghapus siswa ini?')) { try { const result = await deleteSiswaAction(id); if (result.error) { alert('Gagal hapus: ' + result.error); return; } setCurrentPage(1); fetchSiswa(); } catch (error) { console.error('Delete error:', error); alert('Terjadi kesalahan saat menghapus data.'); } } };
-  const handleDeleteAll = async () => { if (confirm('⚠️ PERHATIAN!\n\nSemua data siswa akan dihapus secara permanen.\nTindakan ini TIDAK dapat dibatalkan!\n\nYakin ingin melanjutkan?')) { if (confirm('KONFIRMASI TERAKHIR\n\nAnda benar-benar yakin ingin menghapus SEMUA data siswa?')) { const result = await deleteAllSiswaAction(); if (result.error) { alert('Gagal menghapus semua data: ' + result.error); } else { fetchSiswa(); } } } };
+  const handleDelete = async () => {
+    if (!showDeleteModal) return;
+    setDeleting(true);
+    try {
+      const result = await deleteSiswaAction(showDeleteModal.id);
+      if (result.error) { alert('Gagal hapus: ' + result.error); return; }
+      setShowDeleteModal(null);
+      setDeleteConfirmText('');
+      setCurrentPage(1);
+      fetchSiswa();
+    } catch (error) { console.error('Delete error:', error); alert('Terjadi kesalahan saat menghapus data.'); }
+    setDeleting(false);
+  };
+
+  const handleDeleteAll = async () => {
+    setDeletingAll(true);
+    const result = await deleteAllSiswaAction();
+    if (result.error) { alert('Gagal menghapus semua data: ' + result.error); }
+    else { fetchSiswa(); setShowDeleteAllModal(false); setDeleteConfirmText(''); }
+    setDeletingAll(false);
+  };
 
   const getTargetStudents = () => { if (promoteAction === 'naik-xi') return siswa.filter(s => s.kelas?.startsWith('X ') || s.kelas === 'X'); if (promoteAction === 'naik-xii') return siswa.filter(s => s.kelas?.startsWith('XI ') || s.kelas === 'XI'); if (promoteAction === 'lulus') return siswa.filter(s => s.kelas?.startsWith('XII ') || s.kelas === 'XII'); return []; };
   const getNewKelas = (oldKelas, action) => { if (!oldKelas) return oldKelas; const parts = oldKelas.split(' '); if (action === 'naik-xi') parts[0] = 'XI'; if (action === 'naik-xii') parts[0] = 'XII'; return parts.join(' '); };
@@ -199,7 +224,7 @@ export default function ManajemenSiswa() {
             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Upload size={16}/> Import CSV</button>
             <button onClick={handleExportCSV} className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2.5 rounded-lg hover:bg-yellow-600 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Download size={16}/> Export CSV</button>
             <button onClick={handleCetak} className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2.5 rounded-lg hover:bg-gray-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Printer size={16}/> Cetak Data</button>
-            <button onClick={handleDeleteAll} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Trash2 size={16}/> Hapus Semua Data</button>
+            <button onClick={() => { setShowDeleteAllModal(true); setDeleteConfirmText('') }} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Trash2 size={16}/> Hapus Semua Data</button>
             <div className="w-px h-8 bg-gray-300 mx-1 hidden md:block"></div>
             <button onClick={() => openPromoteModal('naik-xi')} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><ArrowUpCircle size={16}/> X → XI</button>
             <button onClick={() => openPromoteModal('naik-xii')} className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2.5 rounded-lg hover:bg-cyan-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><ArrowUpCircle size={16}/> XI → XII</button>
@@ -250,7 +275,7 @@ export default function ManajemenSiswa() {
                         ) : <span className="text-gray-300 text-xs">—</span>}
                       </td>
                       <td className="py-3 px-4 text-center"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${s.status === 'Aktif' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{s.status}</span></td>
-                      <td className="py-3 px-4 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => openEditModal(s)} className="p-1.5 bg-yellow-50 text-yellow-600 rounded-md hover:bg-yellow-100"><Edit3 size={15}/></button><button onClick={() => handleDelete(s.id)} className="p-1.5 bg-red-50 text-red-600 rounded-md hover:bg-red-100"><Trash2 size={15}/></button></div></td>
+                      <td className="py-3 px-4 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => openEditModal(s)} className="p-1.5 bg-yellow-50 text-yellow-600 rounded-md hover:bg-yellow-100"><Edit3 size={15}/></button><button onClick={() => { setShowDeleteModal({ id: s.id, nama: s.nama, nisn: s.nisn }); setDeleteConfirmText('') }} className="p-1.5 bg-red-50 text-red-600 rounded-md hover:bg-red-100"><Trash2 size={15}/></button></div></td>
                     </tr>
                   ))}
                   {paginatedSiswa.length === 0 && (<tr><td colSpan="9" className="text-center py-10 text-gray-400">Data siswa tidak ditemukan</td></tr>)}
@@ -369,6 +394,80 @@ export default function ManajemenSiswa() {
               ) : (
                 <button onClick={handleProcessPromote} disabled={promoteLoading} className="px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">{promoteLoading ? '⏳ Memproses...' : <><AlertTriangle size={16}/> Proses Sekarang</>}</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* ═══ MODAL HAPUS SATU SISWA ═══ */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowDeleteModal(null); setDeleteConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center shrink-0"><Trash2 size={24} className="text-red-500" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">Hapus Data Siswa</h3>
+                  <p className="text-sm text-gray-500">Tindakan ini tidak dapat dibatalkan</p>
+                </div>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4">
+                <p className="text-sm font-bold text-gray-800">{showDeleteModal.nama}</p>
+                <p className="text-xs text-gray-500 mt-0.5">NISN: {showDeleteModal.nisn || '—'}</p>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold">HAPUS</span> untuk konfirmasi</label>
+                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowDeleteModal(null); setDeleteConfirmText('') }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleDelete} disabled={deleteConfirmText !== 'HAPUS' || deleting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                  {deleting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Hapus</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL HAPUS SEMUA DATA ═══ */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowDeleteAllModal(false); setDeleteConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center shrink-0"><ShieldAlert size={24} className="text-red-500" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">Hapus Semua Data Siswa</h3>
+                  <p className="text-sm text-gray-500">Menghapus {siswa.length} data siswa secara permanen</p>
+                </div>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4 space-y-2">
+                <p className="text-sm text-red-700 font-semibold">⚠️ Data yang akan dihapus:</p>
+                <ul className="text-xs text-red-600 list-disc pl-4 space-y-0.5">
+                  <li>Semua data siswa ({siswa.length} data)</li>
+                  <li>Data absensi terkait siswa</li>
+                  <li>Data pelanggaran dan reward siswa</li>
+                  <li>Data formulir yang terhubung</li>
+                  <li>Tindakan ini <strong>TIDAK dapat dibatalkan</strong></li>
+                </ul>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold tracking-wider">HAPUS SEMUA</span> untuk konfirmasi</label>
+                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS SEMUA"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowDeleteAllModal(false); setDeleteConfirmText('') }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleDeleteAll} disabled={deleteConfirmText !== 'HAPUS SEMUA' || deletingAll}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                  {deletingAll ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Hapus Semua</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

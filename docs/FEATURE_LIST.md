@@ -38,6 +38,8 @@ Status: ACTIVE
 - Pagination
 - Kenaikan Kelas (X → XI, XI → XII dengan Checklist Siswa)
 - Kelulusan (XII → Lulus/Hapus dengan Download Arsip CSV)
+- Hapus Siswa: Konfirmasi menggunakan modal popup modern — tampil nama & NISN siswa, ketik "HAPUS", loading spinner
+- Hapus Semua Data: Konfirmasi menggunakan modal popup modern — daftar 5 dampak penghapusan (data siswa, absensi, pelanggaran, reward, formulir), ketik "HAPUS SEMUA", loading spinner
 
 Status: ACTIVE
 
@@ -371,6 +373,7 @@ Status: ACTIVE
 - Export CSV & Cetak Data (Print Browser dengan format tabel rapi)
 - Modal Detail Data Formulir (Menampilkan semua field dinamis termasuk link file bukti)
 - Tombol Reset Semua Data Formulir (Hapus permanen semua isian dari 3 tabel)
+- Tombol Reset Semua Data Formulir menggunakan modal popup modern (bukan browser confirm) — peringatan detail 3 jenis formulir yang dihapus → ketik "HAPUS SEMUA", loading spinner, tombol disabled sampai teks cocok persis
 
 Status: ACTIVE
 
@@ -803,6 +806,8 @@ Status: ACTIVE
 - Tab Bulanan: Auto-sync data hari libur saat admin edit di Halaman Hari Efektif — menggunakan usePathname listener + polling 15 detik untuk menangani cache server di lingkungan serverless (Vercel)
 - Export PDF Tab Bulanan: Warna blok hari libur di header dan sel data mengikuti kategori (sama dengan tampilan aplikasi)
 - Export PDF Tab Bulanan: Legenda hari libur ditambahkan di bawah tabel PDF — kotak warna + tanggal + nama libur
+- Reset Semester: Konfirmasi menggunakan modal popup modern (bukan browser confirm) — Step 1 peringatan detail (kelas, semester, tahun ajaran) → Step 2 ketik "RESET SEMESTER", loading spinner, tombol disabled sampai teks cocok persis
+- Reset Semua (Tahunan): Konfirmasi menggunakan modal popup modern — Step 1 peringatan detail (kelas, semester 1 & 2, tahun ajaran) → Step 2 ketik "RESET TAHUNAN", loading spinner, tombol disabled sampai teks cocok persis
 
 Status: ACTIVE
 

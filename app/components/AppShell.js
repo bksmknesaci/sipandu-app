@@ -422,13 +422,13 @@ export default function AppShell({ children }) {
       </aside>
 
       <div className="sm:ml-20 flex flex-col min-h-screen pb-20 sm:pb-0 transition-[margin] duration-300 ease-in-out">
-        <header className="relative bg-slate-900 shadow-sm border-b border-slate-700 p-4 flex justify-between items-center z-30 sticky top-0">
+        <header className="relative bg-slate-900 shadow-sm border-b border-slate-700 px-3 py-3 md:p-4 flex justify-between items-center z-30 sticky top-0">
           <div className="flex items-center gap-3">
-            <button className="sm:hidden text-gray-300 active:scale-90 active:text-blue-400 transition-all duration-100" onClick={() => setIsSidebarOpen(true)}><Menu size={24}/></button>
+            <button className="sm:hidden text-gray-300 active:scale-90 active:text-blue-400 transition-all duration-100" onClick={() => setIsSidebarOpen(true)}><Menu size={22}/></button>
             {settings.logo_url ? (
-              <img src={settings.logo_url} alt="Logo" className="h-12 w-12 rounded-md object-cover md:hidden" />
+              <img src={settings.logo_url} alt="Logo" className="h-10 w-10 rounded-xl object-cover md:hidden" />
             ) : (
-              <div className="h-12 w-12 rounded-md bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
+              <div className="h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
             )}
           </div>
           <div className="flex items-center gap-2 md:gap-5 text-gray-300 font-medium text-sm">
