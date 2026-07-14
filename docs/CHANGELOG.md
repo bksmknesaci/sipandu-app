@@ -1,5 +1,73 @@
 # Changelog SIPANDU
 
+## 2026-07-22 (Perbaikan Multi-Halaman)
+- Entri Pelanggaran: Fix key prop duplikat pada dropdown Jenis Pelanggaran — 4 item di kategoriPelanggaran menggunakan properti "name" bukan "nama" menyebabkan key="undefined" dan item tidak tampil
+- Entri Pelanggaran: Fix dropdown Jenis Pelanggaran kosong untuk kategori Sedang (3 item: Bolos Sekolah, Bolos Pelajaran, Mencoret Seragam)
+- Entri Pelanggaran: Fix item "Tawuran" hilang dari dropdown kategori Berat
+- Rekap Sakit & Izin: Fix filter tanggal tidak menampilkan format dd/mm/yyyy di layar HP — tambahkan label tanggal terformat (sm:hidden) di samping input date
+- Konfigurasi WhatsApp: Fix tabs navigasi (Konfigurasi API / Pengaturan Pengiriman / Riwayat Pengiriman) melebihi garis layar HP — tambahkan overflow-x-auto wrapper + whitespace-nowrap per tombol
+- Konfigurasi WhatsApp: Fix filter bar Riwayat Pengiriman melebihi garis layar HP — ubah layout menjadi flex-col di HP, flex-row di SM ke atas, search bar full width di baris pertama
+- Konfigurasi WhatsApp: Fix tombol "Hapus Semua Riwayat" terlalu panjang di HP — teks dipendekkan menjadi "Hapus" di layar kecil (sm:hidden)
+- Absen Sakit & Izin: Siswa PKL ditolak — cek pkl_profiles status Berjalan setelah NISN ditemukan, tampil kartu peringatan kuning dengan tombol langsung ke /absensi-pkl
+- Absen Sakit & Izin: Kartu peringatan PKL menampilkan ikon Briefcase, nama siswa, penjelasan, tombol "Menuju Absensi PKL" gradient oranye, dan link "Cari NISN lain"
+- absensiActions.js: Tambah fungsi checkStudentPKLStatus — query pkl_profiles berdasarkan student_id dengan status Berjalan
+- QR Absensi: Tombol "Cetak PDF" gradient ungu di header Daftar QR Code Kelas, di samping tombol "Generate Semua"
+- QR Absensi: Format PDF — 2 kartu per baris kertas A4, border hitam tebal, header "ABSEN ONLINE SIPANDU", subtitle "> Tata Cara Absen Hadir <", 7 langkah tata cara (kamera, lokasi GPS, validasi, 1x/hari, hadir, terlambat, ditolak), QR Code 130px, nama kelas dinamis, nama sekolah dari app_settings
+- QR Absensi: Otomatis generate QR yang belum ada sebelum cetak (tunggu 600ms untuk render canvas)
+- QR Absensi: Nama sekolah di PDF dinamis dari database — jika admin ganti nama sekolah di Profil SIPANDU, cetak PDF berikutnya otomatis mengikuti
+- qrAbsensiActions.js: Tambah fungsi getSchoolName — ambil nama_sekolah dari tabel app_settings
+- File diubah: app/actions/pelanggaranActions.js, app/components/EntriPelanggaran.js, app/wali-kelas/rekap-sakit-izin/page.js, app/setting/konfigurasi-whatsapp/page.js, app/actions/absensiActions.js, app/absen-sakit-izin/page.js, app/actions/qrAbsensiActions.js, app/setting/qr-absensi/page.js
+
+## 2026-07-21 (Perbaikan Rekap Kehadiran PKL)
+| Elemen | Keterangan |
+|--------|-------------|
+| Input pencarian | Di filter bar, cari berdasarkan nama atau NISN, real-time |
+| Checkbox "Sembunyikan Selesai" | Di tab harian, centang untuk menyembunyikan siswa PKL Selesai dari daftar |
+| Tombol "Hapus Data Selesai" | Muncul saat checkbox centang + ada data Selesai, Admin only, konfirmasi → hapus profil + absensi PKL permanen |
+| Server action `getCompletedPklStudentIds` | Ambil student_id dari pkl_profiles yang status = 'Selesai', mendukung filter |
+| Server action `deleteCompletedPklInvalid` | Hapus attendance (batch 100) + hapus profiles, invalidate cache |
+| Filter bekerja di semua tab | Search filter di semua tab, checkbox hanya di tab harian |
+| Sebelum | Sesudah |
+|--------|---------|
+| `confirm()` browser bawaan | Modal popup 2 langkah dengan desain modern |
+| 1 klik langsung hapus | Step 1: Peringatan detail (jumlah siswa) → Step 2: Ketik "HAPUS SELESAI" |
+| Tidak ada visual feedback | Loading spinner "Menghapus data..." saat proses |
+| Tombol disabled saat loading | Tombol "Hapus Permanen" disabled sampai teks cocok persis |
+| Z-index tidak diatur | `z-[60]` agar tidak tertutup modal detail (`z-50`) |
+| Bagian | Sebelum | Sesudah |
+|--------|---------|---------|
+| Status Harian | Siswa Selesai tampil badge normal (H/S/I/A/T/L) | Badge biru "✓" dengan teks tersembunyi |
+| Pencarian nama | Hanya Administrator | Administrator + Wali Kelas |
+| Tombol Hapus Selesai | Hanya Administrator | Administrator + Wali Kelas |
+| Modal Step 1 | 1 peringatan merah | 2 panel: peringatan merah + saran kuning download arsip dulu |
+| Tombol X hapus pencarian | Tidak ada | Muncul saat ada teks di input |
+
+## 2026-07-20 (Fitur Info PKL di Portal Orang Tua & Cari Data Siswa)
+- Portal Orang Tua: Siswa PKL otomatis menampilkan PklInfoSection — profil PKL (perusahaan, pembimbing, periode, jam kerja, link Google Maps), status hari ini, statistik bulanan, riwayat absensi
+- Portal Orang Tua: Badge status di Hero Header otomatis switch ke data PKL (Hadir/Terlambat/Sakit/Izin/Belum Absen PKL)
+- Portal Orang Tua: Kartu Kehadiran & Hari Ini di Summary Cards otomatis menampilkan data PKL (persentase dari total hari kerja, status PKL hari ini)
+- Portal Orang Tua: Section "Status Hari Ini" kehadiran sekolah disembunyikan saat siswa PKL
+- Cari Data Siswa: Siswa PKL otomatis menampilkan PklInfoSection menggantikan section kehadiran sekolah
+- Cari Data Siswa: 4 kartu stat kehadiran sekolah diganti 6 kartu stat PKL (Hadir/Terlambat/Sakit/Izin/Alpha/Libur) saat siswa PKL
+- Cari Data Siswa: Section Status Kehadiran, Statistik Kehadiran (donut), Riwayat Absensi sekolah disembunyikan saat siswa PKL
+- Komponen PklInfoSection: Reusable — menerima studentId + onPklDetected callback, return null jika bukan siswa PKL
+- Server action getPklStudentProfile: Fetch profil PKL + 60 record absensi terakhir berdasarkan studentId
+- Portal Orang Tua & Cari Data Siswa: Fix top bar sticky menutupi header aplikasi saat scroll
+- File baru: app/components/PklInfoSection.js
+- File diubah: app/actions/pklActions.js, app/portal-ortu/page.js, app/cari-data-siswa/[id]/page.js
+
+## 2026-07-20 (Fitur Pengguna Aktif di Dashboard Admin)
+- Tabel baru "Pengguna Aktif" di Dashboard Administrator — menampilkan daftar user yang sedang login secara real-time
+- Tabel Pengguna Aktif: Avatar inisial dengan gradient warna unik per user, nama, badge peran dengan ikon (Administrator=🛡️, Wali Kelas=👨‍🏫, Sekretaris=📋, OSIS=⭐), waktu login, durasi aktif
+- Tabel Pengguna Aktif: Indikator online hijau berdenyut, auto-refresh setiap 15 detik, tombol refresh manual
+- Tabel Pengguna Aktif: Empty state saat tidak ada user aktif, loading state, error state dengan retry
+- Tabel baru user_sessions di database — menyimpan user_id, user_name, user_role, logged_in_at, last_active, user_agent
+- AppShell: Heartbeat session setiap 45 detik via createUserSession + updateSessionHeartbeat
+- AppShell: Auto-cleanup session saat unmount (logout/navigasi keluar) via endUserSession
+- Server action getActiveSessions: Otomatis hapus session stale (last_active > 2 menit) sebelum return data
+- File baru: app/components/ActiveUsersTable.js
+- File diubah: app/actions/userActions.js, app/components/AppShell.js, app/dashboard/AdminDashboard.js
+
 ## 2026-07-20 (Perbaikan Warna Hari Libur Rekap Kehadiran)
 - Tab Bulanan: Blok warna hari libur mengikuti kategori dari Halaman Hari Efektif — Nasional (rose), Sekolah (amber), Semester (violet), Ujian (blue), Kegiatan Sekolah (teal), Khusus (gray). Sabtu & Minggu tetap merah pekat
 - Tab Bulanan: Header tanggal libur menggunakan warna gelap per kategori, sel data menggunakan warna terang per kategori (sebelumnya semua merah)

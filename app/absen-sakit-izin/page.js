@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { HeartPulse, Camera, MapPin, Clock, Send, AlertTriangle, CheckCircle, XCircle, ShieldCheck, Loader2, Search } from 'lucide-react'
-import { getSiswaByNISN, checkSakitIzinToday, submitSakitIzin } from '@/app/actions/absensiActions'
+import { HeartPulse, Camera, MapPin, Clock, Send, AlertTriangle, CheckCircle, XCircle, ShieldCheck, Loader2, Search, Briefcase } from 'lucide-react'
+import { getSiswaByNISN, checkSakitIzinToday, submitSakitIzin, checkStudentPKLStatus } from '@/app/actions/absensiActions'
 
 export default function AbsenSakitIzinPage() {
   const [user, setUser] = useState(null)
@@ -27,6 +27,7 @@ export default function AbsenSakitIzinPage() {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
+  const [isPKLStudent, setIsPKLStudent] = useState(false)
 
   const cameraRef = useRef(null)
   const isAdmin = user?.role === 'Administrator'
@@ -65,8 +66,17 @@ export default function AbsenSakitIzinPage() {
     const res = await getSiswaByNISN(nisnInput)
     if (res.data) {
       setSiswa(res.data)
+      // Cek apakah siswa sedang PKL
+      if (res.data.id) {
+        const pklCheck = await checkStudentPKLStatus(res.data.id)
+        if (pklCheck.isPKL) {
+          setIsPKLStudent(true)
+          setVerifyLoading(false)
+          return
+        }
+      }
+      setIsPKLStudent(false)
       const todayWIB = getWIBDate()
-      // FIX: gunakan res.data.nisn (bukan .nis)
       const checkRes = await checkSakitIzinToday(res.data.nisn, todayWIB)
       if (checkRes.data) setAlreadySubmitted(true); else setAlreadySubmitted(false)
     } else { setToast({ type: 'error', message: res.error || 'NISN tidak ditemukan!' }); setSiswa(null) }
@@ -183,6 +193,32 @@ export default function AbsenSakitIzinPage() {
           </div>
 
           {siswa && (
+            isPKLStudent ? (
+              <div className="bg-white p-8 rounded-2xl shadow-sm border border-amber-200 text-center space-y-4">
+                <div className="w-20 h-20 mx-auto bg-amber-100 rounded-2xl flex items-center justify-center">
+                  <Briefcase size={40} className="text-amber-600"/>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">Siswa Terdaftar sebagai PKL</h2>
+                  <p className="text-gray-500 mt-2 text-sm leading-relaxed">
+                    <span className="font-semibold text-gray-700">{siswa.nama}</span> saat ini sedang menjalankan Praktik Kerja Lapangan. Absensi sakit/izin untuk siswa PKL harus diajukan melalui halaman <span className="font-bold text-amber-600">Absensi PKL</span>.
+                  </p>
+                </div>
+                <a
+                  href="/absensi-pkl"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold text-sm hover:from-amber-600 hover:to-orange-600 transition shadow-lg shadow-amber-500/25"
+                >
+                  <Briefcase size={16}/> Menuju Absensi PKL
+                </a>
+                <button
+                  type="button"
+                  onClick={() => { setSiswa(null); setIsPKLStudent(false); setNisnInput('') }}
+                  className="block mx-auto text-xs text-gray-400 hover:text-gray-600 underline transition"
+                >
+                  Cari NISN lain
+                </button>
+              </div>
+            ) : (
             <>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0">{siswa?.nama?.charAt(0) || 'S'}</div>
@@ -257,6 +293,7 @@ export default function AbsenSakitIzinPage() {
                 )}
               </div>
             </>
+            )
           )}
         </form>
       )}

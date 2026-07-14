@@ -163,13 +163,15 @@ export default function KonfigurasiWhatsApp() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white p-1.5 rounded-xl shadow-sm border w-fit">
-        {TABS.map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.key ? 'bg-green-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}>
-            <tab.icon size={16} /> {tab.label}
-          </button>
-        ))}
+      <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
+        <div className="flex gap-1 bg-white p-1.5 rounded-xl shadow-sm border w-fit min-w-full">
+          {TABS.map(tab => (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-green-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <tab.icon size={16} /> {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ═══ TAB: KONFIGURASI API ═══ */}
@@ -280,23 +282,25 @@ export default function KonfigurasiWhatsApp() {
       {activeTab === 'riwayat' && (
         <div className="space-y-4 animate-fadeIn">
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex flex-wrap gap-3 items-center">
-              <form onSubmit={handleSearchLogs} className="relative flex-1 min-w-[200px]">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <form onSubmit={handleSearchLogs} className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input type="text" value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="Cari nama/nomor..."
                   className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:outline-none text-gray-800" />
               </form>
-              <select value={logFilterStatus} onChange={e => { setLogFilterStatus(e.target.value); setLogsPage(1) }}
-                className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:outline-none text-gray-800 bg-white">
-                <option value="all">Semua Status</option>
-                <option value="success">Berhasil</option>
-                <option value="failed">Gagal</option>
-                <option value="pending">Menunggu</option>
-              </select>
-              <button onClick={() => setShowDeleteAllModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 transition">
-                <Trash2 size={16} /> Hapus Semua Riwayat
-              </button>
+              <div className="flex gap-3">
+                <select value={logFilterStatus} onChange={e => { setLogFilterStatus(e.target.value); setLogsPage(1) }}
+                  className="flex-1 sm:flex-none px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:outline-none text-gray-800 bg-white">
+                  <option value="all">Semua Status</option>
+                  <option value="success">Berhasil</option>
+                  <option value="failed">Gagal</option>
+                  <option value="pending">Menunggu</option>
+                </select>
+                <button onClick={() => setShowDeleteAllModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 transition whitespace-nowrap">
+                  <Trash2 size={16} /> <span className="hidden sm:inline">Hapus Semua Riwayat</span><span className="sm:hidden">Hapus</span>
+                </button>
+              </div>
             </div>
           </div>
 

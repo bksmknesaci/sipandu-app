@@ -46,3 +46,11 @@ export async function getQRStats() {
     .eq('input_by', 'QR Mandiri')
   return { hadirHadir: hadirHadir || 0, totalScan: totalScan || 0 }
 }
+
+export async function getSchoolName() {
+  const { data } = await supabaseAdmin
+    .from('app_settings')
+    .select('nama_sekolah')
+    .single()
+  return data?.nama_sekolah || 'SIPANDU'
+}

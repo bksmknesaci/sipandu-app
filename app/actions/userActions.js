@@ -303,3 +303,55 @@ export async function resolveAdminUserId(username) {
   if (error) return { id: null, error: error.message };
   return { id: data?.id || null, error: null };
 }
+
+// ── Session Management (User Aktif) ──
+export async function createUserSession({ userId, userName, userRole, userAgent }) {
+  const { data, error } = await supabaseAdmin
+    .from('user_sessions')
+    .upsert({
+      user_id: userId,
+      user_name: userName || '',
+      user_role: userRole || '',
+      user_agent: userAgent?.substring(0, 200) || '',
+      logged_in_at: new Date().toISOString(),
+      last_active: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+  if (error) console.error('createUserSession error:', error)
+  return { data, error }
+}
+
+export async function updateSessionHeartbeat({ userId }) {
+  if (!userId) return
+  const { data, error } = await supabaseAdmin
+    .from('user_sessions')
+    .update({ last_active: new Date().toISOString() })
+    .eq('user_id', userId)
+  if (error) console.error('updateSessionHeartbeat error:', error)
+  return { data, error }
+}
+
+export async function endUserSession({ userId }) {
+  if (!userId) return
+  try {
+    await supabaseAdmin
+      .from('user_sessions')
+      .delete()
+      .eq('user_id', userId)
+  } catch (e) { /* silent — cleanup function */ }
+}
+
+export async function getActiveSessions() {
+  // Hapus session stale (tidak ada heartbeat > 2 menit)
+  const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+  await supabaseAdmin
+    .from('user_sessions')
+    .delete()
+    .lt('last_active', twoMinAgo)
+
+  const { data, error } = await supabaseAdmin
+    .from('user_sessions')
+    .select('*')
+    .order('logged_in_at', { ascending: true })
+
+  return { data: data || [], error }
+}

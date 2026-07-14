@@ -213,22 +213,27 @@ export default function RekapSakitIzinWali() {
           )}
 
           {/* Date Filter */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <CalendarDays size={14} className="text-blue-500" />
             <input
               type="date"
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value)}
-              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800"
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 max-w-[150px]"
             />
             {dateFilter && (
-              <button
-                onClick={() => setDateFilter('')}
-                className="px-2.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
-                title="Tampilkan semua tanggal"
-              >
-                Semua Tanggal
-              </button>
+              <>
+                <span className="sm:hidden text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-lg">
+                  {new Date(dateFilter + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </span>
+                <button
+                  onClick={() => setDateFilter('')}
+                  className="px-2.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                  title="Tampilkan semua tanggal"
+                >
+                  Semua Tanggal
+                </button>
+              </>
             )}
           </div>
 

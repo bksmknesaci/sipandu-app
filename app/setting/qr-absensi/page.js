@@ -4,11 +4,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   QrCode, Download, MapPin, Crosshair, Clock, Shield, RefreshCw,
   Eye, EyeOff, Lock, Unlock, Loader2, UserCheck, UserX, Save, Plus,
-  CheckCircle, XCircle
+  CheckCircle, XCircle, Printer
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { fetchSiswaAction } from '@/app/actions/siswaActions';
-import { getQRSettings, saveQRSettings, getQRStats } from '@/app/actions/qrAbsensiActions';
+import { getQRSettings, saveQRSettings, getQRStats, getSchoolName } from '@/app/actions/qrAbsensiActions';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000
@@ -35,6 +35,7 @@ export default function QRAbsensiPage() {
   const [validationResult, setValidationResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [schoolName, setSchoolName] = useState('');
 
   const blackText = { color: '#1f2937' };
   const inputClass = "w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white";
@@ -68,6 +69,15 @@ export default function QRAbsensiPage() {
       setLoadingSettings(false);
     };
     loadSettings();
+  }, []);
+
+  // ── Load Nama Sekolah ──
+  useEffect(() => {
+    const loadSchool = async () => {
+      const name = await getSchoolName();
+      setSchoolName(name);
+    };
+    loadSchool();
   }, []);
 
   // ── Load QR Stats ──
@@ -122,6 +132,95 @@ export default function QRAbsensiPage() {
     link.href = dataUrl;
     link.click();
   };
+
+  const handlePrintPDF = async () => {
+    // Generate semua QR yang belum ada
+    let needsGenerate = false
+    dynamicKelasList.forEach(k => {
+      if (!activeQR[k]?.data) {
+        handleGenerateQR(k)
+        needsGenerate = true
+      }
+    })
+
+    if (needsGenerate) {
+      await new Promise(r => setTimeout(r, 600))
+    }
+
+    // Kumpulkan data URL dari canvas
+    const qrCards = []
+    for (const kelas of dynamicKelasList) {
+      const canvas = document.getElementById(`qr-canvas-${kelas}`)
+      if (canvas) {
+        qrCards.push({ kelas, dataUrl: canvas.toDataURL('image/png') })
+      }
+    }
+
+    if (qrCards.length === 0) {
+      setToast({ type: 'error', message: 'Generate QR Code terlebih dahulu!' })
+      return
+    }
+
+    const tataCara = [
+      'Kunjungi Aplikasi SIPANDU di link berikut : https://sipandu-nesaci.vercel.app/',
+      'Buka menu ABSEN HADIR MANDIRI → Cari di tombol navigasi "Siswa"',
+      'Ketik NISN Anda pada kolom pencarian, Jika tidak tahu NISN buka menu "Cari Data Siswa"',
+      'Klik tombol Buka Kamera & Scan QR (Pastikan QR Code sesuai kelas Anda)',
+      'Arahkan kamera ke QR Code dibawah ini yang ada di ruang kelas Anda',
+      'Pastikan Anda berada di lingkungan sekolah (dalam radius GPS)',
+      'Absen Hadir Mandiri hanya dapat dilakukan mulai pukul 06:00 WIB s.d. 09:04 WIB.',
+    ]
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>QR Absensi - ${schoolName}</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { border: 2.5px solid #1f2937; padding: 18px 14px; text-align: center; page-break-inside: avoid; border-radius: 4px; }
+    .title { font-size: 15px; font-weight: 900; letter-spacing: 1.5px; margin-bottom: 2px; color: #111; }
+    .subtitle { font-size: 8.5px; font-weight: 700; margin-bottom: 10px; color: #6b7280; letter-spacing: 0.5px; }
+    .tata-cara { text-align: left; font-size: 7px; color: #374151; margin: 0 0 10px 0; padding: 6px 8px; background: #f9fafb; border-radius: 3px; border: 1px solid #e5e7eb; line-height: 1.55; }
+    .tata-cara ol { padding-left: 14px; margin: 0; }
+    .tata-cara li { margin-bottom: 1px; }
+    .qr-img { width: 130px; height: 130px; margin: 0 auto; display: block; }
+    .kelas { font-size: 13px; font-weight: 900; margin-top: 10px; letter-spacing: 0.5px; color: #111; }
+    .sekolah { font-size: 10px; font-weight: 700; margin-top: 3px; color: #4b5563; letter-spacing: 0.3px; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    ${qrCards.map(c => `
+      <div class="card">
+        <div class="title">ABSEN ONLINE SIPANDU</div>
+        <div class="subtitle">> Tata Cara Absen Hadir <</div>
+        <div class="tata-cara">
+          <ol>${tataCara.map(t => `<li>${t}</li>`).join('')}</ol>
+        </div>
+        <img src="${c.dataUrl}" class="qr-img" />
+        <div class="kelas">KELAS ${c.kelas}</div>
+        <div class="sekolah">${schoolName.toUpperCase()}</div>
+      </div>
+    `).join('')}
+  </div>
+  <script>window.onload = function() { window.print(); }<\/script>
+</body>
+</html>`
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(html)
+      printWindow.document.close()
+    } else {
+      setToast({ type: 'error', message: 'Popup diblokir browser. Izinkan popup untuk halaman ini.' })
+    }
+  }
 
   // ── GPS Functions ──
   const handleGetLocation = () => {
@@ -294,7 +393,10 @@ export default function QRAbsensiPage() {
             {gpsLocked && <p className="text-xs text-gray-400 mt-1">Koordinat: {qrSettings.gps_latitude}, {qrSettings.gps_longitude} · Radius: {qrSettings.gps_radius}m</p>}
           </div>
           {dynamicKelasList.length > 0 && (
-            <button onClick={() => dynamicKelasList.forEach(k => handleGenerateQR(k))} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all"><RefreshCw size={16} /> Generate Semua</button>
+            <div className="flex gap-2">
+              <button onClick={() => dynamicKelasList.forEach(k => handleGenerateQR(k))} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all"><RefreshCw size={16} /> Generate Semua</button>
+              <button onClick={handlePrintPDF} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:from-indigo-700 hover:to-purple-700 active:scale-95 transition-all shadow-md shadow-indigo-500/25"><Printer size={16} /> Cetak PDF</button>
+            </div>
           )}
         </div>
 

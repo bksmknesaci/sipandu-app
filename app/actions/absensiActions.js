@@ -586,3 +586,14 @@ async function getRoleByUserId(userId) {
   const { data } = await supabaseAdmin.from('users').select('role').eq('id', userId).maybeSingle()
   return data?.role || null
 }
+
+export async function checkStudentPKLStatus(studentId) {
+  const { data, error } = await supabaseAdmin
+    .from('pkl_profiles')
+    .select('status')
+    .eq('student_id', studentId)
+    .eq('status', 'Berjalan')
+    .maybeSingle()
+  if (error) return { isPKL: false }
+  return { isPKL: !!data }
+}

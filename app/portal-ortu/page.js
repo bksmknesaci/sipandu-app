@@ -1,5 +1,6 @@
 'use client';
 
+import PklInfoSection from '@/app/components/PklInfoSection'
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, User, GraduationCap, BookOpen, Award, AlertTriangle, Calendar, Clock,
@@ -11,6 +12,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { searchStudentByNIS, getDashboardData, sendParentMessage, deleteParentMessage, markNotificationRead, getParentNotifications } from '@/app/actions/parentPortalActions';
+import { getPklStudentProfile } from '@/app/actions/pklActions';
 import { supabase } from '@/lib/supabase';
 
 const PIE_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444'];
@@ -24,6 +26,13 @@ const CAL_COLORS = {
   effective: 'bg-green-100 text-green-800', weekend: 'bg-gray-100 text-gray-400',
   holiday_nasional: 'bg-red-100 text-red-700', holiday_sekolah: 'bg-yellow-100 text-yellow-700',
   ujian: 'bg-blue-100 text-blue-700', kegiatan: 'bg-purple-100 text-purple-700'
+};
+const PKL_BADGE = {
+  'Hadir': { color: 'bg-green-100 text-green-700 border-green-300', icon: '🟢', label: 'Hadir' },
+  'Terlambat': { color: 'bg-amber-100 text-amber-700 border-amber-300', icon: '🟡', label: 'Terlambat' },
+  'Sakit': { color: 'bg-orange-100 text-orange-700 border-orange-300', icon: '🟠', label: 'Sakit' },
+  'Izin': { color: 'bg-blue-100 text-blue-700 border-blue-300', icon: '🔵', label: 'Izin' },
+  'Alpha': { color: 'bg-red-100 text-red-700 border-red-300', icon: '🔴', label: 'Alpha' },
 };
 const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
@@ -131,6 +140,41 @@ export default function PortalOrtu() {
   const [notifShaking, setNotifShaking] = useState(false);
   const notifBellRef = useRef(null);
   const notifPanelRef = useRef(null);
+  const [isPkl, setIsPkl] = useState(false);
+  const [pklStats, setPklStats] = useState(null);
+
+  useEffect(() => {
+    if (!isPkl || !student) return
+    let cancelled = false
+    const fetch = async () => {
+      try {
+        const res = await getPklStudentProfile({ studentId: student.id })
+        if (cancelled) return
+        if (res.isPkl) {
+          const today = new Date().toLocaleDateString('sv-SE')
+          const monthStr = today.substring(0, 7)
+          const mAtt = res.attendance || []
+          const mMonth = mAtt.filter(a => a.attendance_date.startsWith(monthStr))
+          const todayAtt = mAtt.find(a => a.attendance_date === today)
+          const totalRec = mMonth.filter(a => !['Libur'].includes(a.status)).length
+          const hadirCount = mMonth.filter(a => a.status === 'Hadir' || a.status === 'Terlambat').length
+          setPklStats({
+            todayStatus: todayAtt?.status || null,
+            todayCheckIn: todayAtt?.check_in_time || null,
+            todayLate: todayAtt?.is_late || false,
+            persentase: totalRec > 0 ? Math.round((hadirCount / totalRec) * 100) : 0,
+            hadir: mMonth.filter(a => a.status === 'Hadir').length,
+            terlambat: mMonth.filter(a => a.status === 'Terlambat').length,
+            sakit: mMonth.filter(a => a.status === 'Sakit').length,
+            izin: mMonth.filter(a => a.status === 'Izin').length,
+            alpha: mMonth.filter(a => a.status === 'Alpha').length,
+          })
+        }
+      } catch (e) { console.error(e) }
+    }
+    fetch()
+    return () => { cancelled = true }
+  }, [isPkl, student])
 
   const refreshData = async () => {
     if (!student) return;
@@ -355,7 +399,7 @@ export default function PortalOrtu() {
     <div className="min-h-screen bg-gray-50">
 
       {/* ===== TOP NAV BAR ===== */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-4 md:px-8 py-3 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 md:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => { setStudent(null); setData(null); setNisInput(''); }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500" title="Ganti Siswa">
@@ -442,7 +486,18 @@ export default function PortalOrtu() {
                 <span>•</span>
                 <span className="flex items-center gap-1"><Calendar size={14} /> {data.academicYear?.school_year || '-'} {data.academicYear?.semester || ''}</span>
               </div>
-              {ts ? (
+              {isPkl && pklStats ? (
+                pklStats.todayStatus ? (
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${PKL_BADGE[pklStats.todayStatus]?.color || 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                    {PKL_BADGE[pklStats.todayStatus]?.icon || '⏳'} {PKL_BADGE[pklStats.todayStatus]?.label || pklStats.todayStatus} PKL
+                    {pklStats.todayLate && <span className="ml-1 text-amber-600">⏰</span>}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border bg-sky-100 text-sky-700 border-sky-300">
+                    🔴 Belum Absen PKL
+                  </span>
+                )
+              ) : ts ? (
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${ts.color}`}>
                   {ts.icon} {ts.label} Hari Ini
                 </span>
@@ -477,14 +532,21 @@ export default function PortalOrtu() {
 
       {/* ===== 6 SUMMARY CARDS ===== */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-          {[
-            { label: 'Kehadiran', value: `${data.persentase}%`, icon: <CheckCircle size={20} />, gradient: 'from-green-500 to-emerald-600', sub: `${data.hadir}/${data.effectiveCount} hari` },
-            { label: 'Total Reward', value: `${data.totalReward}`, icon: <Award size={20} />, gradient: 'from-blue-500 to-blue-600', sub: 'poin' },
-            { label: 'Pelanggaran', value: `${data.totalPelanggaran}`, icon: <AlertTriangle size={20} />, gradient: data.totalPelanggaran > 0 ? 'from-red-500 to-red-600' : 'from-gray-400 to-gray-500', sub: 'poin' },
-            { label: 'Hari Ini', value: ts ? ts.label : 'Belum Absen', icon: <Eye size={20} />, gradient: ts ? (data.todayStatus?.status === 'Hadir' ? 'from-green-500 to-emerald-600' : 'from-yellow-500 to-amber-600') : 'from-gray-400 to-gray-500', sub: data.todayStatus?.input_by || '-' },
-            { label: 'Ranking', value: data.rank > 0 ? `#${data.rank}` : '-', icon: <TrendingUp size={20} />, gradient: 'from-purple-500 to-purple-600', sub: 'reward' },
-            { label: 'Pesan WK', value: data.unreadMessages, icon: <MessageCircle size={20} />, gradient: data.unreadMessages > 0 ? 'from-orange-500 to-amber-600' : 'from-gray-400 to-gray-500', sub: 'belum dibaca' },
-          ].map((c, i) => (
+          {(() => {
+            const pklTotalRec = pklStats ? (pklStats.hadir + pklStats.terlambat + pklStats.sakit + pklStats.izin + pklStats.alpha) : 0
+            return [
+              isPkl && pklStats
+                ? { label: 'Kehadiran PKL', value: `${pklStats.persentase}%`, icon: <Calendar size={20} />, gradient: 'from-sky-500 to-blue-600', sub: `${pklStats.hadir + pklStats.terlambat}/${pklTotalRec} hari` }
+                : { label: 'Kehadiran', value: `${data.persentase}%`, icon: <CheckCircle size={20} />, gradient: 'from-green-500 to-emerald-600', sub: `${data.hadir}/${data.effectiveCount} hari` },
+              { label: 'Total Reward', value: `${data.totalReward}`, icon: <Award size={20} />, gradient: 'from-blue-500 to-blue-600', sub: 'poin' },
+              { label: 'Pelanggaran', value: `${data.totalPelanggaran}`, icon: <AlertTriangle size={20} />, gradient: data.totalPelanggaran > 0 ? 'from-red-500 to-red-600' : 'from-gray-400 to-gray-500', sub: 'poin' },
+              isPkl && pklStats
+                ? { label: 'PKL Hari Ini', value: pklStats.todayStatus ? (PKL_BADGE[pklStats.todayStatus]?.icon || '') + ' ' + (PKL_BADGE[pklStats.todayStatus]?.label || pklStats.todayStatus) : 'Belum Absen', icon: <Calendar size={20} />, gradient: pklStats.todayStatus ? 'from-sky-500 to-blue-600' : 'from-gray-400 to-gray-500', sub: pklStats.todayCheckIn ? `Masuk ${pklStats.todayCheckIn}` : '-' }
+                : { label: 'Hari Ini', value: ts ? ts.label : 'Belum Absen', icon: <Eye size={20} />, gradient: ts ? (data.todayStatus?.status === 'Hadir' ? 'from-green-500 to-emerald-600' : 'from-yellow-500 to-amber-600') : 'from-gray-400 to-gray-500', sub: data.todayStatus?.input_by || '-' },
+              { label: 'Ranking', value: data.rank > 0 ? `#${data.rank}` : '-', icon: <TrendingUp size={20} />, gradient: 'from-purple-500 to-purple-600', sub: 'reward' },
+              { label: 'Pesan WK', value: data.unreadMessages, icon: <MessageCircle size={20} />, gradient: data.unreadMessages > 0 ? 'from-orange-500 to-amber-600' : 'from-gray-400 to-gray-500', sub: 'belum dibaca' },
+            ]
+          })().map((c, i) => (
             <div key={i} className={`bg-gradient-to-br ${c.gradient} rounded-xl p-4 text-white shadow-lg`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="opacity-80">{c.icon}</span>
@@ -502,6 +564,9 @@ export default function PortalOrtu() {
           {/* LEFT COLUMN */}
           <div className="space-y-6">
 
+            {/* SECTION 3: Status Hari Ini — sembunyikan jika PKL (sudah ditampilkan PklInfoSection) */}
+            {!isPkl && (
+            <div className={`rounded-2xl p-6 border ${data.todayStatus?.status === 'Hadir' ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200' : data.todayStatus?.status === 'Alpha' ? 'bg-gradient-to-br from-red-50 to-rose-50 border-red-200' : data.todayStatus ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-200' : 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200'}`}>
             {/* SECTION 3: Status Hari Ini */}
             <div className={`rounded-2xl p-6 border ${data.todayStatus?.status === 'Hadir' ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200' : data.todayStatus?.status === 'Alpha' ? 'bg-gradient-to-br from-red-50 to-rose-50 border-red-200' : data.todayStatus ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-200' : 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200'}`}>
               <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><Eye size={20} className="text-blue-600" /> Status Hari Ini</h2>
@@ -522,6 +587,8 @@ export default function PortalOrtu() {
                 </div>
               )}
             </div>
+            </div>
+            )}
 
             {/* SECTION 1: Profil */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -559,6 +626,12 @@ export default function PortalOrtu() {
               </div>
             </div>
 
+            {/* ── Cek & Tampilkan Info PKL ── */}
+            <PklInfoSection studentId={student.id} onPklDetected={setIsPkl} />
+
+            {/* Kehadiran Sekolah — sembunyikan jika siswa PKL */}
+            {!isPkl && (
+            <>
             {/* SECTION 2: Kehadiran Bulan Ini */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
               <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2"><Calendar size={20} className="text-blue-600" /> Kehadiran Bulan Ini</h2>
@@ -624,6 +697,8 @@ export default function PortalOrtu() {
                 </div>
               </div>
             </div>
+            </>
+            )}
 
             {/* SECTION 6: Kedisiplinan & Prestasi */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

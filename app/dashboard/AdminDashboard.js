@@ -1,5 +1,6 @@
 'use client';
 
+import ActiveUsersTable from '@/app/components/ActiveUsersTable'
 import { useState, useEffect, useRef } from 'react';
 import { getAdminDashboardData } from '@/app/actions/dashboardActions';
 import {
@@ -214,6 +215,11 @@ export default function AdminDashboard() {
             <p className="text-white/70 text-[11px] font-medium">{c.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Tempatkan di baris grid yang sesuai, misalnya: */}
+      <div className="col-span-1 lg:col-span-2">
+        <ActiveUsersTable />
       </div>
 
       {/* ── Charts Row ── */}

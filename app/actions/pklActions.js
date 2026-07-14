@@ -589,3 +589,54 @@ export async function cleanupOldPklSelfies() {
     return { deleted: 0 }
   }
 }
+
+// ── PKL Student Info untuk Portal Orang Tua & Cari Data Siswa ──
+export async function getPklStudentProfile({ studentId }) {
+  if (!studentId) return { profile: null, attendance: [], isPkl: false }
+
+  const { data: profile, error } = await supabaseAdmin
+    .from('pkl_profiles')
+    .select('*')
+    .eq('student_id', studentId)
+    .single()
+
+  if (error || !profile) return { profile: null, attendance: [], isPkl: false }
+
+  const { data: att } = await supabaseAdmin
+    .from('pkl_attendance')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('attendance_date', { ascending: false })
+    .limit(60)
+
+  return { profile, attendance: att || [], isPkl: true }
+}
+
+// ── Hapus Data PKL Selesai ──
+export async function getCompletedPklStudentIds(filters = {}) {
+  let query = supabaseAdmin
+    .from('pkl_profiles')
+    .select('student_id')
+    .eq('status', 'Selesai')
+  if (filters.company) query = query.ilike('company_name', `%${filters.company}%`)
+  if (filters.kelas) query = query.eq('kelas', filters.kelas)
+  if (filters.jurusan) query = query.eq('jurusan', filters.jurusan)
+  const { data, error } = await query
+  if (error) return { ids: [], error: error.message }
+  return { ids: (data || []).map(p => p.student_id), error: null }
+}
+
+export async function deleteCompletedPklData(filters = {}) {
+  const { ids, error: idErr } = await getCompletedPklStudentIds(filters)
+  if (idErr || !ids || ids.length === 0) {
+    return { error: idErr || 'Tidak ada data PKL Selesai', deleted: 0 }
+  }
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100)
+    await supabaseAdmin.from('pkl_attendance').delete().in('student_id', batch)
+  }
+  const { error: pErr } = await supabaseAdmin.from('pkl_profiles').delete().in('student_id', ids)
+  if (pErr) return { error: pErr.message, deleted: 0 }
+  try { const { invalidateCacheByPrefix } = await import('@/lib/cacheHelpers'); invalidateCacheByPrefix('pkl_') } catch {}
+  return { error: null, deleted: ids.length }
+}

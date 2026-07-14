@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getSiswaDetail } from '@/app/actions/cariSiswaActions';
+import { getPklStudentProfile } from '@/app/actions/pklActions';
+import PklInfoSection from '@/app/components/PklInfoSection';
 
 // ─── Helper Functions ────────────────────────────────────────────
 
@@ -132,6 +134,8 @@ export default function SiswaDetailPage() {
   const [qrCode, setQrCode] = useState(null);
   const [absenFilter, setAbsenFilter] = useState('bulan');
   const printRef = useRef(null);
+  const [isPkl, setIsPkl] = useState(false);
+  const [pklStats, setPklStats] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -146,6 +150,32 @@ export default function SiswaDetailPage() {
     }
     load();
   }, [id]);
+
+    useEffect(() => {
+    if (!isPkl || !id) return
+    let cancelled = false
+    const fetchPklStats = async () => {
+      try {
+        const res = await getPklStudentProfile({ studentId: id })
+        if (cancelled) return
+        if (res.isPkl && res.attendance) {
+          const today = new Date().toLocaleDateString('sv-SE')
+          const monthStr = today.substring(0, 7)
+          const mAtt = res.attendance.filter(a => a.attendance_date.startsWith(monthStr))
+          setPklStats({
+            hadir: mAtt.filter(a => a.status === 'Hadir').length,
+            terlambat: mAtt.filter(a => a.status === 'Terlambat').length,
+            sakit: mAtt.filter(a => a.status === 'Sakit').length,
+            izin: mAtt.filter(a => a.status === 'Izin').length,
+            alpha: mAtt.filter(a => a.status === 'Alpha').length,
+            libur: mAtt.filter(a => a.status === 'Libur').length,
+          })
+        }
+      } catch (e) { console.error(e) }
+    }
+    fetchPklStats()
+    return () => { cancelled = true }
+  }, [isPkl, id])
 
   useEffect(() => {
     if (!id || typeof window === 'undefined') return;
@@ -227,7 +257,7 @@ export default function SiswaDetailPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Top Bar */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-40">
+      <div className="bg-white border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={() => router.push('/cari-data-siswa')} className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
@@ -273,35 +303,65 @@ export default function SiswaDetailPage() {
           </div>
         </div>
 
-        {/* ═══ STAT CARDS KEHADIRAN — warna modern + hover timbul ═══ */}
-<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-  {[
-    { label: 'Hadir', value: detail.stats.hadir, icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-    ), bg: 'bg-gradient-to-br from-green-500 to-emerald-600', shadow: 'shadow-green-200', text: 'text-white' },
-    { label: 'Sakit', value: detail.stats.sakit, icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-    ), bg: 'bg-gradient-to-br from-amber-400 to-yellow-500', shadow: 'shadow-yellow-200', text: 'text-white' },
-    { label: 'Izin', value: detail.stats.izin, icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-    ), bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', shadow: 'shadow-blue-200', text: 'text-white' },
-    { label: 'Alpha', value: detail.stats.alpha, icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-    ), bg: 'bg-gradient-to-br from-red-500 to-rose-600', shadow: 'shadow-red-200', text: 'text-white' },
-  ].map((card) => (
-    <div key={card.label} className={`${card.bg} ${card.shadow} rounded-2xl p-4 flex items-center gap-3 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all duration-200 cursor-default`}>
-      <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shrink-0">
-        <span className={card.text}>{card.icon}</span>
-      </div>
-      <div>
-        <p className={`text-2xl font-bold ${card.text} leading-tight`}>{card.value}</p>
-        <p className="text-white/70 text-xs font-medium">{card.label}</p>
-      </div>
-    </div>
-  ))}
-</div>
+        {/* ═══ STAT CARDS KEHADIRAN ═══ */}
+        {isPkl && pklStats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Hadir PKL', value: pklStats.hadir, icon: '✅', bg: 'bg-gradient-to-br from-emerald-500 to-green-600', shadow: 'shadow-green-200' },
+              { label: 'Terlambat', value: pklStats.terlambat, icon: '⏰', bg: 'bg-gradient-to-br from-amber-400 to-yellow-500', shadow: 'shadow-yellow-200' },
+              { label: 'Sakit PKL', value: pklStats.sakit, icon: '🤒', bg: 'bg-gradient-to-br from-orange-400 to-amber-500', shadow: 'shadow-orange-200' },
+              { label: 'Izin PKL', value: pklStats.izin, icon: '📝', bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', shadow: 'shadow-blue-200' },
+              { label: 'Alpha PKL', value: pklStats.alpha, icon: '❌', bg: 'bg-gradient-to-br from-red-500 to-rose-600', shadow: 'shadow-red-200' },
+              { label: 'Libur PKL', value: pklStats.libur, icon: '📅', bg: 'bg-gradient-to-br from-gray-400 to-gray-500', shadow: 'shadow-gray-200' },
+            ].map((card) => (
+              <div key={card.label} className={`${card.bg} ${card.shadow} rounded-2xl p-4 flex items-center gap-3 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all duration-200 cursor-default`}>
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shrink-0 text-2xl">
+                  {card.icon}
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-white leading-tight">{card.value}</p>
+                  <p className="text-white/70 text-xs font-medium">{card.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Hadir', value: detail.stats.hadir, icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              ), bg: 'bg-gradient-to-br from-green-500 to-emerald-600', shadow: 'shadow-green-200', text: 'text-white' },
+              { label: 'Sakit', value: detail.stats.sakit, icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              ), bg: 'bg-gradient-to-br from-amber-400 to-yellow-500', shadow: 'shadow-yellow-200', text: 'text-white' },
+              { label: 'Izin', value: detail.stats.izin, icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+              ), bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', shadow: 'shadow-blue-200', text: 'text-white' },
+              { label: 'Alpha', value: detail.stats.alpha, icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              ), bg: 'bg-gradient-to-br from-red-500 to-rose-600', shadow: 'shadow-red-200', text: 'text-white' },
+            ].map((card) => (
+              <div key={card.label} className={`${card.bg} ${card.shadow} rounded-2xl p-4 flex items-center gap-3 shadow-md hover:-translate-y-1 hover:shadow-xl transition-all duration-200 cursor-default`}>
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shrink-0">
+                  <span className={card.text}>{card.icon}</span>
+                </div>
+                <div>
+                  <p className={`text-2xl font-bold ${card.text} leading-tight`}>{card.value}</p>
+                  <p className="text-white/70 text-xs font-medium">{card.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* ── Cek & Tampilkan Info PKL ── */}
+          <PklInfoSection studentId={id} onPklDetected={setIsPkl} />
+
+          {/* Kehadiran Sekolah — sembunyikan jika siswa PKL */}
+          {!isPkl && (
+          <>
 
           {/* ═══ SECTION 2: STATUS KEHADIRAN HARI INI ═══ */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -370,6 +430,8 @@ export default function SiswaDetailPage() {
               </div>
             ) : <div className="text-center py-8 text-gray-400 text-sm">Tidak ada data absensi pada periode ini</div>}
           </div>
+          </>
+          )}
 
           {/* ═══ SECTION 5: REWARD ═══ */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

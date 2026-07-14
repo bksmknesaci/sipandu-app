@@ -491,3 +491,26 @@ Catatan Penggunaan Nilai (Value Constraints)
 * siswa
 * Kolom nama, kelas, jurusan, jenis_kelamin memperbolehkan nilai NULL — digunakan saat siswa mendaftar sendiri via halaman Absensi PKL dengan NISN saja, data lengkap diisi kemudian melalui form setup profil
 * Kolom status default 'Aktif' saat auto-insert dari halaman Absensi PKL
+
+## user_sessions
+* id (uuid, primary key, default: gen_random_uuid())
+* user_id (bigint, references users(id) on delete cascade)
+* user_name (varchar)
+* user_role (varchar)
+* logged_in_at (timestamptz, default: now())
+* last_active (timestamptz, default: now())
+* user_agent (text)
+* created_at (timestamptz, default: now())
+
+## Index Tambahan
+* idx_user_sessions_user ON user_sessions(user_id)
+* idx_user_sessions_active ON user_sessions(last_active)
+
+## RLS Policy Tambahan
+* user_sessions: "srv_user_sessions" — FOR ALL USING (true) WITH CHECK (true)
+
+## Catatan Penggunaan Nilai (Update — 2026-07-20)
+* user_sessions
+* Session otomatis dihapus oleh getActiveSessions jika last_active lebih dari 2 menit (stale heartbeat)
+* Heartbeat dikirim setiap 45 detik dari AppShell saat user aktif
+* Session dihapus saat AppShell unmount (logout atau navigasi keluar)

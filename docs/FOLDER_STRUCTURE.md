@@ -72,6 +72,7 @@ SIPANDU-APP/
 │   │   └── page.js
 │   │
 │   ├── components/
+│   │   ├── ActiveUsersTable.js
 │   │   ├── AksesCepatInformasi.js
 │   │   ├── AppShell.js
 │   │   ├── CariDataSiswaWidget.js
@@ -83,6 +84,7 @@ SIPANDU-APP/
 │   │   ├── MajorLogoManager.js
 │   │   ├── NotificationCenter.js
 │   │   ├── PJInfoCard.js
+│   │   ├── PklInfoSection.js
 │   │   ├── RekapPelanggaran.js
 │   │   ├── RekapReward.js
 │   │   ├── RekapSiswa.js

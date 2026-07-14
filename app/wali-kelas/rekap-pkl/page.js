@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { BarChart3, Filter, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, AlertTriangle, Printer, FileSpreadsheet, RotateCcw, Building2 } from 'lucide-react'
-import { getPklFilters, getPklStats, getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklAttendanceDetail, resetAllPklData, cleanupOldPklSelfies } from '@/app/actions/pklActions'
+import { BarChart3, Filter, Trash2, Eye, X, Loader2, CalendarDays, Users, CheckCircle, AlertTriangle, Printer, FileSpreadsheet, RotateCcw, Building2, Search } from 'lucide-react'
+import { getPklFilters, getPklStats, getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklAttendanceDetail, resetAllPklData, cleanupOldPklSelfies, getCompletedPklStudentIds, deleteCompletedPklData } from '@/app/actions/pklActions'
 import { getWKKelasAssignment, getUserKelasInfo } from '@/app/actions/absensiActions'
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
 import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
@@ -95,6 +95,14 @@ export default function RekapPKL() {
   const [resetText, setResetText] = useState('')
   const [resetting, setResetting] = useState(false)
   const [wkNeedsJurusanSelection, setWkNeedsJurusanSelection] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [hideSelesai, setHideSelesai] = useState(false)
+  const [selesaiIds, setSelesaiIds] = useState([])
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteStep, setDeleteStep] = useState(1)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deletingCompleted, setDeletingCompleted] = useState(false)
+  const deleteInputRef = React.useRef(null)
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t) } }, [toast])
 
@@ -133,6 +141,14 @@ export default function RekapPKL() {
   }, [])
 
   useEffect(() => { cleanupOldPklSelfies() }, [])
+
+  useEffect(() => {
+    const fetchSelesai = async () => {
+      const res = await getCompletedPklStudentIds(filters)
+      if (!res.error) setSelesaiIds(res.ids)
+    }
+    fetchSelesai()
+  }, [filters])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -312,6 +328,38 @@ export default function RekapPKL() {
     w.document.close()
   }
 
+  const filteredData = React.useMemo(() => {
+    let result = data
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase()
+      result = result.filter(s => s.nama?.toLowerCase().includes(q) || s.nisn?.toLowerCase().includes(q))
+    }
+    if (hideSelesai && selesaiIds.length > 0) {
+      result = result.filter(s => !selesaiIds.includes(s.student_id))
+    }
+    return result
+  }, [data, searchTerm, hideSelesai, selesaiIds])
+
+  const handleDeleteCompleted = async () => {
+    if (deleteStep === 1) {
+      setDeleteStep(2)
+      setTimeout(() => deleteInputRef.current?.focus(), 100)
+      return
+    }
+    if (deleteConfirmText !== 'HAPUS SELESAI') return
+    setDeletingCompleted(true)
+    const res = await deleteCompletedPklData(filters)
+    setDeletingCompleted(false)
+    if (res.error) { showToast(res.error, 'error'); return }
+    showToast(`Berhasil menghapus data PKL ${res.deleted} siswa Selesai`)
+    setShowDeleteModal(false)
+    setDeleteStep(1)
+    setDeleteConfirmText('')
+    setHideSelesai(false)
+    setSelesaiIds([])
+    loadData()
+  }
+
   const filterActive = filters.company || filters.kelas || filters.jurusan || filters.status
   const tingkatOptions = [...new Set(filterOptions.kelasJurusanList.map(c => c.kelas))].sort()
   const jurusanOptions = filters.kelas
@@ -413,7 +461,13 @@ export default function RekapPKL() {
             <button onClick={exportCSV} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-semibold hover:bg-emerald-100 transition flex items-center gap-1"><FileSpreadsheet size={14} /> CSV</button>
             <button onClick={exportPDF} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-xl text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1"><Printer size={14} /> PDF</button>
             {isAdmin && (
-              <button onClick={() => { setShowResetModal(true); setResetStep(1); setResetText('') }} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1"><Trash2 size={14} /> Reset Semua</button>
+              <div className="flex items-center gap-2">
+          <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Cari nama/NISN..." className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800 min-w-[150px]" />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-400" title="Hapus pencarian"><X size={14} /></button>
+          )}
+                <button onClick={() => { setShowResetModal(true); setResetStep(1); setResetText('') }} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1"><Trash2 size={14} /> Reset Semua</button>
+              </div>
             )}
           </div>
         </div>
@@ -431,9 +485,20 @@ export default function RekapPKL() {
 
         <div className="p-4 border-b border-gray-50">
           {activeTab === 'harian' && (
-            <div className="flex items-center gap-2">
-              <CalendarDays size={16} className="text-blue-500" />
-              <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800" />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={16} className="text-blue-500" />
+                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-800" />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={hideSelesai} onChange={e => setHideSelesai(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="text-xs text-gray-600 font-medium">Sembunyikan Selesai</span>
+              </label>
+              {hideSelesai && selesaiIds.length > 0 && (
+                <button onClick={() => { setShowDeleteModal(true); setDeleteStep(1); setDeleteConfirmText('') }} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1.5">
+                  <Trash2 size={12} /> Hapus Data Selesai ({selesaiIds.length})
+                </button>
+              )}
             </div>
           )}
           {activeTab === 'bulanan' && (
@@ -460,8 +525,8 @@ export default function RekapPKL() {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-8 space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="animate-pulse flex gap-3"><div className="h-4 bg-gray-100 rounded w-8" /><div className="h-4 bg-gray-100 rounded w-24" /><div className="h-4 bg-gray-100 rounded flex-1" /><div className="h-4 bg-gray-100 rounded w-16" /></div>)}</div>
-          ) : data.length === 0 ? (
-            <div className="text-center py-16"><Users size={48} className="mx-auto text-gray-200 mb-3" /><p className="text-gray-500 font-semibold">Tidak ada data siswa PKL</p><p className="text-gray-400 text-xs mt-1">{filterActive ? 'Coba ubah filter' : 'Pastikan ada siswa yang memiliki profil PKL'}</p></div>
+          ) : filteredData.length === 0 ? (
+            <div className="text-center py-16"><Users size={48} className="mx-auto text-gray-200 mb-3" /><p className="text-gray-500 font-semibold">Tidak ada data siswa PKL</p><p className="text-gray-400 text-xs mt-1">{filterActive || searchTerm ? 'Coba ubah filter atau pencarian' : 'Pastikan ada siswa yang memiliki profil PKL'}</p></div>
           ) : activeTab === 'harian' ? (
             <table className="w-full text-sm">
               <thead className="bg-gray-100 border-b border-gray-200">
@@ -483,7 +548,7 @@ export default function RekapPKL() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data.map((s, i) => (
+                {filteredData.map((s, i) => (
                   <tr key={s.student_id} className="hover:bg-blue-50/30 transition">
                     <td className="py-3 px-3 text-gray-500 text-xs">{i + 1}</td>
                     <td className="py-3 px-3 text-gray-600 font-mono text-xs">{s.nisn || '-'}</td>
@@ -496,7 +561,11 @@ export default function RekapPKL() {
                     <td className="py-3 px-3 text-gray-600 text-xs">{s.company_name || '-'}</td>
                     <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_in_time || '-'}</td>
                     <td className="py-3 px-3 text-center text-xs text-gray-700">{s.attendance?.check_out_time || '-'}</td>
-                    <td className="py-3 px-3 text-center">{statusBadge(s.computedStatus)}</td>
+                    <td className="py-3 px-3 text-center">
+                      {selesaiIds.includes(s.student_id) ? (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-extrabold bg-blue-100 text-blue-700">✓</span>
+                      ) : statusBadge(s.computedStatus)}
+                    </td>
                     <td className="py-3 px-3 text-center text-xs">{s.attendance?.is_late ? <span className="text-orange-600 font-bold">Ya</span> : <span className="text-gray-400">-</span>}</td>
                     <td className="py-3 px-3 text-center">
                       {s.attendance?.id && (
@@ -539,7 +608,7 @@ export default function RekapPKL() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {data.map((s, idx) => {
+                  {filteredData.map((s, idx) => {
                     const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
                     let effectiveDays = 0
                     // FIX: Hitung counts dan effectiveDays sekali di sini saja
@@ -600,7 +669,7 @@ export default function RekapPKL() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data.map((s, i) => {
+                {filteredData.map((s, i) => {
                   const pct = parseFloat(s.persentase) || 0
                   const pctColor = pct >= 80 ? 'text-emerald-600' : pct >= 60 ? 'text-amber-600' : 'text-red-600'
                   return (
@@ -630,6 +699,104 @@ export default function RekapPKL() {
           )}
         </div>
       </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowDeleteModal(false); setDeleteStep(1); setDeleteConfirmText('') }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                  <Trash2 size={18} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-800 text-sm">Hapus Data PKL Selesai</h3>
+                  <p className="text-[11px] text-gray-400">Tindakan ini tidak dapat dibatalkan</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowDeleteModal(false); setDeleteStep(1); setDeleteConfirmText('') }} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition">
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4">
+              {deleteStep === 1 ? (
+                <div className="space-y-4">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle size={20} className="text-red-500 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-red-800">Peringatan!</p>
+                        <p className="text-xs text-red-600 mt-1">Data profil PKL dan seluruh riwayat absensi dari <strong>{selesaiIds.length} siswa</strong> dengan status <strong>Selesai</strong> akan dihapus permanen.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle size={20} className="text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-amber-800">📌 Saran Sebelum Menghapus</p>
+                        <p className="text-xs text-amber-700 mt-1">Download terlebih dahulu <strong>Rekap Kehadiran PKL</strong> (CSV/PDF) sebagai arsip data sebelum menghapus. Data yang sudah dihapus <strong>tidak dapat dikembalikan</strong>.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => { setShowDeleteModal(false); setDeleteStep(1); setDeleteConfirmText('') }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition font-medium">
+                      Batal
+                    </button>
+                    <button onClick={handleDeleteCompleted} className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition flex items-center gap-2 ml-3">
+                      Lanjutkan
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle size={20} className="text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-amber-800">Konfirmasi Penghapusan</p>
+                        <p className="text-xs text-amber-700 mt-1">Ketik <strong>HAPUS SELESAI</strong> untuk mengkonfirmasi penghapusan data PKL Selesai.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Ketik konfirmasi:</label>
+                    <input
+                      ref={deleteInputRef}
+                      type="text"
+                      value={deleteConfirmText}
+                      onChange={e => setDeleteConfirmText(e.target.value)}
+                      placeholder="HAPUS SELESAI"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:outline-none transition"
+                    />
+                  </div>
+                  {deletingCompleted ? (
+                    <div className="flex items-center justify-center gap-2 py-3">
+                      <Loader2 size={18} className="animate-spin text-red-500" />
+                      <span className="text-sm text-red-600 font-medium">Menghapus data...</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end">
+                      <button onClick={() => { setDeleteStep(1); setDeleteConfirmText('') }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition font-medium">
+                        Kembali
+                      </button>
+                      <button
+                        onClick={handleDeleteCompleted}
+                        disabled={deleteConfirmText !== 'HAPUS SELESAI'}
+                        className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition flex items-center gap-2 ml-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Hapus Permanen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {detailModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailModal(false)}>

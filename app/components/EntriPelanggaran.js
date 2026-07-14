@@ -180,7 +180,7 @@ export default function EntriPelanggaran({ userData }) {
                   <label className="block text-sm font-semibold text-gray-600 mb-1">Jenis Pelanggaran <span className="text-red-500">*</span></label>
                   <select name="jenis_pelanggaran" value={formData.jenis_pelanggaran} onChange={handleInputChange} disabled={!formData.kategori} className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:outline-none text-gray-800 bg-white disabled:bg-gray-50">
                     <option value="">{formData.kategori ? 'Pilih Jenis' : 'Pilih Kategori Dulu'}</option>
-                    {filteredJenis.map(j => <option key={j.nama} value={j.nama}>{j.nama}</option>)}
+                    {filteredJenis.map((j, i) => <option key={`${j.nama}-${i}`} value={j.nama}>{j.nama}</option>)}
                   </select>
                 </div>
                 <div>

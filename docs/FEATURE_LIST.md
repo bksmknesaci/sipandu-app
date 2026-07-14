@@ -225,6 +225,7 @@ Status: ACTIVE
 - Kartu statistik "Pengajuan Hari Ini": Selalu menampilkan total pengajuan hari ini dari seluruh data (tidak terpengaruh filter tanggal/status)
 - Icon mata (Eye) di kolom Aksi: Modal detail lengkap siswa yang mengajukan (profil, jenis, tanggal, jam, alasan, foto bukti klik-zoom, koordinat GPS + akurasi + tombol Google Maps, catatan WK jika ditolak, timestamp verifikasi)
 - Hapus otomatis riwayat pengajuan sakit/izin yang sudah lebih dari 30 hari (record + foto bukti di Storage) — tidak berpengaruh ke data Rekap Kehadiran karena sumber data terpisah
+- Fix filter tanggal tidak menampilkan format dd/mm/yyyy di layar HP — tambahkan label tanggal terformat yang hanya muncul di layar kecil (sm:hidden)
 
 Status: ACTIVE
 
@@ -540,6 +541,11 @@ Status: ACTIVE
 - Kalender Akademik: Cache key disesuaikan agar otomatis ter-clear saat Admin menambah/edit/hapus hari libur di halaman Hari Efektif
 - Fix Tahun Pelajaran & Semester kosong: Hapus cache yang menyimpan null lama, query langsung ke academic_calendar agar selalu sinkron dengan DB
 - Tambahkan banner peringatan status non-aktif jika status siswa "Pindah" atau "Keluar" — muncul tepat di bawah Hero Header, sebelum Summary Cards
+- Info PKL Otomatis: Siswa yang terdaftar sebagai siswa PKL menampilkan profil PKL (perusahaan, alamat, pembimbing, periode, jam kerja, hari kerja, link Google Maps) menggantikan sebagian tampilan kehadiran sekolah
+- Info PKL Otomatis: Status kehadiran hari ini di Hero Header, kartu Kehadiran & Hari Ini di Summary Cards otomatis menampilkan data PKL (Hadir/Terlambat/Sakit/Izin/Alpha) jika siswa terdaftar PKL
+- Info PKL Otomatis: Section "Status Hari Ini" kehadiran sekolah disembunyikan jika siswa PKL (sudah ditampilkan di PklInfoSection)
+- Info PKL Otomatis: Statistik bulanan PKL (Hadir, Terlambat, Sakit, Izin, Alpha, Libur) dengan progress bar persentase kehadiran
+- Info PKL Otomatis: Riwayat absensi PKL terakhir (20 record) dengan ikon status, jam masuk/pulang, keterangan terlambat, catatan sakit/izin
 
 Status: ACTIVE
 
@@ -663,6 +669,9 @@ Status: ACTIVE
 - Skeleton loading saat memuat data
 - Halaman tidak menggunakan AppShell (standalone page)
 - Tidak menampilkan fitur Portal Orang Tua (chat, WA, kontak guru)
+- Info PKL Otomatis: Siswa yang terdaftar sebagai siswa PKL menampilkan PklInfoSection (profil PKL, status hari ini, statistik bulanan, riwayat absensi) menggantikan section kehadiran sekolah
+- Info PKL Otomatis: 4 kartu stat kehadiran sekolah (Hadir/Sakit/Izin/Alpha) diganti 6 kartu stat PKL (Hadir/Terlambat/Sakit/Izin/Alpha/Libur) dengan gradient warna berbeda
+- Info PKL Otomatis: Section Status Kehadiran Hari Ini, Statistik Kehadiran (donut chart), dan Riwayat Absensi sekolah disembunyikan jika siswa PKL
 
 Status: ACTIVE
 
@@ -698,6 +707,10 @@ Status: ACTIVE
 - Upgrade CountUp ke requestAnimationFrame (presisi tinggi untuk angka besar di atas 1000)
 - Tambah null safety (|| 0, || []) pada seluruh properti data di 4 dashboard
 - Tambah empty state untuk setiap section yang bisa kosong (chart, tabel, list)
+- Pengguna Aktif (Admin Dashboard): Tabel daftar user yang sedang login secara real-time, menampilkan avatar inisial dengan gradient warna, nama user, badge peran (Administrator/Wali Kelas/Sekretaris/OSIS) dengan ikon, waktu login, dan durasi aktif
+- Pengguna Aktif: Auto-refresh setiap 15 detik, indikator online hijau berdenyut, session otomatis dihapus setelah 2 menit tidak ada heartbeat
+- Pengguna Aktif: Heartbeat dikirim setiap 45 detik dari AppShell, session dihapus saat logout atau navigasi keluar
+- Pengguna Aktif: Empty state saat tidak ada user aktif, loading state dengan spinner, error state dengan tombol coba lagi
 
 Status: ACTIVE
 
@@ -798,6 +811,10 @@ Status: ACTIVE
 ## Absen Sakit & Izin (Update)
 - Fix layout tombol Cari di HP (flex-col di mobile, flex-row di SM ke atas) agar tidak tertutup tabel
 - Fix referensi kolom .nis menjadi .nisn saat cek duplikasi pengajuan dan kirim data (sinkron dengan perbaikan getSiswaByNISN)
+- Siswa yang terdaftar sebagai PKL (status Berjalan) ditolak saat input NISN — tampil kartu peringatan kuning dengan informasi siswa sedang PKL
+- Tombol langsung menuju halaman Absensi PKL (/absensi-pkl) pada kartu peringatan
+- Tombol "Cari NISN lain" untuk menginput ulang tanpa reload halaman
+- Server action checkStudentPKLStatus: cek pkl_profiles dengan status Berjalan berdasarkan student_id
 
 Status: ACTIVE
 
@@ -826,6 +843,11 @@ Status: ACTIVE
 - Koordinat GPS yang tersimpan ditampilkan di bawah header Daftar QR Code Kelas
 - Tambah server action qrAbsensiActions.js (getQRSettings, saveQRSettings)
 - Buat tabel baru qr_settings di Supabase (gps_latitude, gps_longitude, gps_radius, jam_masuk, jam_terlambat, jam_tutup)
+- Tombol "Cetak PDF" di header Daftar QR Code Kelas — mencetak semua QR dalam format kartu 2 per baris kertas A4
+- Format PDF: header "ABSEN ONLINE SIPANDU", subtitle "> Tata Cara Absen Hadir <", 7 langkah tata cara, QR Code 130px, nama kelas, nama sekolah
+- Nama sekolah diambil dinamis dari app_settings (otomatis ikut berubah jika admin edit profil sekolah)
+- Otomatis generate QR yang belum ada sebelum cetak
+- Server action getSchoolName: ambil nama_sekolah dari tabel app_settings
 
 Status: ACTIVE
 
@@ -933,11 +955,6 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Entri Pelanggaran (Update)
-- Menghapus fitur "Bukti Pelanggaran (Wajib Foto)" di halaman Entri Pelanggaran
-
-Status: ACTIVE
-
 ## Absensi Kehadiran (Update)
 - Fix filter Jurusan: Dropdown dinamis dari database (bukan hardcode 12 opsi manual)
 - Dropdown jurusan otomatis menyesuaikan berdasarkan tingkat yang dipilih
@@ -964,12 +981,6 @@ Status: ACTIVE
 Status: ACTIVE
 
 ## Entri Reward (Update)
-- Fix nama Wali Kelas tidak muncul pada profil siswa setelah pencarian
-- Menggunakan getPJByClass dari penanggungJawabActions.js untuk mengambil nama Wali Kelas yang sinkron dengan database
-
-Status: ACTIVE
-
-## Entri Pelanggaran (Update)
 - Fix nama Wali Kelas tidak muncul pada profil siswa setelah pencarian
 - Menggunakan getPJByClass dari penanggungJawabActions.js untuk mengambil nama Wali Kelas yang sinkron dengan database
 
@@ -1075,10 +1086,15 @@ Status: ACTIVE
 
 Status: ACTIVE
 
-## Entri Pelanggaran (Update — 2026-07-03)
+## Entri Pelanggaran (Update)
+- Menghapus fitur "Bukti Pelanggaran (Wajib Foto)" di halaman Entri Pelanggaran
+- Fix nama Wali Kelas tidak muncul pada profil siswa setelah pencarian
+- Menggunakan getPJByClass dari penanggungJawabActions.js untuk mengambil nama Wali Kelas yang sinkron dengan database
 - Fix pencarian siswa untuk role Wali Kelas: Filter otomatis berdasarkan kelas binaan (sama logikanya dengan Entri Reward)
 - Format parsing: "XI TKRO 1" → kelas="XI", jurusan="TKRO 1"
 - Prioritas ambil kelas dari database (tabel users) jika userId tersedia, fallback ke userData.kelas dari localStorage
+- Fix key prop duplikat pada dropdown Jenis Pelanggaran (item Sedang & Berat memiliki key "undefined" akibat properti "name"instead of "nama")
+- Fix dropdown Jenis Pelanggaran kosong untuk kategori Sedang dan item "Tawuran" hilang dari kategori Berat — akar masalah 4 item di kategoriPelanggaran menggunakan key "name" bukan "nama"
 
 Status: ACTIVE
 
@@ -1207,6 +1223,13 @@ Status: ACTIVE
 - Tombol "Hapus Semua Riwayat" dengan konfirmasi ketik "HAPUS SEMUA" (2x konfirmasi)
 - Server action whatsappActions.js: getWhatsAppConfig, saveWhatsAppConfig, testWhatsAppConnection, getAlphaStudentsForWA, executeSendWA, getWhatsAppLogs, retryWhatsAppLog, deleteAllWALogs, getWhatsAppTodayStats
 - Keamanan: API Token disimpan di server via supabaseAdmin, tidak pernah dikirim ke frontend secara utuh (masking ●●●●●)
+
+Status: ACTIVE
+
+## Konfigurasi WhatsApp (Update)
+- Fix tabs navigasi melebihi layar HP — tambahkan overflow-x-auto dan whitespace-nowrap
+- Fix filter bar Riwayat Pengiriman melebihi garis layar HP — layout flex-col di HP, flex-row di SM ke atas
+- Fix tombol "Hapus Semua Riwayat" terlalu panjang di HP — teks dipendekkan menjadi "Hapus" di layar kecil
 
 Status: ACTIVE
 

@@ -11,9 +11,9 @@ const kategoriPelanggaran = {
     { nama: 'Rambut Panjang', poin: 1 },
   ],
   Sedang: [
-    { name: 'Bolos Sekolah', poin: 2 },
-    { name: 'Bolos Pelajaran', poin: 2 },
-    { name: 'Mencoret Seragam', poin: 2 },
+    { nama: 'Bolos Sekolah', poin: 2 },
+    { nama: 'Bolos Pelajaran', poin: 2 },
+    { nama: 'Mencoret Seragam', poin: 2 },
   ],
   Berat: [
     { nama: 'Mencuri', poin: 3 },
@@ -22,7 +22,7 @@ const kategoriPelanggaran = {
     { nama: 'Merokok', poin: 3 },
     { nama: 'Berkelahi', poin: 3 },
     { nama: 'Membawa Sajam', poin: 3 },
-    { name: 'Tawuran', poin: 3 },
+    { nama: 'Tawuran', poin: 3 },
     { nama: 'Narkoba', poin: 3 },
   ]
 }

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { updateProfileData, resolveAdminUserId } from '@/app/actions/userActions';
+import { updateProfileData, resolveAdminUserId, createUserSession, updateSessionHeartbeat, endUserSession } from '@/app/actions/userActions';
 import { getUserKelasInfo } from '@/app/actions/absensiActions';
 import NotificationCenter from '@/app/components/NotificationCenter';
 import { 
@@ -20,6 +20,31 @@ import {
 export default function AppShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
+    // ── Session Management: heartbeat + cleanup ──
+  useEffect(() => {
+    let userId = null
+    try {
+      const stored = localStorage.getItem('userData')
+      if (stored) {
+        const u = JSON.parse(stored)
+        userId = u.id
+        if (userId) {
+          createUserSession({ userId, userName: u.nama, userRole: u.role, userAgent: navigator.userAgent })
+        }
+      }
+    } catch (e) { /* ignore parse error */ }
+
+    if (!userId) return
+
+    const heartbeat = setInterval(() => {
+      updateSessionHeartbeat({ userId })
+    }, 45000)
+
+    return () => {
+      clearInterval(heartbeat)
+      endUserSession({ userId })
+    }
+  }, [])
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);

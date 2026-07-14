@@ -442,36 +442,52 @@ export default function AbsensiPKL() {
                 </div>
               </div>
 
-              {/* Step 2 */}
+              {/* Step 2 — BARU */}
               <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</div>
+                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</div>
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">Atur Profil PKL dengan Teliti</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Setelah NISN dikenali, Anda akan diminta mengisi profil PKL. <strong>Perhatikan dengan seksama:</strong></p>
+                  <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1.5 text-[11px] text-amber-800">
+                    <div className="flex items-center gap-1.5"><Calendar size={11} className="text-amber-600 shrink-0" /><span><strong>Periode PKL</strong> — Sesuai surat penempatan dari sekolah</span></div>
+                    <div className="flex items-center gap-1.5"><Clock size={11} className="text-amber-600 shrink-0" /><span><strong>Jam Kerja</strong> — Sesuai ketentuan perusahaan tempat PKL</span></div>
+                    <div className="flex items-center gap-1.5"><Calendar size={11} className="text-amber-600 shrink-0" /><span><strong>Hari Kerja</strong> — Sesuai jadwal yang disepakati dengan perusahaan</span></div>
+                    <div className="flex items-center gap-1.5"><MapPin size={11} className="text-amber-600 shrink-0" /><span><strong>Koordinat Lokasi</strong> — Ambil langsung di tempat PKL agar GPS akurat</span></div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2 italic">Data ini menjadi acuan penentuan hari efektif & validasi absensi GPS. Profil PKL <strong>disarankan diatur di tempat PKL</strong> agar koordinat lokasi akurat.</p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</div>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">Cek Jadwal Absensi</p>
                   <p className="text-xs text-gray-500 mt-0.5">Perhatikan tabel jadwal yang tampil. Pastikan Anda berada di <strong>hari kerja</strong> dan dalam <strong>waktu yang ditentukan</strong>. Dot hijau menandakan jendela absensi sedang aktif.</p>
                 </div>
               </div>
 
-              {/* Step 3 */}
+              {/* Step 4 — sebelumnya Step 3 */}
               <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</div>
+                <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</div>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">Absen Masuk</p>
                   <p className="text-xs text-gray-500 mt-0.5">Klik tombol <strong>"Absen Masuk"</strong> (hijau) → Sistem memvalidasi lokasi GPS Anda (harus dalam radius 50m dari lokasi PKL) → Ambil foto selfie → Kirim.</p>
                 </div>
               </div>
 
-              {/* Step 4 */}
+              {/* Step 5 — sebelumnya Step 4 */}
               <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</div>
+                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">5</div>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">Absen Pulang</p>
                   <p className="text-xs text-gray-500 mt-0.5">Setelah selesai bekerja, klik tombol <strong>"Absen Pulang"</strong> (biru) → Validasi GPS → Foto selfie → Kirim.</p>
                 </div>
               </div>
 
-              {/* Step 5 */}
+              {/* Step 6 — sebelumnya Step 5 */}
               <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">5</div>
+                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">6</div>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">Sakit / Izin</p>
                   <p className="text-xs text-gray-500 mt-0.5">Jika tidak bisa masuk, gunakan tombol <strong>"Sakit"</strong> atau <strong>"Izin"</strong>. Wajib lampirkan foto selfie dan isi alasan. Lokasi GPS opsional.</p>
@@ -486,7 +502,7 @@ export default function AbsensiPKL() {
                   <li>Foto selfie <strong>wajib dari kamera langsung</strong> (tidak boleh dari galeri).</li>
                   <li>Jika terlambat lebih dari <strong>15 menit</strong> dari jam masuk, status otomatis "Terlambat".</li>
                   <li>Setelah absen masuk berhasil, tombol akan berubah jadi <strong>"✅ Sudah Absen Masuk"</strong>.</li>
-                  <li>Profil PKL disarankan diatur <strong>di tempat PKL</strong> agar koordinat lokasi akurat.</li>
+                  <li><strong>Atur profil PKL dengan teliti</strong> — Pastikan Periode PKL, Jam Kerja, Hari Kerja, dan Koordinat Lokasi sesuai keadaan sebenarnya di tempat PKL.</li>
                 </ul>
               </div>
             </div>
