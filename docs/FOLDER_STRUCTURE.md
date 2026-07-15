@@ -200,6 +200,8 @@ SIPANDU-APP/
 │   ├── globe.svg
 │   ├── logo-dinas.png
 │   ├── logo-sekolah.png
+│   ├── logo-sipandu.png
+│   ├── manifest.json
 │   ├── next.svg
 │   ├── vercel.svg
 │   └── window.svg

@@ -37,8 +37,17 @@ function getWIBTime() { return new Date().toLocaleTimeString('sv-SE', { hour: '2
 
 function isWorkDay(dateStr, workDays) {
   if (!workDays || !Array.isArray(workDays)) return false
+  if (workDays.includes('Fleksibel')) {
+    const d = new Date(dateStr + 'T00:00:00')
+    const day = d.getDay()
+    return day >= 1 && day <= 5
+  }
   const d = new Date(dateStr + 'T00:00:00')
   return workDays.includes(DAY_NAMES[d.getDay()])
+}
+
+function isFlexibleSchedule(workDays) {
+  return Array.isArray(workDays) && workDays.includes('Fleksibel')
 }
 
 function base64ToBuffer(b64) {
@@ -46,7 +55,7 @@ function base64ToBuffer(b64) {
   return Buffer.from(data, 'base64')
 }
 
-// ═════════════════ PROFILE ═════════════════
+// ═══════════════ PROFILE ═══════════════
 
 export async function searchStudentForPkl(nisn) {
   const trimmed = (nisn || '').trim()
@@ -63,15 +72,10 @@ export async function searchStudentForPkl(nisn) {
   return { student: data, profile }
 }
 
-/**
- * Data lengkap siswa + profil PKL + attendance hari ini
- * Jika NISN belum terdaftar, otomatis buat data siswa minimal
- */
 export async function getPklStudentData(nisn) {
   const trimmed = (nisn || '').trim()
   if (!trimmed) return { error: 'NISN tidak boleh kosong' }
 
-  // 1. Cari siswa
   let { data: siswa, error: errSiswa } = await supabaseAdmin
     .from('siswa')
     .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
@@ -87,7 +91,6 @@ export async function getPklStudentData(nisn) {
     if (d2) { siswa = d2; errSiswa = null }
   }
 
-  // 2. Jika tidak ditemukan, buat data siswa baru (minimal: NISN saja)
   if (!siswa) {
     const { data: newSiswa, error: insertErr } = await supabaseAdmin
       .from('siswa')
@@ -101,7 +104,6 @@ export async function getPklStudentData(nisn) {
   if (errSiswa) return { error: errSiswa.message }
   if (!siswa.nisn && siswa.nis) siswa.nisn = siswa.nis
 
-  // 3. Ambil profil PKL + auto-update status
   const { data: profile, error: errProfile } = await supabaseAdmin
     .from('pkl_profiles')
     .select('*')
@@ -109,9 +111,8 @@ export async function getPklStudentData(nisn) {
     .maybeSingle()
 
   if (errProfile) return { error: errProfile.message }
-  if (!profile) return { error: 'NO_PROFILE', student: siswa } // Sinyal khusus: siswa ada tapi belum punya profil
+  if (!profile) return { error: 'NO_PROFILE', student: siswa }
 
-  // Auto-update status berdasarkan tanggal
   const today = getWIBDate()
   let ns = profile.status
   if (profile.start_date && profile.end_date) {
@@ -124,7 +125,6 @@ export async function getPklStudentData(nisn) {
     profile.status = ns
   }
 
-  // 4. Ambil attendance hari ini
   const { data: todayAtt } = await supabaseAdmin
     .from('pkl_attendance')
     .select('*')
@@ -172,7 +172,6 @@ export async function savePklProfile(d) {
   }
   if (res.error) return { error: res.error.message }
 
-  // Update data siswa jika ada (untuk siswa yang baru terdaftar)
   if (d.student_nama || d.student_kelas || d.student_jurusan || d.student_jenis_kelamin) {
     const studentUpdate = {}
     if (d.student_nama) studentUpdate.nama = d.student_nama
@@ -185,7 +184,7 @@ export async function savePklProfile(d) {
   return { success: true, profile: res.data }
 }
 
-// ═══════════════════ ATTENDANCE (STUDENT) ═════════════════
+// ═══════════════ ATTENDANCE (STUDENT) ═══════════════
 
 export async function getTodayPklAttendance(studentId) {
   const today = getWIBDate()
@@ -307,7 +306,7 @@ export async function submitPklSakitIzin({ studentId, type, photoBase64, note, l
   return { success: true, data }
 }
 
-// ═══════════════════ REKAP (WK/ADMIN) ═════════════════
+// ═══════════════ REKAP (WK/ADMIN) ═══════════════
 
 export async function getPklFilters() {
   return getCached('pkl_filters', async () => {
@@ -345,7 +344,6 @@ export async function getPklStudents(filters = {}) {
   const siswaMap = {}; (siswaList || []).forEach(s => { siswaMap[s.id] = s })
   let students = profiles.map(p => ({ ...p, ...(siswaMap[p.student_id] || {}), student_id: p.student_id }))
 
-  // FIX: Gunakan exact match (===) bukan substring match (.includes())
   if (filters.kelas) students = students.filter(s => (s.kelas || '').trim() === filters.kelas.trim())
   if (filters.jurusan) students = students.filter(s => (s.jurusan || '').trim() === filters.jurusan.trim())
 
@@ -363,10 +361,11 @@ export async function getPklRekapHarian(date, filters = {}) {
   const merged = students.map(s => {
     const a = attMap[s.student_id]
     const wd = s.work_days ? isWorkDay(date, s.work_days) : false
-    let status = a ? a.status : (wd ? 'Alpha' : 'Libur')
+    const flex = isFlexibleSchedule(s.work_days)
+    let status = a ? a.status : (flex ? null : (wd ? 'Alpha' : 'Libur'))
     if (s.start_date && date < s.start_date) status = '-'
     if (s.end_date && date > s.end_date) status = '-'
-    return { ...s, attendance: a, computedStatus: status, isWorkDay: wd }
+    return { ...s, attendance: a, computedStatus: status, isWorkDay: wd, isFlexible: flex }
   })
   return { students: merged, date }
 }
@@ -383,32 +382,46 @@ export async function getPklRekapBulanan(year, month, filters = {}) {
   ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
   const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
-  // FIX REALTIME: Ambil tanggal hari ini WIB untuk batasi Alpha hanya sampai hari ini
   const todayStr = getWIBDate()
 
   const merged = students.map(s => {
+    const flex = isFlexibleSchedule(s.work_days)
     const days = []
+    let flexEffectiveDays = 0
+
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
       const dayName = DAY_NAMES[new Date(ds + 'T00:00:00').getDay()]
       const wd = s.work_days ? s.work_days.includes(dayName) : false
       const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
       const a = attMap[`${s.student_id}_${ds}`]
-
-      // FIX REALTIME: Alpha hanya dihitung untuk tanggal yang sudah lewat atau hari ini
-      // Tanggal masa depan yang belum terjadi tidak langsung di-mark Alpha
       const isPastOrToday = ds <= todayStr
 
       let status
-      if (!inRange) status = null
-      else if (a) status = a.status
-      else if (wd && isPastOrToday) status = 'Alpha'
-      else if (wd) status = null // hari kerja masa depan — belum ada status
-      else status = 'Libur'
+      if (!inRange) {
+        status = null
+      } else if (a) {
+        status = a.status
+        if (flex && isPastOrToday) flexEffectiveDays++
+      } else if (flex) {
+        status = null
+      } else if (wd && isPastOrToday) {
+        status = 'Alpha'
+      } else if (wd) {
+        status = null
+      } else {
+        status = 'Libur'
+      }
 
       days.push({ date: ds, day: d, dayName, isWorkDay: wd, inRange, attendance: a, status, isPastOrToday })
     }
-    return { ...s, days }
+
+    return {
+      ...s,
+      days,
+      isFlexible: flex,
+      effectiveDays: flex ? flexEffectiveDays : null
+    }
   })
   return { students: merged, year, month, monthName: monthNames[month], daysInMonth }
 }
@@ -437,12 +450,12 @@ export async function getPklRekapSemester(filters = {}) {
   const attMap = {}
   ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
 
-  // FIX REALTIME: Alpha semester juga hanya sampai hari ini
   const todayStr = getWIBDate()
 
   const merged = students.map(s => {
     const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
     let totalKerja = 0
+    const flex = isFlexibleSchedule(s.work_days)
     const cur = new Date(startDate + 'T00:00:00'), end = new Date(endDate + 'T00:00:00')
     while (cur <= end) {
       const ds = cur.toLocaleDateString('sv-SE')
@@ -451,24 +464,27 @@ export async function getPklRekapSemester(filters = {}) {
       const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
       if (inRange) {
         if (wd) {
-          // FIX REALTIME: hanya hitung hari kerja sampai hari ini
-          if (ds <= todayStr) totalKerja++
           const a = attMap[`${s.student_id}_${ds}`]
           if (a) {
             counts[a.status] = (counts[a.status] || 0) + 1
-          } else if (ds <= todayStr) {
+          } else if (!flex && ds <= todayStr) {
             counts.Alpha++
           }
-          // hari kerja masa depan tanpa record = belum ada status, tidak dihitung
+          if (!flex && ds <= todayStr) totalKerja++
         } else {
           counts.Libur++
         }
       }
       cur.setDate(cur.getDate() + 1)
     }
+
+    if (flex) {
+      totalKerja = counts.Hadir + counts.Terlambat + counts.Sakit + counts.Izin
+    }
+
     const hadirTotal = counts.Hadir + counts.Terlambat
     const persentase = totalKerja > 0 ? ((hadirTotal / totalKerja) * 100).toFixed(1) : '0.0'
-    return { ...s, ...counts, totalKerja, hadirTotal, persentase }
+    return { ...s, ...counts, totalKerja, hadirTotal, persentase, isFlexible: flex }
   })
   return { students: merged, semesterInfo: { startDate, endDate, label: semesterLabel } }
 }
@@ -483,12 +499,18 @@ export async function getPklStats(filters = {}) {
   ;(att || []).forEach(a => { attMap[a.student_id] = a })
   students.forEach(s => {
     const a = attMap[s.student_id]
+    const flex = isFlexibleSchedule(s.work_days)
     const wd = s.work_days ? isWorkDay(today, s.work_days) : false
     const inRange = (!s.start_date || today >= s.start_date) && (!s.end_date || today <= s.end_date)
     if (!inRange || s.status !== 'Berjalan') return
-    if (a) { const key = (a.status || '').toLowerCase(); stats[key] = (stats[key] || 0) + 1 }
-    else if (wd) { stats.alpha++ }
-    else { stats.libur++ }
+    if (a) {
+      const key = (a.status || '').toLowerCase()
+      stats[key] = (stats[key] || 0) + 1
+    } else if (!flex && wd) {
+      stats.alpha++
+    } else if (!flex && !wd) {
+      stats.libur++
+    }
   })
   const hadirTotal = stats.hadir + stats.terlambat
   const workDays = stats.hadir + stats.sakit + stats.izin + stats.alpha + stats.terlambat
@@ -500,7 +522,6 @@ export async function getPklAttendanceDetail(id) {
   const { data, error } = await supabaseAdmin.from('pkl_attendance').select('*, siswa:student_id(nisn, nama, kelas, jurusan)').eq('id', id).maybeSingle()
   if (error) return { error: error.message }
 
-  // Ambil profil PKL siswa
   let pklProfile = null
   if (data?.student_id) {
     const { data: profile } = await supabaseAdmin
@@ -514,7 +535,7 @@ export async function getPklAttendanceDetail(id) {
   return { detail: { ...data, pklProfile } }
 }
 
-// ═══════════════════ MAINTENANCE ═══════════════════
+// ═══════════════ MAINTENANCE ═══════════════
 
 export async function resetAllPklData() {
   const { data: att } = await supabaseAdmin.from('pkl_attendance').select('selfie_url, check_out_selfie_url').not('selfie_url', 'is', null)
@@ -532,12 +553,6 @@ export async function resetAllPklData() {
   return { success: true }
 }
 
-/**
- * Hapus foto selfie PKL yang sudah > 1 hari
- * - Loop sampai semua record terproses (bukan sekali limit 200)
- * - Hapus file dari Storage bucket 'pkl-selfies'
- * - Set kolom URL menjadi null di database
- */
 export async function cleanupOldPklSelfies() {
   try {
     let totalDeleted = 0
@@ -551,10 +566,7 @@ export async function cleanupOldPklSelfies() {
         .lt('created_at', cutoff.toISOString())
         .limit(200)
 
-      if (!old || old.length === 0) {
-        hasMore = false
-        break
-      }
+      if (!old || old.length === 0) { hasMore = false; break }
 
       const paths = [], ids = []
       old.forEach(r => {
@@ -569,9 +581,7 @@ export async function cleanupOldPklSelfies() {
         try {
           const { error: delErr } = await supabaseAdmin.storage.from('pkl-selfies').remove(paths)
           if (!delErr) totalDeleted += paths.length
-        } catch (e) {
-          console.error('[cleanupPklSelfies] Storage remove error:', e)
-        }
+        } catch (e) { console.error('[cleanupPklSelfies] Storage remove error:', e) }
       }
 
       if (ids.length > 0) {
@@ -580,7 +590,6 @@ export async function cleanupOldPklSelfies() {
           .in('id', ids)
       }
 
-      // Jika hasil kurang dari limit, berarti sudah tidak ada lagi
       if (old.length < 200) hasMore = false
     }
     return { deleted: totalDeleted }
@@ -590,7 +599,6 @@ export async function cleanupOldPklSelfies() {
   }
 }
 
-// ── PKL Student Info untuk Portal Orang Tua & Cari Data Siswa ──
 export async function getPklStudentProfile({ studentId }) {
   if (!studentId) return { profile: null, attendance: [], isPkl: false }
 
@@ -612,18 +620,31 @@ export async function getPklStudentProfile({ studentId }) {
   return { profile, attendance: att || [], isPkl: true }
 }
 
-// ── Hapus Data PKL Selesai ──
+// ═══════════════ SELESAI PKL — FIX: filter kelas/jurusan via tabel siswa ═══════════════
+
 export async function getCompletedPklStudentIds(filters = {}) {
+  // Step 1: Ambil semua student_id dengan status Selesai dari pkl_profiles
   let query = supabaseAdmin
     .from('pkl_profiles')
     .select('student_id')
     .eq('status', 'Selesai')
   if (filters.company) query = query.ilike('company_name', `%${filters.company}%`)
-  if (filters.kelas) query = query.eq('kelas', filters.kelas)
-  if (filters.jurusan) query = query.eq('jurusan', filters.jurusan)
+  // JANGAN filter kelas/jurusan di sini — kolom tersebut tidak ada di pkl_profiles
   const { data, error } = await query
   if (error) return { ids: [], error: error.message }
-  return { ids: (data || []).map(p => p.student_id), error: null }
+
+  let ids = (data || []).map(p => p.student_id)
+
+  // Step 2: Jika ada filter kelas/jurusan, filter via tabel siswa
+  if ((filters.kelas || filters.jurusan) && ids.length > 0) {
+    let siswaQuery = supabaseAdmin.from('siswa').select('id').in('id', ids)
+    if (filters.kelas) siswaQuery = siswaQuery.eq('kelas', filters.kelas)
+    if (filters.jurusan) siswaQuery = siswaQuery.eq('jurusan', filters.jurusan)
+    const { data: siswaData } = await siswaQuery
+    ids = (siswaData || []).map(s => s.id)
+  }
+
+  return { ids, error: null }
 }
 
 export async function deleteCompletedPklData(filters = {}) {

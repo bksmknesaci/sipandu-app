@@ -1453,3 +1453,38 @@ Status: ACTIVE
 - pklActions.js: savePklProfile otomatis update data siswa jika field student_nama/student_kelas/student_jurusan/student_jenis_kelamin dikirim
 
 Status: ACTIVE
+
+## Absen Sakit & Izin (Update — 2026-07-26)
+- Lokasi GPS untuk Sakit/Izin sekarang **wajib** diambil — sebelumnya bertanda "Opsional", sekarang jika gagal siswa harus coba lagi
+
+Status: ACTIVE
+
+---
+
+## Absensi PKL (Update — 2026-07-26)
+- Tombol Absen Masuk, Pulang, Sakit, Izin sekarang bisa membuka kamera — fix bug `<video>` element belum ter-render saat `startCamera()` dipanggil, diganti `useEffect` yang menunggu render sebelum memulai stream
+- Halaman lokasi Izin menggunakan warna **biru** (sebelumnya kuning, sama dengan Sakit) agar konsisten dengan warna teks Izin
+- Tombol **Simpan Profil PKL dikunci** sebelum siswa klik "Ambil Lokasi GPS" — mencegah siswa menyimpan profil tanpa koordinat, sehingga absensi masuk/pulang di luar radius akan ditolak sistem
+- Popup Panduan: Poin 2 ditambahkan keterangan **Mode Fleksibel** pada kotak kuning Hari Kerja — "Pilih hari rutin, atau aktifkan 'Fleksibel' jika jadwal PKL tidak menentu (kadang 2x, 4x, atau libur seminggu)"
+
+Status: ACTIVE
+
+---
+
+## Rekap Kehadiran PKL (Update — 2026-07-26)
+- Checkbox "Sembunyikan Selesai" sekarang berfungsi — fix bug `getCompletedPklStudentIds` memfilter kelas/jurusan di tabel `pkl_profiles` yang tidak memiliki kolom tersebut, diganti join ke tabel `siswa`
+- Badge ceklis (✓) untuk siswa status Selesai sekarang muncul di kolom Status tab Harian
+- Tombol "Hapus Data Selesai" sekarang muncul saat checkbox centang + ada data Selesai
+- Modal Hapus Data Selesai menggunakan z-index z-[60] agar tidak tertutup modal detail (z-50)
+- Dependency useEffect selesai dihapus early return yang mencegah fetch saat filter belum lengkap
+
+Status: ACTIVE
+
+## PWA & Social Preview
+- PWA Manifest: Logo SIPANDU muncul di Home Screen HP saat "Add to Home Screen" (standalone mode, theme_color biru)
+- Open Graph Meta Tags: Logo SIPANDU muncul sebagai preview gambar saat link dibagikan ke WhatsApp, Telegram, Facebook
+- Twitter Card Meta Tags: Logo SIPANDU muncul saat link dibagikan ke platform X/Twitter
+- metadataBase: URL dasar dinamis dari NEXT_PUBLIC_BASE_URL agar OG image selalu URL lengkap
+- Viewport: theme_color biru (#2563eb), max-scale 1 untuk mencegah zoom tidak disengaja di HP
+
+Status: ACTIVE

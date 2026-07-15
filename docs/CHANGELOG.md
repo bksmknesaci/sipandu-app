@@ -1,5 +1,29 @@
 # Changelog SIPANDU
 
+## 2026-07-27 (PWA Manifest & Social Preview)
+- Tambah file public/manifest.json — konfigurasi PWA (nama, icon, theme_color, standalone display) agar logo muncul di Home Screen HP
+- layout.tsx: Tambah metadataBase dari NEXT_PUBLIC_BASE_URL — mengubah path relatif OG image menjadi URL lengkap
+- layout.tsx: Tambah openGraph meta tags (og:title, og:description, og:image, og:url, og:siteName, og:locale, og:type) — logo muncul saat link dibagikan ke WhatsApp
+- layout.tsx: Tambah twitter card meta tags (twitter:card, twitter:title, twitter:description, twitter:images) — logo muncul saat link dibagikan ke X/Twitter
+- layout.tsx: Tambah manifest link dan apple-touch-icon — mendukung Add to Home Screen di iOS dan Android
+- layout.tsx: Tambah viewport export (themeColor, width, initialScale, maximumScale) — warna status bar HP dan cegah zoom tidak disengaja
+- .env.local: Tambah NEXT_PUBLIC_BASE_URL — URL dasar untuk metadataBase (wajib agar OG image berfungsi di WhatsApp)
+- File baru: public/manifest.json
+- File diubah: app/layout.tsx, .env.local
+
+## 2026-07-26 (Perbaikan Absensi PKL & Rekap PKL)
+- Absensi PKL: Fix tombol Buka Kamera tidak berfungsi — `startCamera()` mengakses `videoRef.current` sebelum `<video>` element ter-render di DOM, diganti `useEffect` yang menunggu render lalu memulai stream via `cameraRequestedRef`
+- Absensi PKL: Halaman lokasi Izin menggunakan warna biru (bg-blue-50, border-blue-200, from-blue-500) konsisten dengan warna teks "Izin"
+- Absensi PKL: Lokasi GPS untuk Sakit/Izin sekarang wajib diambil — sebelumnya bertanda "Opsional", jika gagal siswa harus coba lagi
+- Absensi PKL: Tombol "Simpan Profil PKL" dikunci (disabled) sebelum siswa klik "Ambil Lokasi GPS" — mencegah profil tanpa koordinat
+- Absensi PKL: Popup Panduan poin 2 ditambahkan keterangan Mode Fleksibel pada kotak kuning Hari Kerja
+- Absensi PKL: Tampilan Jadwal Absensi dikembalikan persis asli — info box biru dengan icon Clock/Calendar/Timer, grid 2 kolom, jendela waktu dengan dot indikator (hijau/biru berdenyut saat aktif), peringatan terlambat kuning
+- Rekap Kehadiran PKL: Fix badge ✓ hilang untuk siswa Selesai — akar masalah `getCompletedPklStudentIds` memfilter kelas/jurusan di tabel `pkl_profiles` yang tidak punya kolom tersebut, diganti join ke tabel `siswa`
+- Rekap Kehadiran PKL: Checkbox "Sembunyikan Selesai" sekarang berfungsi — hapus early return `if (!filters.kelas)` yang mencegah fetch
+- Rekap Kehadiran PKL: Tombol "Hapus Data Selesai" sekarang muncul saat checkbox centang + ada data Selesai
+- Rekap Kehadiran PKL: Modal Hapus Data Selesai menggunakan z-index z-[60] agar tidak tertutup modal detail
+- File diubah: app/absensi-pkl/page.js, app/actions/pklActions.js, app/wali-kelas/rekap-pkl/page.js
+
 ## 2026-07-25 (Perbaikan Konfirmasi Hapus Daftar Siswa)
 - Daftar Siswa: Ganti confirm() browser bawaan dengan modal popup modern untuk Hapus Siswa per-baris — tampil nama & NISN siswa di card merah, ketik "HAPUS", tombol disabled sampai teks cocok persis
 - Daftar Siswa: Ganti confirm() 2x bertumpuk dengan modal popup modern untuk Hapus Semua Data — daftar 5 dampak penghapusan (data siswa, absensi, pelanggaran, reward, formulir), ketik "HAPUS SEMUA", tombol disabled sampai teks cocok persis
