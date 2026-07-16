@@ -1,5 +1,19 @@
 # Changelog SIPANDU
 
+## 2026-07-27 (Fix OG Image WhatsApp & Rekap PKL)
+- OG Image: Ganti dari logo-sipandu.png (rasio 1:1, 627x632) ke og-image.png (rasio landscape 1.91:1, 1200x630) — WhatsApp sering menolak menampilkan gambar persegi di link preview
+- layout.tsx: openGraph images dan twitter images sekarang merujuk ke /og-image.png
+- File baru: public/og-image.png
+- File diubah: app/layout.tsx
+
+## 2026-07-27 (Perbaikan Rekap Kehadiran PKL)
+- Fix 404 blank page: File page.js terpotong di tengah JSX (tab Bulanan tidak lengkap, closing tag hilang) — ditulis ulang lengkap
+- Modal Detail: Tambah foto selfie absen masuk (selfie_url) dan absen pulang (check_out_selfie_url) — klik untuk zoom fullscreen
+- Modal Detail: Placeholder informatif jika foto sudah dihapus otomatis (> 1 hari) atau belum absen pulang
+- Modal Detail: Fix text putih tidak terbaca di HP — semua text sekarang menggunakan warna eksplisit (text-gray-800/600/500)
+- Modal Detail: Fix info siswa null — gunakan path Supabase join yang benar (detailData.siswa?.nama) bukan flat field (detailData.student_nama)
+- File diubah: app/wali-kelas/rekap-pkl/page.js
+
 ## 2026-07-27 (PWA Manifest & Social Preview)
 - Tambah file public/manifest.json — konfigurasi PWA (nama, icon, theme_color, standalone display) agar logo muncul di Home Screen HP
 - layout.tsx: Tambah metadataBase dari NEXT_PUBLIC_BASE_URL — mengubah path relatif OG image menjadi URL lengkap

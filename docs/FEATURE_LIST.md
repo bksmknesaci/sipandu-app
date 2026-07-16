@@ -1488,3 +1488,19 @@ Status: ACTIVE
 - Viewport: theme_color biru (#2563eb), max-scale 1 untuk mencegah zoom tidak disengaja di HP
 
 Status: ACTIVE
+
+## PWA & Social Preview (Update)
+- OG Image menggunakan file landscape khusus (og-image.png, 1200x630px) — rasio standar universal yang dijamin tampil di WhatsApp, Telegram, Facebook, Twitter, LINE
+- Logo SIPANDU (logo-sipandu.png) tetap digunakan untuk icon browser dan PWA home screen
+- Twitter Card juga menggunakan og-image.png
+
+Status: ACTIVE
+
+## Rekap Kehadiran PKL (Update)
+- Modal Detail Absensi: Tampil foto selfie absen masuk dan absen pulang (klik untuk zoom fullscreen)
+- Modal Detail Absensi: Placeholder informatif jika foto sudah otomatis dihapus (> 1 hari)
+- Modal Detail Absensi: Semua text menggunakan warna eksplisit (text-gray-800/600/500) — tidak ada lagi text putih yang tidak terbaca di HP
+- Modal Detail Absensi: Info siswa menggunakan path Supabase join yang benar (detailData.siswa?.nama, bukan detailData.student_nama)
+- Fix halaman 404 blank: File terpotong di tengah JSX — tab Bulanan dan Semester ditulis ulang lengkap
+
+Status: ACTIVE
