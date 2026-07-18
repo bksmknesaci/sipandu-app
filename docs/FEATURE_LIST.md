@@ -1490,9 +1490,10 @@ Status: ACTIVE
 Status: ACTIVE
 
 ## PWA & Social Preview (Update)
-- OG Image menggunakan file landscape khusus (og-image.png, 1200x630px) — rasio standar universal yang dijamin tampil di WhatsApp, Telegram, Facebook, Twitter, LINE
+- OG Image menggunakan file landscape khusus (og-image.jpg, 1200x630px, JPEG, <300KB) — rasio standar 1.91:1 yang dijamin tampil di WhatsApp, Telegram, Facebook, Twitter, LINE
+- Twitter Card menggunakan tipe summary_large_image untuk menampilkan gambar besar
 - Logo SIPANDU (logo-sipandu.png) tetap digunakan untuk icon browser dan PWA home screen
-- Twitter Card juga menggunakan og-image.png
+- next.config.ts: Cache-Control dan CORS headers untuk og-image.jpg agar gambar bisa diakses oleh crawler WhatsApp
 
 Status: ACTIVE
 
@@ -1502,5 +1503,15 @@ Status: ACTIVE
 - Modal Detail Absensi: Semua text menggunakan warna eksplisit (text-gray-800/600/500) — tidak ada lagi text putih yang tidak terbaca di HP
 - Modal Detail Absensi: Info siswa menggunakan path Supabase join yang benar (detailData.siswa?.nama, bukan detailData.student_nama)
 - Fix halaman 404 blank: File terpotong di tengah JSX — tab Bulanan dan Semester ditulis ulang lengkap
+
+Status: ACTIVE
+
+## Data Siswa (Update)
+- Import CSV diganti dengan Import Excel — menggunakan library xlsx untuk membaca file .xlsx, .xls, dan .csv tanpa masalah delimiter
+- Import Excel: Modal popup dengan info format kolom, area pilih file, dan loading state
+- Import Excel: Download Template Excel otomatis — generate file .xlsx dengan contoh data dan lebar kolom yang sesuai
+- Hapus tombol Export CSV — cukup gunakan Cetak Data
+- Kartu statistik dinamis mengikuti filter — Total Siswa, Total Kelas, Total Rombel, Aktif, Non Aktif berubah saat filter diterapkan
+- Total Jurusan diganti Total Rombel — menghitung gabungan unik kelas + jurusan (contoh: "X TKR 1", "X RPL 2") bukan jurusan saja
 
 Status: ACTIVE

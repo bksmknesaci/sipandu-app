@@ -1,5 +1,26 @@
 # Changelog SIPANDU
 
+## 2026-07-28 (Perbaikan Import Data Siswa & Statistik)
+- Import CSV diganti Import Excel: Menggunakan library xlsx untuk parse file .xlsx/.xls/.csv — tidak lagi terpotong oleh masalah delimiter koma
+- Import Excel: Modal popup modern dengan info format kolom, area klik pilih file, loading state
+- Import Excel: Tombol Download Template Excel — generate file .xlsx otomatis dengan contoh 3 baris data dan lebar kolom sesuai
+- Hapus tombol Export CSV — fungsi handleExportCSV dan import CSV dihapus, cukup gunakan Cetak Data
+- Kartu statistik dinamis: Menggunakan useMemo agar Total Siswa, Total Kelas, Total Rombel, Aktif, Non Aktif otomatis berubah saat filter kelas/jurusan/status/search diterapkan
+- Total Jurusan diganti Total Rombel: Menghitung gabungan unik kelas + jurusan (contoh filter X → "X TKR 1", "X TKR 2", dst) bukan jurusan saja
+- Total Kelas: Menghitung jumlah tingkat unik (X, XI, XII) dari data terfilter
+- File diubah: app/admin/siswa/page.js
+
+## 2026-07-27 (Fix OG Image WhatsApp — Final)
+- Ganti OG image dari PNG (1.35MB, rasio 1:1) ke JPEG (<300KB, rasio 1.91:1 landscape 1200x630) — WhatsApp menolak gambar OG yang terlalu besar dan berupa persegi
+- Rename file dari og.image.png menjadi og-image.jpg (nama file sebelumnya salah, menggunakan titik bukan strip)
+- layout.tsx: openGraph images dan twitter images merujuk ke /og-image.jpg
+- layout.tsx: Twitter card diganti dari "summary" menjadi "summary_large_image" agar gambar tampil besar
+- next.config.ts: Fix headers() yang sebelumnya berada di luar objek config sehingga tidak dieksekusi — sekarang berada di dalam objek nextConfig
+- next.config.ts: Tambah headers Cache-Control dan CORS untuk /og-image.jpg
+- File baru: public/og-image.jpg
+- File dihapus: public/og.image.png
+- File diubah: app/layout.tsx, next.config.ts
+
 ## 2026-07-27 (Fix OG Image WhatsApp & Rekap PKL)
 - OG Image: Ganti dari logo-sipandu.png (rasio 1:1, 627x632) ke og-image.png (rasio landscape 1.91:1, 1200x630) — WhatsApp sering menolak menampilkan gambar persegi di link preview
 - layout.tsx: openGraph images dan twitter images sekarang merujuk ke /og-image.png

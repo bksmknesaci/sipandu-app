@@ -203,7 +203,7 @@ SIPANDU-APP/
 │   ├── logo-sipandu.png
 │   ├── manifest.json
 │   ├── next.svg
-│   ├── og.image.png
+│   ├── og-image.jpg
 │   ├── vercel.svg
 │   └── window.svg
 │

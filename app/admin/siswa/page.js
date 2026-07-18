@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { fetchSiswaAction, saveSiswaAction, deleteSiswaAction, deleteAllSiswaAction, importSiswaAction, promoteStudentsAction, graduateAndDeleteAction } from '@/app/actions/siswaActions';
 import {
-  Users, School, Award, UserCheck, UserX, Plus, Download, Upload, Printer,
+  Users, School, Award, UserCheck, UserX, Plus, Upload, Printer,
   Search, Filter, Edit3, Trash2, X, CheckCircle, XCircle, AlertTriangle,
   ChevronLeft, ChevronRight, GraduationCap, ArrowUpCircle, Save,
-  ShieldAlert, Loader2
+  ShieldAlert, Loader2, FileSpreadsheet, Download
 } from 'lucide-react';
 
-// [WA] Helper validasi nomor HP Indonesia
 function normalizePhone(phone) {
   if (!phone) return ''
   let p = String(phone).trim().replace(/[^\d+]/g, '')
@@ -25,8 +25,6 @@ function isValidPhone(phone) {
 
 export default function ManajemenSiswa() {
   const [activeTab, setActiveTab] = useState('data-siswa');
-  
-  // ===== DATA SISWA STATE =====
   const [siswa, setSiswa] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,12 +33,10 @@ export default function ManajemenSiswa() {
   const [filterStatus, setFilterStatus] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  // [WA] Tambah parent_whatsapp ke formData
   const [formData, setFormData] = useState({ nis: '', nama: '', kelas: '', jurusan: '', status: 'Aktif', jenis_kelamin: 'L', parent_whatsapp: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [importMsg, setImportMsg] = useState(null);
-  
-  // ===== KENAIKAN KELAS & KELULUSAN STATE =====
+
   const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
   const [promoteStep, setPromoteStep] = useState(1);
   const [promoteAction, setPromoteAction] = useState('');
@@ -48,8 +44,10 @@ export default function ManajemenSiswa() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [promoteLoading, setPromoteLoading] = useState(false);
   const itemsPerPage = 10;
-  const fileInputRef = useRef(null);
-  const printRef = useRef(null);
+
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const excelInputRef = useRef(null);
 
   const [toast, setToast] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(null);
@@ -61,8 +59,6 @@ export default function ManajemenSiswa() {
   useEffect(() => { fetchSiswa(); }, []);
   const fetchSiswa = async () => { setLoading(true); const result = await fetchSiswaAction(); if (result.data) setSiswa(result.data); if (result.error) console.error('Fetch error:', result.error); setLoading(false); };
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t) } }, [toast])
-
-  const stats = { total: siswa.length, kelas: [...new Set(siswa.map(s => s.kelas))].length, jurusan: [...new Set(siswa.map(s => s.jurusan))].length, aktif: siswa.filter(s => s.status === 'Aktif').length, nonAktif: siswa.filter(s => s.status !== 'Aktif').length };
 
   const filteredSiswa = siswa.filter(s => {
     const matchSearch = s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) || s.nisn?.includes(searchTerm) || (s.parent_whatsapp || '').includes(searchTerm);
@@ -80,22 +76,30 @@ export default function ManajemenSiswa() {
   const tingkatList = [...new Set(siswa.map(s => { const kelas = (s.kelas || '').trim(); const firstWord = kelas.split(/\s+/)[0]; if (['X', 'XI', 'XII'].includes(firstWord)) return firstWord; return firstWord; }))].filter(Boolean).sort();
   const kelasGroupList = [...new Set(siswa.map(s => { const kelas = (s.kelas || '').trim(); const parts = kelas.split(/\s+/); if (parts.length > 1) return parts.slice(1).join(' '); return s.jurusan || ''; }))].filter(Boolean).sort();
 
+  const stats = useMemo(() => ({
+    total: filteredSiswa.length,
+    kelas: [...new Set(filteredSiswa.map(s => (s.kelas || '').trim().split(/\s+/)[0]).filter(k => ['X', 'XI', 'XII'].includes(k)))].length,
+    rombel: [...new Set(filteredSiswa.map(s => {
+      const k = (s.kelas || '').trim();
+      const j = (s.jurusan || '').trim();
+      return j ? `${k} ${j}` : k;
+    }).filter(Boolean))].length,
+    aktif: filteredSiswa.filter(s => s.status === 'Aktif').length,
+    nonAktif: filteredSiswa.filter(s => s.status !== 'Aktif').length,
+  }), [filteredSiswa]);
+
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  // [WA] Tambah parent_whatsapp di openAddModal
   const openAddModal = () => { setFormData({ nis: '', nama: '', kelas: '', jurusan: '', status: 'Aktif', jenis_kelamin: 'L', parent_whatsapp: '' }); setEditMode(false); setIsModalOpen(true); };
-  // [WA] Tambah parent_whatsapp di openEditModal
   const openEditModal = (s) => { setFormData({ ...s, nis: s.nisn || s.nis || '', parent_whatsapp: s.parent_whatsapp || '' }); setEditMode(true); setIsModalOpen(true); };
 
   const handleSave = async () => {
     if (!formData.nis || !formData.nama || !formData.kelas || !formData.jurusan) { alert('Semua field wajib diisi!'); return }
-    // [WA] Validasi nomor WA jika diisi
     if (formData.parent_whatsapp && !isValidPhone(formData.parent_whatsapp)) {
       alert('Format No. WA Orang Tua tidak valid. Gunakan format: 08xxx atau 628xxx (10-15 digit).');
       return;
     }
     try {
-      // [WA] Normalize phone sebelum simpan
       const dataToSave = { ...formData, parent_whatsapp: formData.parent_whatsapp ? normalizePhone(formData.parent_whatsapp) : null };
       const result = await saveSiswaAction(dataToSave, editMode);
       if (result.error) { alert('Gagal simpan: ' + result.error); return; }
@@ -109,10 +113,7 @@ export default function ManajemenSiswa() {
     try {
       const result = await deleteSiswaAction(showDeleteModal.id);
       if (result.error) { alert('Gagal hapus: ' + result.error); return; }
-      setShowDeleteModal(null);
-      setDeleteConfirmText('');
-      setCurrentPage(1);
-      fetchSiswa();
+      setShowDeleteModal(null); setDeleteConfirmText(''); setCurrentPage(1); fetchSiswa();
     } catch (error) { console.error('Delete error:', error); alert('Terjadi kesalahan saat menghapus data.'); }
     setDeleting(false);
   };
@@ -133,7 +134,6 @@ export default function ManajemenSiswa() {
 
   const handleDownloadArchive = () => {
     const archiveStudents = siswa.filter(s => selectedIds.includes(s.id));
-    // [WA] Tambah kolom parent_whatsapp di arsip
     const headers = ['No', 'NISN', 'Nama Siswa', 'L/P', 'Kelas', 'Jurusan', 'No WA Ortu', 'Status'];
     const rows = archiveStudents.map((s, idx) => [idx + 1, s.nisn || '', s.nama || '', s.jenis_kelamin || '', s.kelas || '', s.jurusan || '', s.parent_whatsapp || '', s.status || '']);
     const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -144,53 +144,73 @@ export default function ManajemenSiswa() {
 
   const handleProcessPromote = async () => {
     setPromoteLoading(true);
-    try { if (promoteAction === 'lulus') { const result = await graduateAndDeleteAction(selectedIds); if (result.error) { alert('Gagal: ' + result.error); return; } } else { const updates = siswa.filter(s => selectedIds.includes(s.id)).map(s => ({ id: s.id, kelas: getNewKelas(s.kelas, promoteAction) })); const result = await promoteStudentsAction(updates); if (result.error) { alert('Gagal: ' + result.error); return; } } setIsPromoteModalOpen(false); fetchSiswa(); } finally { setPromoteLoading(false); }
+    try { if (promoteAction === 'lulus') { const result = await graduateAndDeleteAction(selectedIds); if (result.error) { alert('Gagal: ' + result.error); return; } } else { const updates = siswa.filter(s => selectedIds.includes(s.id)).map(s => ({ id: s.id, kelas: getNewKelas(s.kelas, promoteAction) })); const result = await promoteStudentsAction(updates); if (result.error) { alert('Gagal: ' + result.error); return; } } setIsPromoteModalOpen(false); fetchSiswa(); } finally { setPromoteLoading(false) }
   };
 
-  // [WA] Tambah kolom parent_whatsapp di export CSV
-  const handleExportCSV = () => {
-    if (filteredSiswa.length === 0) { alert('Tidak ada data untuk diexport.'); return; }
-    const headers = ['No', 'NISN', 'Nama Siswa', 'L/P', 'Kelas', 'Jurusan', 'No WA Ortu', 'Status'];
-    const rows = filteredSiswa.map((s, idx) => [idx + 1, s.nisn || '', s.nama || '', s.jenis_kelamin || '', s.kelas || '', s.jurusan || '', s.parent_whatsapp || '', s.status || '']);
-    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a');
-    link.href = url; link.download = `Data_Siswa_SIPANDU_${new Date().toISOString().split('T')[0]}.csv`; link.click(); URL.revokeObjectURL(url);
+  // ===== DOWNLOAD TEMPLATE EXCEL =====
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      { 'No': 1, 'NISN': '0099886176', 'Nama Siswa': 'FATIH AMMAR ALGHIFARI', 'L/P': 'L', 'Kelas': 'X', 'Jurusan': 'TKR 1', 'No WA Ortu': '081234567890', 'Status': 'Aktif' },
+      { 'No': 2, 'NISN': '0093648776', 'Nama Siswa': 'SITI AYAH', 'L/P': 'P', 'Kelas': 'X', 'Jurusan': 'RPL 1', 'No WA Ortu': '081234567891', 'Status': 'Aktif' },
+      { 'No': 3, 'NISN': '', 'Nama Siswa': '...', 'L/P': 'L', 'Kelas': 'XI', 'Jurusan': 'TKR 2', 'No WA Ortu': '', 'Status': 'Aktif' },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 15 }, { wch: 30 }, { wch: 5 }, { wch: 8 }, { wch: 15 }, { wch: 18 }, { wch: 10 },
+    ];
+    XLSX.writeFile(wb, 'Template_Import_Siswa_SIPANDU.xlsx');
   };
 
-  // [WA] Update import CSV untuk kolom parent_whatsapp (index 6)
-  const handleImportCSV = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    if (!file.name.endsWith('.csv')) { alert('File harus berformat CSV.'); return; }
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target.result; const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length < 2) { alert('File CSV kosong atau tidak valid.'); return; }
-      const dataRows = lines.slice(1); const importedData = [];
-      for (const line of dataRows) {
-        const columns = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        if (!columns || columns.length < 4) continue;
-        const cleanValue = (val) => String(val).replace(/^"|"$/g, '').trim();
-        importedData.push({
-          nis: cleanValue(columns[1] || ''),
-          nama: cleanValue(columns[2] || ''),
-          jenis_kelamin: cleanValue(columns[3] || 'L'),
-          kelas: cleanValue(columns[4] || ''),
-          jurusan: cleanValue(columns[5] || ''),
-          parent_whatsapp: normalizePhone(cleanValue(columns[6] || '')), // [WA] Kolom baru di index 6
-          status: cleanValue(columns[7] || 'Aktif'), // [WA] Status geser ke index 7
-        });
-      }
-      if (importedData.length === 0) { alert('Tidak ada data valid dalam file CSV.'); return; }
+  // ===== IMPORT EXCEL =====
+  const handleImportExcel = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const validExts = ['.xlsx', '.xls', '.csv'];
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validExts.includes(ext)) { alert('File harus berformat Excel (.xlsx/.xls) atau CSV (.csv).'); return; }
+
+    setImporting(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+      if (jsonData.length === 0) { alert('File Excel kosong atau tidak valid.'); setImporting(false); return; }
+
+      const importedData = jsonData.map(row => ({
+        nis: String(row['NISN'] || row['nisn'] || row['NIS'] || '').trim(),
+        nama: String(row['Nama Siswa'] || row['nama'] || row['Nama'] || '').trim(),
+        jenis_kelamin: String(row['L/P'] || row['jenis_kelamin'] || row['LP'] || 'L').trim().toUpperCase() === 'P' ? 'P' : 'L',
+        kelas: String(row['Kelas'] || row['kelas'] || '').trim(),
+        jurusan: String(row['Jurusan'] || row['jurusan'] || '').trim(),
+        parent_whatsapp: normalizePhone(String(row['No WA Ortu'] || row['parent_whatsapp'] || row['No WA'] || '').trim()),
+        status: String(row['Status'] || row['status'] || 'Aktif').trim(),
+      })).filter(d => d.nis || d.nama);
+
+      if (importedData.length === 0) { alert('Tidak ada data valid dalam file. Pastikan kolom sesuai template.'); setImporting(false); return; }
+
       const result = await importSiswaAction(importedData);
-      if (result.error) { setImportMsg({ type: 'error', text: `Import gagal: ${result.error}` }); }
-      else { setImportMsg({ type: 'success', text: `Berhasil import ${importedData.length} data siswa!` }); fetchSiswa(); }
+      if (result.error) {
+        setImportMsg({ type: 'error', text: `Import gagal: ${result.error}` });
+      } else {
+        setImportMsg({ type: 'success', text: `Berhasil import ${importedData.length} data siswa!` });
+        fetchSiswa();
+        setShowImportModal(false);
+      }
       setTimeout(() => setImportMsg(null), 5000);
-    };
-    reader.readAsText(file); e.target.value = '';
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Gagal membaca file. Pastikan file tidak rusak dan formatnya benar.');
+    }
+    setImporting(false);
+    e.target.value = '';
   };
 
-  // [WA] Tambah kolom parent_whatsapp di cetak
+  // ===== CETAK DATA =====
   const handleCetak = () => {
     const printWindow = window.open('', '_blank');
     const tableRows = filteredSiswa.map((s, idx) => `<tr><td style="border:1px solid #ccc;padding:6px;text-align:center;">${idx+1}</td><td style="border:1px solid #ccc;padding:6px;">${s.nisn||''}</td><td style="border:1px solid #ccc;padding:6px;">${s.nama||''}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.jenis_kelamin||''}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.kelas||''}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.jurusan||''}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.parent_whatsapp||'-'}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.status||''}</td></tr>`).join('');
@@ -213,16 +233,14 @@ export default function ManajemenSiswa() {
       {activeTab === 'data-siswa' && (
         <div className="space-y-6 animate-fadeIn">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[{ label: 'Total Siswa', value: stats.total, icon: Users, color: 'bg-blue-500', bg: 'bg-blue-50' },{ label: 'Total Kelas', value: stats.kelas, icon: School, color: 'bg-indigo-500', bg: 'bg-indigo-50' },{ label: 'Total Jurusan', value: stats.jurusan, icon: Award, color: 'bg-purple-500', bg: 'bg-purple-50' },{ label: 'Siswa Aktif', value: stats.aktif, icon: UserCheck, color: 'bg-green-500', bg: 'bg-green-50' },{ label: 'Non Aktif', value: stats.nonAktif, icon: UserX, color: 'bg-red-500', bg: 'bg-red-50' }].map((stat, idx) => (
+            {[{ label: 'Total Siswa', value: stats.total, icon: Users, color: 'bg-blue-500', bg: 'bg-blue-50' },{ label: 'Total Kelas', value: stats.kelas, icon: School, color: 'bg-indigo-500', bg: 'bg-indigo-50' },{ label: 'Total Rombel', value: stats.rombel, icon: Award, color: 'bg-purple-500', bg: 'bg-purple-50' },{ label: 'Siswa Aktif', value: stats.aktif, icon: UserCheck, color: 'bg-green-500', bg: 'bg-green-50' },{ label: 'Non Aktif', value: stats.nonAktif, icon: UserX, color: 'bg-red-500', bg: 'bg-red-50' }].map((stat, idx) => (
               <div key={idx} className={`${stat.bg} p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow`}><div className="flex items-center justify-between mb-3"><div className={`${stat.color} p-2 rounded-lg text-white`}><stat.icon size={20}/></div></div><p className="text-3xl font-bold text-gray-800">{stat.value}</p><p className="text-xs text-gray-500 font-medium mt-1">{stat.label}</p></div>
             ))}
           </div>
 
           <div className="flex flex-wrap gap-3">
             <button onClick={openAddModal} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Plus size={16}/> Tambah Siswa</button>
-            <input type="file" ref={fileInputRef} accept=".csv" className="hidden" onChange={handleImportCSV} />
-            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Upload size={16}/> Import CSV</button>
-            <button onClick={handleExportCSV} className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2.5 rounded-lg hover:bg-yellow-600 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Download size={16}/> Export CSV</button>
+            <button onClick={() => { setShowImportModal(true); setImportMsg(null) }} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Upload size={16}/> Import Excel</button>
             <button onClick={handleCetak} className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2.5 rounded-lg hover:bg-gray-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Printer size={16}/> Cetak Data</button>
             <button onClick={() => { setShowDeleteAllModal(true); setDeleteConfirmText('') }} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 active:scale-95 transition-all text-sm font-semibold shadow-sm"><Trash2 size={16}/> Hapus Semua Data</button>
             <div className="w-px h-8 bg-gray-300 mx-1 hidden md:block"></div>
@@ -251,7 +269,6 @@ export default function ManajemenSiswa() {
                     <th className="py-3 px-4 font-bold text-gray-800 text-center">L/P</th>
                     <th className="py-3 px-4 font-bold text-gray-800">Kelas</th>
                     <th className="py-3 px-4 font-bold text-gray-800">Jurusan</th>
-                    {/* [WA] Kolom baru No WA Ortu */}
                     <th className="py-3 px-4 font-bold text-gray-800 text-center">No WA Ortu</th>
                     <th className="py-3 px-4 font-bold text-gray-800 text-center">Status</th>
                     <th className="py-3 px-4 font-bold text-gray-800 text-center">Aksi</th>
@@ -266,7 +283,6 @@ export default function ManajemenSiswa() {
                       <td className="py-3 px-4 text-center"><span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${s.jenis_kelamin === 'P' ? 'bg-pink-100' : 'bg-blue-100'}`} style={blackText}>{s.jenis_kelamin || 'L'}</span></td>
                       <td className="py-3 px-4 font-semibold" style={blackText}>{s.kelas}</td>
                       <td className="py-3 px-4 font-semibold" style={blackText}>{s.jurusan}</td>
-                      {/* [WA] Kolom baru No WA Ortu */}
                       <td className="py-3 px-4 text-center">
                         {s.parent_whatsapp ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[10px] font-bold border border-green-200">
@@ -285,7 +301,8 @@ export default function ManajemenSiswa() {
             <div className="flex items-center justify-between p-4 border-t bg-gray-50">
               <span className="text-sm text-gray-500">Halaman {currentPage} dari {totalPages || 1}</span>
               <div className="flex gap-2">
-                <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="p-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"><ChevronLeft size={16}/></button>
+                <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="p-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+                  <ChevronLeft size={16}/></button>
                 <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages} className="p-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"><ChevronRight size={16}/></button>
               </div>
             </div>
@@ -293,7 +310,61 @@ export default function ManajemenSiswa() {
         </div>
       )}
 
-      {/* MODAL TAMBAH/EDIT SISWA */}
+      {/* ═══ MODAL IMPORT EXCEL ═══ */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { if (!importing) setShowImportModal(false); setImportMsg(null) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
+            <div className="flex justify-between items-center p-5 border-b">
+              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><FileSpreadsheet size={20} className="text-green-600" /> Import Excel</h3>
+              <button onClick={() => { if (!importing) { setShowImportModal(false); setImportMsg(null) } }} className="text-gray-400 hover:text-red-500"><X size={20}/></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-sm text-blue-700 space-y-2">
+                <p className="font-bold">📋 Format Kolom Excel:</p>
+                <div className="grid grid-cols-4 gap-1 text-xs font-mono bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="font-bold text-blue-800">NISN</span>
+                  <span className="font-bold text-blue-800">Nama Siswa</span>
+                  <span className="font-bold text-blue-800">L/P</span>
+                  <span className="font-bold text-blue-800">Kelas</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 text-xs font-mono bg-white rounded-lg p-2 border border-blue-100">
+                  <span className="font-bold text-blue-800">Jurusan</span>
+                  <span className="font-bold text-blue-800">No WA Ortu</span>
+                  <span className="font-bold text-blue-800">Status</span>
+                  <span className="text-gray-400 italic">opsional</span>
+                </div>
+                <p className="text-xs text-blue-600 mt-1">Support: .xlsx, .xls, .csv</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={handleDownloadTemplate} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition">
+                  <Download size={16} /> Download Template
+                </button>
+              </div>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-green-400 hover:bg-green-50/30 transition cursor-pointer" onClick={() => excelInputRef.current?.click()}>
+                <input type="file" ref={excelInputRef} accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportExcel} />
+                <Upload size={32} className="mx-auto text-gray-400 mb-2" />
+                <p className="text-sm font-semibold text-gray-700">Klik untuk pilih file Excel</p>
+                <p className="text-xs text-gray-400 mt-1">.xlsx, .xls, atau .csv</p>
+              </div>
+
+              {importMsg && (
+                <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${importMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {importMsg.type === 'success' ? <CheckCircle size={16}/> : <AlertTriangle size={16}/>} {importMsg.text}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-5 border-t bg-gray-50 rounded-b-2xl">
+              <button onClick={() => { if (!importing) { setShowImportModal(false); setImportMsg(null) } }} disabled={importing} className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50">
+                {importing ? 'Menunggu...' : 'Tutup'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL TAMBAH/EDIT SISWA ═══ */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-scaleIn">
@@ -309,7 +380,6 @@ export default function ManajemenSiswa() {
                 <div><label className="text-xs font-semibold text-gray-500 block mb-1">Kelas</label><select name="kelas" value={formData.kelas?.split(' ')[0] || ''} onChange={(e) => { const tingkat = e.target.value; const jurusan = formData.jurusan || ''; setFormData({ ...formData, kelas: jurusan ? `${tingkat} ${jurusan}` : tingkat }); }} style={blackText} className={inputClass}><option value="">Pilih Kelas</option>{tingkatList.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                 <div><label className="text-xs font-semibold text-gray-500 block mb-1">Jurusan</label><select name="jurusan" value={formData.jurusan} onChange={(e) => { const jurusan = e.target.value; const tingkat = formData.kelas?.split(' ')[0] || ''; setFormData({ ...formData, jurusan: jurusan, kelas: tingkat && jurusan ? `${tingkat} ${jurusan}` : tingkat }); }} style={blackText} className={inputClass}><option value="">Pilih Jurusan</option>{kelasGroupList.map(j => <option key={j} value={j}>{j}</option>)}</select></div>
               </div>
-              {/* [WA] Field baru No WA Orang Tua */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 block mb-1">No. WA Orang Tua <span className="text-gray-400 font-normal">(opsional)</span></label>
                 <input type="text" name="parent_whatsapp" value={formData.parent_whatsapp} onChange={handleInputChange} style={blackText} className={inputClass} placeholder="08xxxxxxxxxx atau 628xxxxxxxxxx" />
@@ -324,7 +394,7 @@ export default function ManajemenSiswa() {
         </div>
       )}
 
-      {/* MODAL KENAIKAN KELAS & KELULUSAN (tetap sama, tidak berubah) */}
+      {/* ═══ MODAL KENAIKAN KELAS & KELULUSAN ═══ */}
       {isPromoteModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-scaleIn">
@@ -399,7 +469,7 @@ export default function ManajemenSiswa() {
         </div>
       )}
 
-            {/* ═══ MODAL HAPUS SATU SISWA ═══ */}
+      {/* ═══ MODAL HAPUS SATU SISWA ═══ */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => { setShowDeleteModal(null); setDeleteConfirmText('') }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()} style={{ animation: 'scaleIn 0.2s ease-out' }}>
@@ -417,14 +487,11 @@ export default function ManajemenSiswa() {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold">HAPUS</span> untuk konfirmasi</label>
-                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setShowDeleteModal(null); setDeleteConfirmText('') }}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
-                <button onClick={handleDelete} disabled={deleteConfirmText !== 'HAPUS' || deleting}
-                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                <button onClick={() => { setShowDeleteModal(null); setDeleteConfirmText('') }} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleDelete} disabled={deleteConfirmText !== 'HAPUS' || deleting} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
                   {deleting ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Hapus</>}
                 </button>
               </div>
@@ -457,14 +524,11 @@ export default function ManajemenSiswa() {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ketik <span className="text-red-600 font-bold tracking-wider">HAPUS SEMUA</span> untuk konfirmasi</label>
-                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS SEMUA"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
+                <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="HAPUS SEMUA" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:outline-none text-gray-800 text-sm text-center font-bold tracking-widest" />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setShowDeleteAllModal(false); setDeleteConfirmText('') }}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
-                <button onClick={handleDeleteAll} disabled={deleteConfirmText !== 'HAPUS SEMUA' || deletingAll}
-                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                <button onClick={() => { setShowDeleteAllModal(false); setDeleteConfirmText('') }} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleDeleteAll} disabled={deleteConfirmText !== 'HAPUS SEMUA' || deletingAll} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40 flex items-center justify-center gap-2">
                   {deletingAll ? <><Loader2 size={16} className="animate-spin" /> Menghapus...</> : <><Trash2 size={16}/> Hapus Semua</>}
                 </button>
               </div>
