@@ -28,9 +28,9 @@ metadataBase: new URL("https://sipandu-nesaci.vercel.app"),
     siteName: "SIPANDU",
 images: [
   {
-    url: "/og-image.png",
-    width: 1200,
-    height: 630,
+    url: "/logo-sipandu.png",
+    width: 627,
+    height: 632,
     alt: "SIPANDU - Sistem Informasi dan Penanganan Siswa Terpadu",
   },
 ],
@@ -41,7 +41,7 @@ images: [
     card: "summary",
     title: "SIPANDU",
     description: "Sistem Informasi dan Penanganan Siswa Terpadu",
-    images: ["/og-image.png"],
+    images: ["/logo-sipandu.png"],
   },
 };
 
