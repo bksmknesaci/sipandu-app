@@ -13,7 +13,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-metadataBase: new URL("https://sipandu-nesaci.vercel.app"),
+  metadataBase: new URL("https://sipandu-nesaci.vercel.app"),
   title: "SIPANDU",
   description: "Sistem Informasi dan Penanganan Siswa Terpadu",
   manifest: "/manifest.json",
@@ -26,22 +26,22 @@ metadataBase: new URL("https://sipandu-nesaci.vercel.app"),
     description: "Sistem Informasi dan Penanganan Siswa Terpadu",
     url: "/",
     siteName: "SIPANDU",
-images: [
-  {
-    url: "/logo-sipandu.png",
-    width: 627,
-    height: 632,
-    alt: "SIPANDU - Sistem Informasi dan Penanganan Siswa Terpadu",
-  },
-],
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "SIPANDU - Sistem Informasi dan Penanganan Siswa Terpadu",
+      },
+    ],
     locale: "id_ID",
     type: "website",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "SIPANDU",
     description: "Sistem Informasi dan Penanganan Siswa Terpadu",
-    images: ["/logo-sipandu.png"],
+    images: ["/og-image.png"],
   },
 };
 
