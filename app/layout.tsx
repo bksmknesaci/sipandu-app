@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     siteName: "SIPANDU",
     images: [
       {
-        url: "/og-image.png",
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
         alt: "SIPANDU - Sistem Informasi dan Penanganan Siswa Terpadu",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SIPANDU",
     description: "Sistem Informasi dan Penanganan Siswa Terpadu",
-    images: ["/og-image.png"],
+    images: ["/og-image.jpg"],
   },
 };
 
