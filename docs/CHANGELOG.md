@@ -1,5 +1,11 @@
 # Changelog SIPANDU
 
+## 2026-07-28 (Perbaikan Auto-Alpha Hanya Hari Efektif)
+- rekapActions.js: Auto-Alpha sistem otomatis sekarang mengecek hari efektif sebelum menyisipkan Alpha — hari libur dan weekend tidak diberi Alpha
+- rekapActions.js: Auto-cleanup Alpha di hari libur — setiap halaman Rekap Kehadiran dibuka setelah jam 14:00, sistem menghapus record Alpha (input_by='Sistem Otomatis') yang salah sisipkan di hari libur
+- rekapActions.js: Tambah import getHolidays dari effectiveDaysActions dan fungsi helper isEffectiveDay untuk cek weekend + hari libur
+- File diubah: app/actions/rekapActions.js
+
 ## 2026-07-28 (Perbaikan Import Data Siswa & Statistik)
 - Import CSV diganti Import Excel: Menggunakan library xlsx untuk parse file .xlsx/.xls/.csv — tidak lagi terpotong oleh masalah delimiter koma
 - Import Excel: Modal popup modern dengan info format kolom, area klik pilih file, loading state

@@ -1515,3 +1515,10 @@ Status: ACTIVE
 - Total Jurusan diganti Total Rombel — menghitung gabungan unik kelas + jurusan (contoh: "X TKR 1", "X RPL 2") bukan jurusan saja
 
 Status: ACTIVE
+
+## Rekap Kehadiran (Update)
+- Auto-Alpha sistem otomatis hanya berlaku di hari efektif — hari libur (Nasional, Sekolah, Ujian, Kegiatan, Khusus) dan weekend (Sabtu & Minggu) tidak diberi Alpha
+- Auto-cleanup Alpha di hari libur: Setiap halaman Rekap Kehadiran dibuka setelah jam 14:00, sistem otomatis menghapus record Alpha yang salah sisipkan oleh sistem di hari libur sebelumnya
+- Fungsi helper isEffectiveDay di rekapActions.js: Cek weekend + hari libur dari tabel effective_days sebelum menentukan apakah hari ini layak diberi Alpha
+
+Status: ACTIVE

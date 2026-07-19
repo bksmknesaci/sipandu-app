@@ -1,13 +1,21 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getHolidays } from '@/app/actions/effectiveDaysActions'
+
+// ============================
+// HELPER: Cek apakah tanggal adalah hari efektif
+// ============================
+async function isEffectiveDay(dateStr) {
+  const day = new Date(dateStr + 'T00:00:00').getDay()
+  if (day === 0 || day === 6) return false
+  const holidays = await getHolidays()
+  return !holidays.some(h => h.date === dateStr)
+}
 
 // ============================
 // GET REKAP KEHADIRAN
 // ============================
-// CATATAN OPTIMASI: Alur ini secara inherent sequential —
-// absensi bergantung pada studentIds dari query siswa.
-// Tidak bisa diparalelkan. Query sudah se-optimal mungkin.
 export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, userId }) {
   let studentQuery = supabaseAdmin.from('siswa').select('*').eq('status', 'Aktif');
 
@@ -51,31 +59,59 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
   const currentHour = new Date().getHours();
 
   if (date === today && currentHour >= 14) {
-    const todayRecords = (absensi || []).filter(a => a.tanggal === today);
-    const presentIds = todayRecords.map(a => a.siswa_id);
-    const absentStudents = students.filter(s => !presentIds.includes(s.id));
+    const todayIsEffective = await isEffectiveDay(today);
 
-    if (absentStudents.length > 0) {
-      const alphaInserts = absentStudents.map(s => ({
-        siswa_id: s.id,
-        tanggal: today,
-        status: 'Alpha',
-        input_by: 'Sistem Otomatis',
-        locked: true
-      }));
+    if (todayIsEffective) {
+      const todayRecords = (absensi || []).filter(a => a.tanggal === today);
+      const presentIds = todayRecords.map(a => a.siswa_id);
+      const absentStudents = students.filter(s => !presentIds.includes(s.id));
 
-      await supabaseAdmin
+      if (absentStudents.length > 0) {
+        const alphaInserts = absentStudents.map(s => ({
+          siswa_id: s.id,
+          tanggal: today,
+          status: 'Alpha',
+          input_by: 'Sistem Otomatis',
+          locked: true
+        }));
+
+        await supabaseAdmin
+          .from('absensi')
+          .upsert(alphaInserts, { onConflict: 'siswa_id,tanggal', ignoreDuplicates: true });
+
+        const { data: updatedAbsensi } = await supabaseAdmin
+          .from('absensi')
+          .select('*')
+          .in('siswa_id', studentIds)
+          .gte('tanggal', startDate)
+          .lte('tanggal', endDate);
+
+        absensi = updatedAbsensi || [];
+      }
+    } else {
+      const { data: wrongAlphas } = await supabaseAdmin
         .from('absensi')
-        .upsert(alphaInserts, { onConflict: 'siswa_id,tanggal', ignoreDuplicates: true });
+        .select('id')
+        .eq('tanggal', today)
+        .eq('status', 'Alpha')
+        .eq('input_by', 'Sistem Otomatis');
 
-      const { data: updatedAbsensi } = await supabaseAdmin
-        .from('absensi')
-        .select('*')
-        .in('siswa_id', studentIds)
-        .gte('tanggal', startDate)
-        .lte('tanggal', endDate);
+      if (wrongAlphas && wrongAlphas.length > 0) {
+        const wrongIds = wrongAlphas.map(a => a.id);
+        await supabaseAdmin
+          .from('absensi')
+          .delete()
+          .in('id', wrongIds);
 
-      absensi = updatedAbsensi || [];
+        const { data: updatedAbsensi } = await supabaseAdmin
+          .from('absensi')
+          .select('*')
+          .in('siswa_id', studentIds)
+          .gte('tanggal', startDate)
+          .lte('tanggal', endDate);
+
+        absensi = updatedAbsensi || [];
+      }
     }
   }
 
@@ -85,8 +121,6 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
 // ============================
 // GET FILTER OPTIONS
 // ============================
-// CATATAN: Fungsi ini sudah digantikan oleh getKelasFilters() di absensiActions.js
-// yang memiliki cache 5 menit. Pertahankan untuk backward compatibility.
 export async function getFilterOptions() {
   const { data, error } = await supabaseAdmin
     .from('siswa')
