@@ -89,10 +89,11 @@ export default function AbsenSakitIzinPage() {
       reader.onload = (event) => {
         const img = new Image()
         img.onload = () => {
-          const canvas = document.createElement('canvas'); let width = img.width; let height = img.height; const maxWidth = 1280
-          if (width > maxWidth) { height = (height * maxWidth) / width; width = maxWidth }
+          const canvas = document.createElement('canvas'); let width = img.width; let height = img.height; const maxW = 540; const maxH = 720
+          if (width > maxW) { height = Math.round((maxW / width) * height); width = maxW }
+          if (height > maxH) { width = Math.round((maxH / height) * width); height = maxH }
           canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height)
-          canvas.toBlob((blob) => resolve(new File([blob], "bukti_compressed.jpg", { type: "image/jpeg" })), 'image/jpeg', 0.7)
+          canvas.toBlob((blob) => resolve(new File([blob], "bukti_compressed.jpg", { type: "image/jpeg" })), 'image/jpeg', 0.6)
         }; img.src = event.target.result
       }; reader.readAsDataURL(file)
     })

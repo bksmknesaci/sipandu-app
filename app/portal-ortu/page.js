@@ -298,7 +298,7 @@ export default function PortalOrtu() {
   // ── Polling fallback notifikasi: setiap 15 detik ──
   useEffect(() => {
     if (!student) return;
-    const iv = setInterval(fetchOrtuNotifs, 15000);
+    const iv = setInterval(fetchOrtuNotifs, 60000); // 60 detik
     return () => clearInterval(iv);
   }, [student, fetchOrtuNotifs]);
 

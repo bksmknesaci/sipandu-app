@@ -22,19 +22,17 @@ function canvasToBlob(canvas, quality) {
   });
 }
 
-function compressImage(file, targetSizeKB = 200) {
+function compressImage(file, targetSizeKB = 100) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = async () => {
-        const maxWidth = 1400;
+        const maxW = 800; const maxH = 600;
         let w = img.width;
         let h = img.height;
-        if (w > maxWidth) {
-          h = (h * maxWidth) / w;
-          w = maxWidth;
-        }
+        if (w > maxW) { h = Math.round((maxW / w) * h); w = maxW }
+        if (h > maxH) { w = Math.round((maxH / h) * w); h = maxH }
 
         const canvas = document.createElement('canvas');
         canvas.width = w;
@@ -76,8 +74,8 @@ function compressImage(file, targetSizeKB = 200) {
         }
 
         // Jika kualitas terendah masih di atas target, perkecil dimensi 70%
-        w = Math.floor(w * 0.7);
-        h = Math.floor(h * 0.7);
+        w = Math.round(w * 0.7);
+        h = Math.round(h * 0.7);
         canvas.width = w;
         canvas.height = h;
         ctx.fillStyle = '#ffffff';
@@ -231,7 +229,7 @@ export default function PosBeritaPage() {
 
         const { error: uploadErr } = await supabase.storage
           .from('news-media')
-          .upload(fileName, compressed, { cacheControl: '3600', upsert: false });
+          .upload(fileName, compressed, { cacheControl: '2592000', upsert: false });
 
         if (!uploadErr) {
           const { data: urlData } = supabase.storage.from('news-media').getPublicUrl(fileName);
@@ -446,6 +444,8 @@ export default function PosBeritaPage() {
                           <img
                             src={getImageUrl(post.cover_url) || FALLBACK_IMG}
                             referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                               e.target.src = FALLBACK_IMG;
                               e.target.onerror = null;
@@ -567,7 +567,7 @@ export default function PosBeritaPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <p className="text-sm text-gray-400">Klik untuk upload cover</p>
-                      <p className="text-xs text-gray-300">Otomatis dikompres ~200 KB</p>
+                      <p className="text-xs text-gray-300">Otomatis dikompres ~100 KB</p>
                     </div>
                   )}
                 </div>

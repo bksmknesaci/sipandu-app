@@ -9,12 +9,13 @@ const DAY_NAMES_GETDAY = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat',
 const TINGKAT_OPTIONS = ['X', 'XI', 'XII']
 const JK_OPTIONS = ['Laki-laki', 'Perempuan']
 
-function compressImage(b64, maxW = 800, q = 0.7) {
+function compressImage(b64, maxW = 480, maxH = 640, q = 0.55) {
   return new Promise(resolve => {
     const img = new Image(); img.onload = () => {
       const c = document.createElement('canvas')
       let w = img.width, h = img.height
-      if (w > maxW) { h = (maxW / w) * h; w = maxW }
+      if (w > maxW) { h = Math.round((maxW / w) * h); w = maxW }
+      if (h > maxH) { w = Math.round((maxH / h) * w); h = maxH }
       c.width = w; c.height = h
       c.getContext('2d').drawImage(img, 0, 0, w, h)
       resolve(c.toDataURL('image/jpeg', q))
@@ -152,10 +153,14 @@ export default function AbsensiPKL() {
   const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return
     const c = canvasRef.current, v = videoRef.current
-    c.width = v.videoWidth; c.height = v.videoHeight
-    c.getContext('2d').drawImage(v, 0, 0)
-    const raw = c.toDataURL('image/jpeg', 0.85)
-    const compressed = await compressImage(raw)
+    // Langsung resize di canvas sekali saja — hindari kompresi ganda (toDataURL lalu compressImage lagi)
+    let w = v.videoWidth, h = v.videoHeight
+    const maxW = 480, maxH = 640
+    if (w > maxW) { h = Math.round((maxW / w) * h); w = maxW }
+    if (h > maxH) { w = Math.round((maxH / h) * w); h = maxH }
+    c.width = w; c.height = h
+    c.getContext('2d').drawImage(v, 0, 0, w, h)
+    const compressed = c.toDataURL('image/jpeg', 0.55)
     setCapturedPhoto(compressed)
     stopCamera()
   }

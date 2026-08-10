@@ -74,7 +74,7 @@ export default function ActiveUsersTable() {
 
   useEffect(() => {
     fetchSessions()
-    const interval = setInterval(fetchSessions, 15000)
+    const interval = setInterval(fetchSessions, 60000) // refresh setiap 60 detik
     return () => clearInterval(interval)
   }, [fetchSessions])
 
@@ -88,7 +88,7 @@ export default function ActiveUsersTable() {
           </div>
           <div>
             <h3 className="font-bold text-gray-800 text-sm">Pengguna Aktif</h3>
-            <p className="text-[11px] text-gray-400">Login real-time · update 15 detik</p>
+            <p className="text-[11px] text-gray-400">Login real-time · update 60 detik</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

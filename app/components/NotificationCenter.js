@@ -169,7 +169,7 @@ export default function NotificationCenter({ userId, userRole }) {
     if (!userId) return;
     const iv = setInterval(() => {
       fetchData();
-    }, 15000);
+    }, 60000); // 60 detik
     return () => clearInterval(iv);
   }, [userId, fetchData]);
 

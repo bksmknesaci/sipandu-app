@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { updateProfileData, resolveAdminUserId, createUserSession, updateSessionHeartbeat, endUserSession } from '@/app/actions/userActions';
+import { addCacheControl } from '@/lib/storageOptimize';
 import { getUserKelasInfo } from '@/app/actions/absensiActions';
 import NotificationCenter from '@/app/components/NotificationCenter';
 import { 
@@ -38,7 +39,7 @@ export default function AppShell({ children }) {
 
     const heartbeat = setInterval(() => {
       updateSessionHeartbeat({ userId })
-    }, 45000)
+    }, 120000) // setiap 2 menit
 
     return () => {
       clearInterval(heartbeat)
@@ -332,7 +333,7 @@ export default function AppShell({ children }) {
           <div className="flex items-center gap-3">
             {settings.logo_url ? (
               <div className="flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden shadow-md bg-slate-800">
-                <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                <img src={addCacheControl(settings.logo_url, 2592000)} alt="Logo" className="w-full h-full object-cover" />
               </div>
             ) : (
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-xl shadow-md">S</div>
@@ -426,7 +427,7 @@ export default function AppShell({ children }) {
           <div className="flex items-center gap-3">
             <button className="sm:hidden text-gray-300 active:scale-90 active:text-blue-400 transition-all duration-100" onClick={() => setIsSidebarOpen(true)}><Menu size={22}/></button>
             {settings.logo_url ? (
-              <img src={settings.logo_url} alt="Logo" className="h-10 w-10 rounded-xl object-cover md:hidden" />
+              <img src={addCacheControl(settings.logo_url, 2592000)} alt="Logo" className="h-10 w-10 rounded-xl object-cover md:hidden" />
             ) : (
               <div className="h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 font-extrabold text-lg md:hidden">S</div>
             )}
@@ -443,7 +444,7 @@ export default function AppShell({ children }) {
                   className="relative flex-shrink-0 active:scale-95 transition-transform duration-100"
                 >
                   {userData.foto_url ? (
-                    <img src={userData.foto_url} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-blue-400/50 hover:border-blue-300 transition-colors" />
+                    <img src={addCacheControl(userData.foto_url, 604800)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="w-9 h-9 rounded-full object-cover border-2 border-blue-400/50 hover:border-blue-300 transition-colors" />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow">{userData.nama?.charAt(0)?.toUpperCase() || 'A'}</div>
                   )}
@@ -511,7 +512,7 @@ export default function AppShell({ children }) {
               <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
                 <div className="relative">
                   {userData.foto_url ? (
-                    <img src={userData.foto_url} alt="" className="w-16 h-16 rounded-full object-cover border-3 border-white shadow-xl" />
+                    <img src={addCacheControl(userData.foto_url, 604800)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="w-16 h-16 rounded-full object-cover border-3 border-white shadow-xl" />
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold border-3 border-white shadow-xl">{userData.nama?.charAt(0)?.toUpperCase() || 'A'}</div>
                   )}

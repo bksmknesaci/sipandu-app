@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { HeartPulse, CheckCircle, XCircle, Eye, ImageOff, AlertTriangle, X, RefreshCw, Loader2, MapPin, ExternalLink, Filter, Users, Clock, Frown, CalendarDays, FileText, Shield } from 'lucide-react'
 import { getSakitIzinWaliKelas, verifySakitIzin, getKelasFilters, cleanupOldBuktiSakitIzin, getUserKelasInfo } from '@/app/actions/absensiActions'
+import { getOptimizedImageUrl } from '@/lib/storageOptimize'
 
 function CountUp({ end, duration = 800 }) {
   const [count, setCount] = useState(0)
@@ -292,7 +293,7 @@ export default function RekapSakitIzinWali() {
                       <td className="py-3 px-4 text-gray-600 max-w-[200px] truncate">{d.alasan}</td>
                       <td className="py-3 px-4">
                         {d.foto_bukti ? (
-                          <button onClick={() => setViewImage(d.foto_bukti)} className="text-blue-600 hover:underline text-xs font-semibold flex items-center gap-1"><Eye size={12}/> Lihat</button>
+                          <button onClick={() => setViewImage(getOptimizedImageUrl(d.foto_bukti, 'full'))} className="text-blue-600 hover:underline text-xs font-semibold flex items-center gap-1"><Eye size={12}/> Lihat</button>
                         ) : (
                           <span className="text-gray-400 text-xs flex items-center gap-1"><ImageOff size={12}/> Kosong</span>
                         )}
@@ -358,7 +359,7 @@ export default function RekapSakitIzinWali() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewImage(null)}>
           <div className="relative max-w-lg w-full">
             <button onClick={() => setViewImage(null)} className="absolute -top-4 -right-4 bg-white text-gray-800 p-2 rounded-full shadow-lg z-10"><X size={20}/></button>
-            <img src={viewImage} alt="Bukti" className="w-full rounded-2xl shadow-2xl" />
+            <img src={viewImage} alt="Bukti" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="w-full rounded-2xl shadow-2xl" />
           </div>
         </div>
       )}
@@ -417,9 +418,12 @@ export default function RekapSakitIzinWali() {
                 <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1.5"><Eye size={14}/> Foto Bukti</h4>
                 {showDetail.foto_bukti ? (
                   <img
-                    src={showDetail.foto_bukti}
+                    src={getOptimizedImageUrl(showDetail.foto_bukti, 'medium')}
                     alt="Bukti"
-                    onClick={() => setViewImage(showDetail.foto_bukti)}
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onClick={() => setViewImage(getOptimizedImageUrl(showDetail.foto_bukti, 'full'))}
                     className="w-full max-h-64 object-cover rounded-xl border cursor-pointer hover:opacity-80 transition"
                   />
                 ) : (

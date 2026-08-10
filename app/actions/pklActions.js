@@ -1,7 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getCached, TTL } from '@/lib/cacheHelpers'
+import { getCached, TTL, invalidateCacheByPrefix } from '@/lib/cacheHelpers'
 
 const LATE_TOLERANCE_MINUTES = 15
 const CHECKIN_EARLY_MIN = 60
@@ -181,6 +181,7 @@ export async function savePklProfile(d) {
     await supabaseAdmin.from('siswa').update(studentUpdate).eq('id', d.student_id)
   }
 
+  try { invalidateCacheByPrefix('pkl_') } catch {}
   return { success: true, profile: res.data }
 }
 
@@ -308,231 +309,436 @@ export async function submitPklSakitIzin({ studentId, type, photoBase64, note, l
 
 // ═══════════════ REKAP (WK/ADMIN) ═══════════════
 
+// ── FIX: getPklFilters sekarang mengambil kelas/jurusan hanya dari siswa yang PUNYA PKL profil ──
 export async function getPklFilters() {
   return getCached('pkl_filters', async () => {
-    const [profilesRes, siswaRes] = await Promise.all([
-      supabaseAdmin.from('pkl_profiles').select('company_name, status'),
-      supabaseAdmin.from('siswa').select('kelas, jurusan').not('kelas', 'is', null),
-    ])
+    // Ambil data PKL + join siswa untuk dapat kelas/jurusan yang relevan
+    const { data: pklWithSiswa, error: pklErr } = await supabaseAdmin
+      .from('pkl_profiles')
+      .select('student_id, company_name, status, siswa!inner(kelas, jurusan)')
 
-    const companies = [...new Set((profilesRes.data || []).map(p => p.company_name).filter(Boolean))].sort()
+    if (pklErr) {
+      console.error('[getPklFilters] join error:', pklErr.message)
+      // Fallback: query terpisah
+      const [profilesRes, siswaRes] = await Promise.all([
+        supabaseAdmin.from('pkl_profiles').select('company_name, status, student_id'),
+        supabaseAdmin.from('siswa').select('id, kelas, jurusan').not('kelas', 'is', null),
+      ])
+      const pklIds = new Set((profilesRes.data || []).map(p => p.student_id).filter(Boolean))
+      const relevantSiswa = (siswaRes.data || []).filter(s => pklIds.has(s.id))
+      return buildFilterResult(profilesRes.data || [], relevantSiswa)
+    }
+
+    const profiles = pklWithSiswa || []
+    const companies = [...new Set(profiles.map(p => p.company_name).filter(Boolean))].sort()
     const statuses = ['Belum Mulai', 'Berjalan', 'Selesai']
 
     const kelasSet = new Set(), jurusanSet = new Set(), kelasJurusanList = [], kjSet = new Set()
-    ;(siswaRes.data || []).forEach(s => {
-      if (s.kelas) kelasSet.add(s.kelas.trim())
-      if (s.jurusan) jurusanSet.add(s.jurusan.trim())
-      if (s.kelas && s.jurusan) {
-        const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
-        if (!kjSet.has(combo)) { kjSet.add(combo); kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim() }) }
+    profiles.forEach(p => {
+      const k = p.siswa?.kelas
+      const j = p.siswa?.jurusan
+      if (k) kelasSet.add(k.trim())
+      if (j) jurusanSet.add(j.trim())
+      if (k && j) {
+        const combo = `${k.trim()} ${j.trim()}`
+        if (!kjSet.has(combo)) { kjSet.add(combo); kelasJurusanList.push({ kelas: k.trim(), jurusan: j.trim() }) }
       }
     })
+
     return { companies, statuses, tingkat: [...kelasSet].sort(), jurusan: [...jurusanSet].sort(), kelasJurusanList }
   }, TTL.KELAS_FILTERS)
 }
 
+function buildFilterResult(profiles, siswaList) {
+  const companies = [...new Set(profiles.map(p => p.company_name).filter(Boolean))].sort()
+  const statuses = ['Belum Mulai', 'Berjalan', 'Selesai']
+  const kelasSet = new Set(), jurusanSet = new Set(), kelasJurusanList = [], kjSet = new Set()
+  siswaList.forEach(s => {
+    if (s.kelas) kelasSet.add(s.kelas.trim())
+    if (s.jurusan) jurusanSet.add(s.jurusan.trim())
+    if (s.kelas && s.jurusan) {
+      const combo = `${s.kelas.trim()} ${s.jurusan.trim()}`
+      if (!kjSet.has(combo)) { kjSet.add(combo); kelasJurusanList.push({ kelas: s.kelas.trim(), jurusan: s.jurusan.trim() }) }
+    }
+  })
+  return { companies, statuses, tingkat: [...kelasSet].sort(), jurusan: [...jurusanSet].sort(), kelasJurusanList }
+}
+
+// ── FIX: getPklStudents — filter kelas/jurusan di-resolve ke student_id dulu di tabel siswa ──
 export async function getPklStudents(filters = {}) {
-  let query = supabaseAdmin.from('pkl_profiles').select('*')
-  if (filters.company) query = query.eq('company_name', filters.company)
-  if (filters.status) query = query.eq('status', filters.status)
-  query = query.order('id', { ascending: true })
-  const { data: profiles, error } = await query
-  if (error) { console.error('[getPklStudents]', error.message); return { students: [], error: error.message } }
-  if (!profiles || profiles.length === 0) return { students: [] }
-  const studentIds = profiles.map(p => p.student_id).filter(Boolean)
-  const { data: siswaList } = await supabaseAdmin.from('siswa').select('id, nisn, nama, kelas, jurusan, jenis_kelamin').in('id', studentIds)
-  const siswaMap = {}; (siswaList || []).forEach(s => { siswaMap[s.id] = s })
-  let students = profiles.map(p => ({ ...p, ...(siswaMap[p.student_id] || {}), student_id: p.student_id }))
+  try {
+    const companyVal = (filters.company || '').trim()
+    const statusVal = (filters.status || '').trim()
+    const kelasVal = (filters.kelas || '').trim()
+    const jurusanVal = (filters.jurusan || '').trim()
 
-  if (filters.kelas) students = students.filter(s => (s.kelas || '').trim() === filters.kelas.trim())
-  if (filters.jurusan) students = students.filter(s => (s.jurusan || '').trim() === filters.jurusan.trim())
+    // Step 1: Jika ada filter kelas/jurusan, resolve ke student_id dari tabel siswa
+    let allowedStudentIds = null
+    if (kelasVal || jurusanVal) {
+      let siswaQuery = supabaseAdmin.from('siswa').select('id')
+      if (kelasVal) siswaQuery = siswaQuery.eq('kelas', kelasVal)
+      if (jurusanVal) siswaQuery = siswaQuery.eq('jurusan', jurusanVal)
+      const { data: siswaData, error: sErr } = await siswaQuery
+      if (sErr) { console.error('[getPklStudents] siswa query error:', sErr.message); return { students: [] } }
+      if (!siswaData || siswaData.length === 0) return { students: [] }
+      allowedStudentIds = siswaData.map(s => s.id)
+    }
 
-  students.sort((a, b) => (a.nama || '').localeCompare(b.nama || ''))
-  return { students }
+    // Step 2: Query pkl_profiles dengan filter
+    let profiles = []
+    if (allowedStudentIds) {
+      // Filter by student_id (batch 100) + company + status
+      for (let i = 0; i < allowedStudentIds.length; i += 100) {
+        const batch = allowedStudentIds.slice(i, i + 100)
+        let q = supabaseAdmin.from('pkl_profiles').select('*').in('student_id', batch)
+        if (companyVal) q = q.eq('company_name', companyVal)
+        if (statusVal) q = q.eq('status', statusVal)
+        q = q.order('id', { ascending: true })
+        const { data } = await q
+        if (data) profiles.push(...data)
+      }
+    } else {
+      let q = supabaseAdmin.from('pkl_profiles').select('*')
+      if (companyVal) q = q.eq('company_name', companyVal)
+      if (statusVal) q = q.eq('status', statusVal)
+      q = q.order('id', { ascending: true })
+      const { data, error } = await q
+      if (error) { console.error('[getPklStudents]', error.message); return { students: [] } }
+      profiles = data || []
+    }
+
+    if (profiles.length === 0) return { students: [] }
+
+    // Step 3: Fetch siswa data untuk profil yang ditemukan
+    const studentIds = profiles.map(p => p.student_id).filter(Boolean)
+    const siswaMap = {}
+    if (studentIds.length > 0) {
+      const batchSize = 100
+      for (let i = 0; i < studentIds.length; i += batchSize) {
+        const batch = studentIds.slice(i, i + batchSize)
+        const { data: batchData } = await supabaseAdmin.from('siswa').select('id, nisn, nama, kelas, jurusan, jenis_kelamin').in('id', batch)
+        if (batchData) batchData.forEach(s => { siswaMap[s.id] = s })
+      }
+    }
+
+    const students = profiles.map(p => ({ ...p, ...(siswaMap[p.student_id] || {}), student_id: p.student_id }))
+    students.sort((a, b) => (a.nama || '').localeCompare(b.nama || ''))
+    return { students }
+  } catch (e) {
+    console.error('[getPklStudents]', e)
+    return { students: [] }
+  }
+}
+
+async function fetchAttendanceBatch(studentIds, dateFilter = {}) {
+  const allAtt = []
+  const batchSize = 100
+  for (let i = 0; i < studentIds.length; i += batchSize) {
+    const batch = studentIds.slice(i, i + batchSize)
+    let query = supabaseAdmin.from('pkl_attendance').select('*').in('student_id', batch)
+    if (dateFilter.eq) query = query.eq('attendance_date', dateFilter.eq)
+    if (dateFilter.gte) query = query.gte('attendance_date', dateFilter.gte)
+    if (dateFilter.lte) query = query.lte('attendance_date', dateFilter.lte)
+    const { data } = await query
+    if (data) allAtt.push(...data)
+  }
+  return allAtt
 }
 
 export async function getPklRekapHarian(date, filters = {}) {
-  const { students } = await getPklStudents(filters)
-  if (students.length === 0) return { students: [], date }
-  const ids = students.map(s => s.student_id)
-  const { data: att } = await supabaseAdmin.from('pkl_attendance').select('*').eq('attendance_date', date).in('student_id', ids)
-  const attMap = {}
-  ;(att || []).forEach(a => { attMap[a.student_id] = a })
-  const merged = students.map(s => {
-    const a = attMap[s.student_id]
-    const wd = s.work_days ? isWorkDay(date, s.work_days) : false
-    const flex = isFlexibleSchedule(s.work_days)
-    let status = a ? a.status : (flex ? null : (wd ? 'Alpha' : 'Libur'))
-    if (s.start_date && date < s.start_date) status = '-'
-    if (s.end_date && date > s.end_date) status = '-'
-    return { ...s, attendance: a, computedStatus: status, isWorkDay: wd, isFlexible: flex }
-  })
-  return { students: merged, date }
+  try {
+    const { students } = await getPklStudents(filters)
+    if (students.length === 0) return { students: [], date }
+    const ids = students.map(s => s.student_id)
+    const att = await fetchAttendanceBatch(ids, { eq: date })
+    const attMap = {}
+    ;(att || []).forEach(a => { attMap[a.student_id] = a })
+    const merged = students.map(s => {
+      const a = attMap[s.student_id]
+      const wd = s.work_days ? isWorkDay(date, s.work_days) : false
+      const flex = isFlexibleSchedule(s.work_days)
+      let status = a ? a.status : (flex ? null : (wd ? 'Alpha' : 'Libur'))
+      if (s.start_date && date < s.start_date) status = '-'
+      if (s.end_date && date > s.end_date) status = '-'
+      return { ...s, attendance: a, computedStatus: status, isWorkDay: wd, isFlexible: flex }
+    })
+    return { students: merged, date }
+  } catch (e) {
+    console.error('[getPklRekapHarian]', e)
+    return { students: [], date }
+  }
 }
 
 export async function getPklRekapBulanan(year, month, filters = {}) {
-  const { students } = await getPklStudents(filters)
-  if (students.length === 0) return { students: [], year, month, daysInMonth: 0 }
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const ids = students.map(s => s.student_id)
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const endDate = `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`
-  const { data: att } = await supabaseAdmin.from('pkl_attendance').select('*').gte('attendance_date', startDate).lte('attendance_date', endDate).in('student_id', ids)
-  const attMap = {}
-  ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
-  const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+  try {
+    const { students } = await getPklStudents(filters)
+    if (students.length === 0) return { students: [], year, month, daysInMonth: 0 }
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const ids = students.map(s => s.student_id)
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`
+    const att = ids.length > 0 ? await fetchAttendanceBatch(ids, { gte: startDate, lte: endDate }) : []
+    const attMap = {}
+    ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
+    const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+    const todayStr = getWIBDate()
 
-  const todayStr = getWIBDate()
+    const merged = students.map(s => {
+      const flex = isFlexibleSchedule(s.work_days)
+      const wdSet = s.work_days ? new Set(s.work_days) : null
+      const days = []
+      let flexEffectiveDays = 0
 
-  const merged = students.map(s => {
-    const flex = isFlexibleSchedule(s.work_days)
-    const days = []
-    let flexEffectiveDays = 0
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        const dayName = DAY_NAMES[new Date(ds + 'T00:00:00').getDay()]
+        const wd = wdSet ? wdSet.has(dayName) : false
+        const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
+        const a = attMap[`${s.student_id}_${ds}`]
+        const isPastOrToday = ds <= todayStr
 
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ds = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      const dayName = DAY_NAMES[new Date(ds + 'T00:00:00').getDay()]
-      const wd = s.work_days ? s.work_days.includes(dayName) : false
-      const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
-      const a = attMap[`${s.student_id}_${ds}`]
-      const isPastOrToday = ds <= todayStr
+        let status
+        if (!inRange) {
+          status = null
+        } else if (a) {
+          status = a.status
+          if (flex && isPastOrToday) flexEffectiveDays++
+        } else if (flex) {
+          status = null
+        } else if (wd && isPastOrToday) {
+          status = 'Alpha'
+        } else if (wd) {
+          status = null
+        } else {
+          status = 'Libur'
+        }
 
-      let status
-      if (!inRange) {
-        status = null
-      } else if (a) {
-        status = a.status
-        if (flex && isPastOrToday) flexEffectiveDays++
-      } else if (flex) {
-        status = null
-      } else if (wd && isPastOrToday) {
-        status = 'Alpha'
-      } else if (wd) {
-        status = null
-      } else {
-        status = 'Libur'
+        days.push({ date: ds, day: d, dayName, isWorkDay: wd, inRange, attendance: a, status, isPastOrToday })
       }
 
-      days.push({ date: ds, day: d, dayName, isWorkDay: wd, inRange, attendance: a, status, isPastOrToday })
-    }
-
-    return {
-      ...s,
-      days,
-      isFlexible: flex,
-      effectiveDays: flex ? flexEffectiveDays : null
-    }
-  })
-  return { students: merged, year, month, monthName: monthNames[month], daysInMonth }
+      return {
+        ...s,
+        days,
+        isFlexible: flex,
+        effectiveDays: flex ? flexEffectiveDays : null
+      }
+    })
+    return { students: merged, year, month, monthName: monthNames[month], daysInMonth }
+  } catch (e) {
+    console.error('[getPklRekapBulanan]', e)
+    return { students: [], year, month, daysInMonth: 0 }
+  }
 }
 
 export async function getPklRekapSemester(filters = {}) {
-  const { students } = await getPklStudents(filters)
-  if (students.length === 0) return { students: [], semesterInfo: null }
-  let startDate, endDate, semesterLabel
+  try {
+    const { students } = await getPklStudents(filters)
+    if (students.length === 0) return { students: [], semesterInfo: null }
+    let startDate, endDate, semesterLabel
 
-  const cal = await getCached('academic_calendar_active', () =>
-    supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
-      .then(r => r.data || null),
-    TTL.HARI_EFEKTIF
-  )
+    const cal = await getCached('academic_calendar_active', () =>
+      supabaseAdmin.from('academic_calendar').select('*').eq('is_active', true).maybeSingle()
+        .then(r => r.data || null),
+      TTL.HARI_EFEKTIF
+    )
 
-  if (cal) {
-    startDate = cal.start_date; endDate = cal.end_date
-    semesterLabel = `${cal.semester} ${cal.school_year}`
-  } else {
-    const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
-    if (m >= 7) { startDate = `${y}-07-01`; endDate = `${y + 1}-12-31`; semesterLabel = `Ganjil ${y}/${y + 1}` }
-    else { startDate = `${y}-01-01`; endDate = `${y}-06-30`; semesterLabel = `Genap ${y - 1}/${y}` }
-  }
-  const ids = students.map(s => s.student_id)
-  const { data: att } = await supabaseAdmin.from('pkl_attendance').select('*').gte('attendance_date', startDate).lte('attendance_date', endDate).in('student_id', ids)
-  const attMap = {}
-  ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
+    if (cal) {
+      startDate = cal.start_date; endDate = cal.end_date
+      semesterLabel = `${cal.semester} ${cal.school_year}`
+    } else {
+      const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
+      if (m >= 7) { startDate = `${y}-07-01`; endDate = `${y + 1}-12-31`; semesterLabel = `Ganjil ${y}/${y + 1}` }
+      else { startDate = `${y}-01-01`; endDate = `${y}-06-30`; semesterLabel = `Genap ${y - 1}/${y}` }
+    }
+    const ids = students.map(s => s.student_id)
+    const att = ids.length > 0 ? await fetchAttendanceBatch(ids, { gte: startDate, lte: endDate }) : []
+    const attMap = {}
+    ;(att || []).forEach(a => { attMap[`${a.student_id}_${a.attendance_date}`] = a })
 
-  const todayStr = getWIBDate()
+    const todayStr = getWIBDate()
 
-  const merged = students.map(s => {
-    const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
-    let totalKerja = 0
-    const flex = isFlexibleSchedule(s.work_days)
+    const dateList = []
     const cur = new Date(startDate + 'T00:00:00'), end = new Date(endDate + 'T00:00:00')
     while (cur <= end) {
-      const ds = cur.toLocaleDateString('sv-SE')
-      const dayName = DAY_NAMES[cur.getDay()]
-      const wd = s.work_days ? s.work_days.includes(dayName) : false
-      const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
-      if (inRange) {
-        if (wd) {
-          const a = attMap[`${s.student_id}_${ds}`]
-          if (a) {
-            counts[a.status] = (counts[a.status] || 0) + 1
-          } else if (!flex && ds <= todayStr) {
-            counts.Alpha++
-          }
-          if (!flex && ds <= todayStr) totalKerja++
-        } else {
-          counts.Libur++
-        }
-      }
+      dateList.push({
+        ds: cur.toLocaleDateString('sv-SE'),
+        dn: DAY_NAMES[cur.getDay()],
+        ipot: cur.toLocaleDateString('sv-SE') <= todayStr
+      })
       cur.setDate(cur.getDate() + 1)
     }
 
-    if (flex) {
-      totalKerja = counts.Hadir + counts.Terlambat + counts.Sakit + counts.Izin
-    }
+    const merged = students.map(s => {
+      const counts = { Hadir: 0, Sakit: 0, Izin: 0, Alpha: 0, Terlambat: 0, Libur: 0 }
+      let totalKerja = 0
+      const flex = isFlexibleSchedule(s.work_days)
+      const wdSet = s.work_days ? new Set(s.work_days) : null
 
-    const hadirTotal = counts.Hadir + counts.Terlambat
-    const persentase = totalKerja > 0 ? ((hadirTotal / totalKerja) * 100).toFixed(1) : '0.0'
-    return { ...s, ...counts, totalKerja, hadirTotal, persentase, isFlexible: flex }
-  })
-  return { students: merged, semesterInfo: { startDate, endDate, label: semesterLabel } }
+      for (let i = 0; i < dateList.length; i++) {
+        const { ds, dn, ipot } = dateList[i]
+        const inRange = (!s.start_date || ds >= s.start_date) && (!s.end_date || ds <= s.end_date)
+        if (!inRange) continue
+
+        const wd = wdSet ? wdSet.has(dn) : false
+        if (!wd) { counts.Libur++; continue }
+
+        const a = attMap[`${s.student_id}_${ds}`]
+        if (a) {
+          counts[a.status] = (counts[a.status] || 0) + 1
+        } else if (!flex && ipot) {
+          counts.Alpha++
+        }
+        if (!flex && ipot) totalKerja++
+      }
+
+      if (flex) {
+        totalKerja = counts.Hadir + counts.Terlambat + counts.Sakit + counts.Izin
+      }
+
+      const hadirTotal = counts.Hadir + counts.Terlambat
+      const persentase = totalKerja > 0 ? ((hadirTotal / totalKerja) * 100).toFixed(1) : '0.0'
+      return { ...s, ...counts, totalKerja, hadirTotal, persentase, isFlexible: flex }
+    })
+    return { students: merged, semesterInfo: { startDate, endDate, label: semesterLabel } }
+  } catch (e) {
+    console.error('[getPklRekapSemester]', e)
+    return { students: [], semesterInfo: null }
+  }
 }
 
 export async function getPklStats(filters = {}) {
-  const { students } = await getPklStudents(filters)
-  const ids = students.map(s => s.student_id)
-  const today = getWIBDate()
-  const { data: att } = await supabaseAdmin.from('pkl_attendance').select('*').eq('attendance_date', today).in('student_id', ids)
-  const stats = { total: students.length, hadir: 0, sakit: 0, izin: 0, alpha: 0, terlambat: 0, libur: 0 }
-  const attMap = {}
-  ;(att || []).forEach(a => { attMap[a.student_id] = a })
-  students.forEach(s => {
-    const a = attMap[s.student_id]
-    const flex = isFlexibleSchedule(s.work_days)
-    const wd = s.work_days ? isWorkDay(today, s.work_days) : false
-    const inRange = (!s.start_date || today >= s.start_date) && (!s.end_date || today <= s.end_date)
-    if (!inRange || s.status !== 'Berjalan') return
-    if (a) {
-      const key = (a.status || '').toLowerCase()
-      stats[key] = (stats[key] || 0) + 1
-    } else if (!flex && wd) {
-      stats.alpha++
-    } else if (!flex && !wd) {
-      stats.libur++
-    }
-  })
-  const hadirTotal = stats.hadir + stats.terlambat
-  const workDays = stats.hadir + stats.sakit + stats.izin + stats.alpha + stats.terlambat
-  stats.persentase = workDays > 0 ? ((hadirTotal / workDays) * 100).toFixed(1) : '0.0'
-  return stats
+  try {
+    const { students } = await getPklStudents(filters)
+    const ids = students.map(s => s.student_id)
+    const today = getWIBDate()
+    const att = ids.length > 0 ? await fetchAttendanceBatch(ids, { eq: today }) : []
+    const stats = { total: students.length, hadir: 0, sakit: 0, izin: 0, alpha: 0, terlambat: 0, libur: 0 }
+    const attMap = {}
+    ;(att || []).forEach(a => { attMap[a.student_id] = a })
+    students.forEach(s => {
+      const a = attMap[s.student_id]
+      const flex = isFlexibleSchedule(s.work_days)
+      const wd = s.work_days ? isWorkDay(today, s.work_days) : false
+      const inRange = (!s.start_date || today >= s.start_date) && (!s.end_date || today <= s.end_date)
+      if (!inRange || s.status !== 'Berjalan') return
+      if (a) {
+        const key = (a.status || '').toLowerCase()
+        stats[key] = (stats[key] || 0) + 1
+      } else if (!flex && wd) {
+        stats.alpha++
+      } else if (!flex && !wd) {
+        stats.libur++
+      }
+    })
+    const hadirTotal = stats.hadir + stats.terlambat
+    const workDays = stats.hadir + stats.sakit + stats.izin + stats.alpha + stats.terlambat
+    stats.persentase = workDays > 0 ? ((hadirTotal / workDays) * 100).toFixed(1) : '0.0'
+    return stats
+  } catch (e) {
+    console.error('[getPklStats]', e)
+    return { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, terlambat: 0, libur: 0, persentase: '0.0' }
+  }
 }
 
 export async function getPklAttendanceDetail(id) {
-  const { data, error } = await supabaseAdmin.from('pkl_attendance').select('*, siswa:student_id(nisn, nama, kelas, jurusan)').eq('id', id).maybeSingle()
-  if (error) return { error: error.message }
+  if (!id) return { error: 'ID tidak valid' }
+
+  const { data: att, error: attErr } = await supabaseAdmin
+    .from('pkl_attendance')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (attErr) return { error: attErr.message }
+  if (!att) return { error: 'Data absensi tidak ditemukan' }
 
   let pklProfile = null
-  if (data?.student_id) {
+  if (att.student_id) {
     const { data: profile } = await supabaseAdmin
       .from('pkl_profiles')
       .select('*')
-      .eq('student_id', data.student_id)
+      .eq('student_id', att.student_id)
       .maybeSingle()
     if (profile) pklProfile = profile
   }
 
-  return { detail: { ...data, pklProfile } }
+  return { detail: { ...att, pklProfile } }
+}
+
+export async function updatePklAttendanceStatus({ attendanceId, newStatus, note }) {
+  if (!attendanceId || !newStatus) return { error: 'Data tidak lengkap' }
+  const validStatuses = ['Hadir', 'Terlambat', 'Sakit', 'Izin', 'Alpha']
+  if (!validStatuses.includes(newStatus)) return { error: 'Status tidak valid' }
+
+  const updateData = { status: newStatus, updated_at: new Date().toISOString() }
+
+  if (newStatus === 'Sakit' || newStatus === 'Izin') {
+    updateData.attendance_type = newStatus
+    updateData.note = note || null
+    updateData.check_in_time = null
+    updateData.check_out_time = null
+    updateData.is_late = false
+  } else if (newStatus === 'Hadir' || newStatus === 'Terlambat') {
+    updateData.attendance_type = 'Hadir'
+    updateData.is_late = newStatus === 'Terlambat'
+    updateData.note = null
+  } else if (newStatus === 'Alpha') {
+    updateData.attendance_type = null
+    updateData.note = note || null
+    updateData.check_in_time = null
+    updateData.check_out_time = null
+    updateData.is_late = false
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('pkl_attendance')
+    .update(updateData)
+    .eq('id', attendanceId)
+    .select()
+    .single()
+
+  if (error) return { error: error.message }
+  try { invalidateCacheByPrefix('pkl_') } catch {}
+  return { success: true, data }
+}
+
+export async function insertPklAttendanceRecord({ studentId, attendanceDate, newStatus, note }) {
+  if (!studentId || !attendanceDate || !newStatus) return { error: 'Data tidak lengkap' }
+  const validStatuses = ['Hadir', 'Terlambat', 'Sakit', 'Izin']
+  if (!validStatuses.includes(newStatus)) return { error: 'Status tidak valid' }
+
+  const { data: existing } = await supabaseAdmin.from('pkl_attendance')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('attendance_date', attendanceDate)
+    .maybeSingle()
+
+  if (existing) return { error: 'Record absensi sudah ada. Gunakan fungsi update.' }
+
+  const record = {
+    student_id: studentId,
+    attendance_date: attendanceDate,
+    status: newStatus,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (newStatus === 'Sakit' || newStatus === 'Izin') {
+    record.attendance_type = newStatus
+    record.note = note || null
+  } else if (newStatus === 'Hadir' || newStatus === 'Terlambat') {
+    record.attendance_type = 'Hadir'
+    record.is_late = newStatus === 'Terlambat'
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('pkl_attendance')
+    .insert([record])
+    .select()
+    .single()
+
+  if (error) return { error: error.message }
+  try { invalidateCacheByPrefix('pkl_') } catch {}
+  return { success: true, data }
 }
 
 // ═══════════════ MAINTENANCE ═══════════════
@@ -550,6 +756,7 @@ export async function resetAllPklData() {
   const { error: e1 } = await supabaseAdmin.from('pkl_attendance').delete().neq('id', 0)
   const { error: e2 } = await supabaseAdmin.from('pkl_profiles').delete().neq('id', 0)
   if (e1 || e2) return { error: (e1 || e2).message }
+  try { invalidateCacheByPrefix('pkl_') } catch {}
   return { success: true }
 }
 
@@ -557,13 +764,12 @@ export async function cleanupOldPklSelfies() {
   try {
     let totalDeleted = 0
     let hasMore = true
+    const todayWIB = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })
+
     while (hasMore) {
-      const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - 1)
       const { data: old } = await supabaseAdmin.from('pkl_attendance')
         .select('id, selfie_url, check_out_selfie_url')
-        .or('selfie_url.is.not.null,check_out_selfie_url.is.not.null')
-        .lt('created_at', cutoff.toISOString())
+        .lt('attendance_date', todayWIB)
         .limit(200)
 
       if (!old || old.length === 0) { hasMore = false; break }
@@ -620,26 +826,23 @@ export async function getPklStudentProfile({ studentId }) {
   return { profile, attendance: att || [], isPkl: true }
 }
 
-// ═══════════════ SELESAI PKL — FIX: filter kelas/jurusan via tabel siswa ═══════════════
+// ═══════════════ SELESAI PKL ═══════════════
 
 export async function getCompletedPklStudentIds(filters = {}) {
-  // Step 1: Ambil semua student_id dengan status Selesai dari pkl_profiles
   let query = supabaseAdmin
     .from('pkl_profiles')
     .select('student_id')
     .eq('status', 'Selesai')
-  if (filters.company) query = query.ilike('company_name', `%${filters.company}%`)
-  // JANGAN filter kelas/jurusan di sini — kolom tersebut tidak ada di pkl_profiles
+  if (filters.company) query = query.eq('company_name', (filters.company || '').trim())
   const { data, error } = await query
   if (error) return { ids: [], error: error.message }
 
   let ids = (data || []).map(p => p.student_id)
 
-  // Step 2: Jika ada filter kelas/jurusan, filter via tabel siswa
   if ((filters.kelas || filters.jurusan) && ids.length > 0) {
     let siswaQuery = supabaseAdmin.from('siswa').select('id').in('id', ids)
-    if (filters.kelas) siswaQuery = siswaQuery.eq('kelas', filters.kelas)
-    if (filters.jurusan) siswaQuery = siswaQuery.eq('jurusan', filters.jurusan)
+    if (filters.kelas) siswaQuery = siswaQuery.eq('kelas', (filters.kelas || '').trim())
+    if (filters.jurusan) siswaQuery = siswaQuery.eq('jurusan', (filters.jurusan || '').trim())
     const { data: siswaData } = await siswaQuery
     ids = (siswaData || []).map(s => s.id)
   }
@@ -660,4 +863,16 @@ export async function deleteCompletedPklData(filters = {}) {
   if (pErr) return { error: pErr.message, deleted: 0 }
   try { const { invalidateCacheByPrefix } = await import('@/lib/cacheHelpers'); invalidateCacheByPrefix('pkl_') } catch {}
   return { error: null, deleted: ids.length }
+}
+
+export async function getPklAttendanceByStudentDate(studentId, date) {
+  if (!studentId || !date) return { error: 'Data tidak lengkap' }
+  const { data, error } = await supabaseAdmin
+    .from('pkl_attendance')
+    .select('id, status')
+    .eq('student_id', studentId)
+    .eq('attendance_date', date)
+    .maybeSingle()
+  if (error) return { error: error.message }
+  return { record: data }
 }

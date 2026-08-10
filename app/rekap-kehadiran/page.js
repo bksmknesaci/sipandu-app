@@ -192,7 +192,7 @@ export default function RekapKehadiran() {
     fetchHolidays()
     // Polling setiap 15 detik — menangani cache server yang belum ter-invalidate
     // di lingkungan serverless (Vercel) dimana cold start bisa pakai instance berbeda
-    const interval = setInterval(fetchHolidays, 15000)
+    const interval = setInterval(fetchHolidays, 60000) // 60 detik
     return () => clearInterval(interval)
   }, [pathname]) // Re-run saat user navigasi kembali ke halaman ini
   useEffect(() => { const f = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; f() }, [])

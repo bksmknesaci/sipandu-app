@@ -1,5 +1,22 @@
 # Changelog SIPANDU
 
+## 2026-08-11 (Optimasi Cache Egress Supabase)
+- File baru lib/storageOptimize.js: Utilitas optimasi Storage Supabase — addCacheControl (parameter cacheControl pada URL agar browser cache lokal), getOptimizedImageUrl (wrapper dengan fallback SVG placeholder), compressImage (kompresi gambar di sisi klien sebelum upload), COMPRESSION_PRESETS (preset kompresi per tipe upload: pklSelfie 480×640/55%, buktiSakitIzin 540×720/60%, newsCover 800×600/72%, profilPhoto 200×200/65%, dll), getLazyImgProps (props siap spread ke <img> untuk lazy loading + fade-in)
+- Absensi PKL: Kompresi selfie dari 800px/70% menjadi 480×640px/55% — estimasi ~200KB → ~35KB per selfie (-82%)
+- Absensi PKL: Capture photo diubah dari 2x encode JPEG (canvas full → toDataURL → load ulang → compressImage) menjadi 1x encode langsung (canvas resize → toDataURL sekali) — lebih cepat dan ukuran lebih kecil
+- Absen Sakit & Izin: Kompresi bukti foto dari 1280px/70% menjadi 540×720px/60% — estimasi ~250KB → ~50KB per bukti (-80%)
+- Absen Sakit & Izin: Tambahkan batas tinggi (maxH) pada kompresi agar foto portrait tidak terlalu besar
+- Pos Berita: Kompresi cover dari 1400px/target 200KB menjadi 800×600px/target 100KB — estimasi ~400KB → ~80KB per cover (-80%)
+- Pos Berita: Upload Storage cacheControl dari 3600 (1 jam) menjadi 2592000 (30 hari) — cover berita yang sudah diunduh tidak perlu download ulang setiap buka halaman
+- Pos Berita: Thumbnail di tabel ditambahkan loading="lazy" dan decoding="async" agar tidak memblokir render
+- Rekap PKL: Import getOptimizedImageUrl dari storageOptimize — selfie masuk/pulang di modal detail menggunakan cache 24 jam (medium) dan 1 jam (full zoom), lazy loading, dan referrerPolicy no-referrer
+- Rekap Sakit & Izin: Import getOptimizedImageUrl dari storageOptimize — foto bukti di tabel dan modal detail menggunakan cache 24 jam (medium) dan 1 jam (full zoom), lazy loading, dan referrerPolicy no-referrer
+- AppShell: Import addCacheControl dari storageOptimize — logo sekolah di sidebar dan header menggunakan cache 30 hari (2592000 detik)
+- AppShell: Foto profil user di header dropdown dan modal profil menggunakan cache 7 hari (604800 detik) + lazy loading + decoding async
+- Dampak estimasi: Penggunaan Cache Egress turun dari ~25 GB/bulan menjadi ~3 GB/bulan (-88%) dengan asumsi perilaku penggunaan sama
+- File baru: lib/storageOptimize.js
+- File diubah: app/absensi-pkl/page.js, app/absen-sakit-izin/page.js, app/setting/pos-berita/page.js, app/wali-kelas/rekap-pkl/page.js, app/wali-kelas/rekap-sakit-izin/page.js, app/components/AppShell.js
+
 ## 2026-07-28 (Perbaikan Auto-Alpha Hanya Hari Efektif)
 - rekapActions.js: Auto-Alpha sistem otomatis sekarang mengecek hari efektif sebelum menyisipkan Alpha — hari libur dan weekend tidak diberi Alpha
 - rekapActions.js: Auto-cleanup Alpha di hari libur — setiap halaman Rekap Kehadiran dibuka setelah jam 14:00, sistem menghapus record Alpha (input_by='Sistem Otomatis') yang salah sisipkan di hari libur
