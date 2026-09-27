@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { User, Lock, Eye, EyeOff, LogIn, GraduationCap } from 'lucide-react';
 import { loginUserAction, getAdminLoginData } from '@/app/actions/userActions';
+import { getAppSettings } from '@/lib/appSettingsClient';
 
 export default function Login() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function Login() {
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
+      const data = await getAppSettings();
       if (data) setSettings(data);
     };
     fetchSettings();

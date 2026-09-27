@@ -1,5 +1,57 @@
 # Changelog SIPANDU
 
+## 2026-09-28 (Fix Batas 1000 Baris PostgREST di Seluruh Query Besar + Optimasi Heartbeat/Log Ingestion)
+- Akar masalah ditemukan: Supabase memotong hasil query SELECT pada 1000 baris TANPA error — query rentang panjang kehilangan data diam-diam (rekap salah Alpha, ranking salah, pengajuan lama hilang dari daftar)
+- Audit SQL: pkl_attendance 5521 baris (5× batas), pkl_profiles 377, tb_absensi_sakit_izin 28, tb_reward_siswa 23
+- rekapActions.js: getRekapKehadiran mengambil absensi setahun penuh bertahap (.order('id') + .range per 1000 baris) — fix siswa 5-10 baris terakhir selalu tampil Alpha meski absennya sudah diisi via Absensi Kelas (halaman itu tampil benar karena query 1 tanggal tidak terpotong)
+- rekap-kehadiran/page.js: pulihkan useEffect getKelasFilters — dropdown Tingkat & Jurusan & Kelas yang kosong + tambah try/catch dengan console.error
+- cariSiswaActions.js: searchSiswa — query absensi hari ini difilter .in('siswa_id', 10 hasil pencarian), sebelumnya mengunduh absensi seluruh sekolah pada setiap ketikan
+- parentPortalActions.js: getDashboardData — ranking reward diambil bertahap + getCached('reward_rank_all', 10 menit); allRewardEntries menyesuaikan format array; otomatis ter-invalidate oleh invalidateCacheByPrefix('reward_')
+- absensiActions.js: getSakitIzinWaliKelas — pengambilan bertahap 1000 baris per batch
+- pklActions.js: fetchAttendanceBatch — pagination baris 1000 di dalam loop kelompok 100 siswa; satu titik perbaikan meliputi getPklRekapHarian, getPklRekapBulanan, getPklRekapSemester, getPklStats
+- formulirActions.js: getRekapFormulir bertahap 1000 baris; getFormulirStats 3 count query memakai head:true; saveSnbpSnbt upload cacheControl 604800
+- admin/rekap-formulir/page.js: debounce pencarian 400 ms (sebelumnya 1 query per tombol ditekan)
+- AppShell.js: heartbeat session 45 → 90 detik + hanya saat tab terlihat (document.hidden) — sumber request konstan terbesar dipangkas, log ingestion turun ±60-80%
+- userActions.js: getActiveSessions — ambang session stale 2 menit → 4 menit (menyesuaikan interval 90 detik); ActiveUsersTable.js teks footer ikut disesuaikan
+- Standar baru: query yang berpotensi melewati 1000 baris WAJIB memakai pola batch .order('id') + .range() berulang
+- Hasil verifikasi: Rekap Kehadiran tampil normal; egress siklus baru 0,10 GB dari kuota 5 GB (overage 0); Log Ingestion 0,317 GB dari 1 GB dipantau
+- File diubah: app/actions/rekapActions.js, app/rekap-kehadiran/page.js, app/actions/cariSiswaActions.js, app/actions/parentPortalActions.js, app/actions/absensiActions.js, app/actions/pklActions.js, app/actions/formulirActions.js, app/admin/rekap-formulir/page.js, app/components/AppShell.js, app/actions/userActions.js, app/components/ActiveUsersTable.js
+
+## 2026-09-23 (Realtime Publication Aktif + Konsolidasi app_settings + Kompresi Logo Jurusan)
+- Akar masalah realtime ditemukan: publication supabase_realtime hanya berisi 1 tabel (notifications) — subscription postgres_changes pada absensi & parent_notifications TIDAK PERNAH menerima event sejak awal; polling "fallback" yang selalu aktif adalah kompensasi yang tidak disadari pembuatnya
+- SQL: ALTER PUBLICATION supabase_realtime ADD TABLE public.absensi + public.parent_notifications — kini 3 tabel ter-broadcast, fitur real-time DaftarTidakHadir & Portal Orang Tua benar-benar bekerja
+- File baru lib/appSettingsClient.js: fetch app_settings terpusat sisi browser — 1 fetch per browser per 5 menit + deduplikasi request bersamaan + clearAppSettingsCache()
+- app/page.js, AppShell.js, login/page.js, tentang/page.js: fetchSettings beralih ke getAppSettings() (sebelumnya 4-5 fetch full-row per buka halaman)
+- setting/profil/page.js: clearAppSettingsCache() dipanggil setelah simpan — perubahan admin langsung terlihat di halaman lain tanpa menunggu cache
+- MajorLogoManager.js: logo jurusan dikompresi client-side via preset logoJurusan sebelum upload — 612-639 kB → 17-28 kB per logo (-96%)
+- majorLogoActions.js: uploadMajorLogoAction cacheControl 3600 → 2592000 (30 hari)
+- Re-upload hero (103-183 kB JPEG, sebelumnya 704-786 kB PNG) dan 6 logo jurusan — total muatan gambar Beranda turun dari ±7,5 MB → ±0,9 MB per pengunjung baru, 0 untuk pengunjung berulang
+- SQL cleanup: UPDATE app_settings SET major_logos = major_logos - 'TKR' (entri mati menunjuk file terhapus) — kini tepat 6 key
+- File yatim dibersihkan dari Storage: 5 hero percobaan pertama + 6 logo .jpg lama + 6 PNG percobaan
+- Dampak: egress siklus baru (21-26 Sep) hanya 0,10 GB dari kuota 5 GB — sebelumnya 8,52 GB dan terbatas dalam 1-2 hari pemakaian
+- File baru: lib/appSettingsClient.js
+- File diubah: app/page.js, app/components/AppShell.js, app/login/page.js, app/tentang/page.js, app/setting/profil/page.js, app/components/MajorLogoManager.js, app/actions/majorLogoActions.js
+
+## 2026-09-10 (Optimasi Egress Supabase — Fix Pembatasan Kuota Free Tier 5GB)
+- Akar masalah pembatasan: Hero Dashboard diupload mentah tanpa kompresi & tanpa cacheControl (3-8MB per foto × 5 = 15-40MB per pengunjung baru Beranda) + badai amplifikasi realtime + polling yang selalu aktif — egress mencapai 8.52GB dari kuota 5GB/bulan
+- lib/storageOptimize.js: Tambah preset kompresi heroImage (1280×720, quality 0.75, JPEG) — estimasi 3-8MB → ±150KB per hero (-95%)
+- Profil SIPANDU: handleHeroUpload kompresi foto hero via preset heroImage + upload cacheControl 2592000 (30 hari)
+- Profil SIPANDU: uploadToStorage (logo aplikasi, KOP dinas, KOP sekolah) menambah cacheControl 2592000 (30 hari)
+- DaftarTidakHadir: Debounce realtime 5 detik — batch finalisasi absensi pagi & Auto-Alpha pukul 14:00 yang tadinya memicu 1 fetch PER BARIS ke semua tab Beranda terbuka, sekarang 1 fetch gabungan
+- DaftarTidakHadir: Polling 30 detik selalu-aktif diganti fallback sungguhan — hanya jalan saat realtime gagal (status ≠ SUBSCRIBED) DAN tab terlihat, interval 60 detik
+- NotificationCenter: Debounce callback realtime 3 detik — update/hapus massal notifikasi tidak lagi memicu fetch per baris; fetch dilewati saat tab tersembunyi
+- Portal Orang Tua: Polling notifikasi 60 detik hanya aktif saat realtime gagal (notifWsOkRef) + tab terlihat — sebelumnya jalan terus bersamaan dengan websocket
+- Portal Orang Tua: Callback realtime parent_notifications didebounce 3 detik
+- Rekap Kehadiran: Polling hari libur (60 detik) berhenti saat tab tersembunyi + refresh otomatis saat kembali (visibilitychange)
+- rekapActions.js: getRekapKehadiran Auto-Alpha & auto-cleanup tidak lagi re-fetch absensi SETAHUN PENUH — hasil upsert digabung lokal, hasil delete difilter lokal (transfer per pembukaan halaman turun ±50%)
+- ActiveUsersTable: Polling 60 detik hanya saat tab terlihat + refresh saat kembali
+- userActions.js: getActiveSessions — DELETE session stale di-throttle maksimal 1x per 5 menit, daftar tetap akurat via filter .gte('last_active') langsung pada SELECT
+- userActions.js: uploadUserPhotoAction menambah cacheControl 604800 (7 hari)
+- Langkah manual wajib: hero lama di-upload ulang sekali via Profil SIPANDU agar terkompresi & ber-cache 30 hari
+- Catatan verifikasi: fungsi addCacheControl (query param ?cacheControl= pada URL) dicurigai tidak mempengaruhi header response Storage — caching sebenarnya ditentukan saat upload; verifikasi via DevTools Response Headers
+- Dampak estimasi: egress harian turun dari hitungan GB/hari menjadi ±ratusan MB/hari atau kurang — jauh di bawah kuota 5GB/bulan
+- File diubah: lib/storageOptimize.js, app/setting/profil/page.js, app/actions/rekapActions.js, app/actions/userActions.js, app/rekap-kehadiran/page.js, app/components/ActiveUsersTable.js, app/components/DaftarTidakHadir.js, app/components/NotificationCenter.js, app/portal-ortu/page.js
+
 ## 2026-08-11 (Optimasi Cache Egress Supabase)
 - File baru lib/storageOptimize.js: Utilitas optimasi Storage Supabase — addCacheControl (parameter cacheControl pada URL agar browser cache lokal), getOptimizedImageUrl (wrapper dengan fallback SVG placeholder), compressImage (kompresi gambar di sisi klien sebelum upload), COMPRESSION_PRESETS (preset kompresi per tipe upload: pklSelfie 480×640/55%, buktiSakitIzin 540×720/60%, newsCover 800×600/72%, profilPhoto 200×200/65%, dll), getLazyImgProps (props siap spread ke <img> untuk lazy loading + fade-in)
 - Absensi PKL: Kompresi selfie dari 800px/70% menjadi 480×640px/55% — estimasi ~200KB → ~35KB per selfie (-82%)

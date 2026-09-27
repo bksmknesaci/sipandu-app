@@ -41,7 +41,12 @@ export default function RekapFormulirPage() {
     if (res) setStats(res);
   };
 
-  useEffect(() => { fetchData(); }, [activeTab, searchTerm]);
+  // SESUDAH — pencarian tetap real-time, tapi menembak 1 query
+// setelah user berhenti mengetik (bukan per tombol yang ditekan):
+useEffect(() => {
+  const t = setTimeout(() => { fetchData(); }, 400);
+  return () => clearTimeout(t);
+}, [activeTab, searchTerm]);
 
   const fetchData = async () => {
     setLoading(true);

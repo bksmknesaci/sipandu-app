@@ -182,20 +182,44 @@ export default function RekapKehadiran() {
     }
   }, [])
 
-  // ── Fetch holidays + auto-sync saat admin edit di Halaman Hari Efektif ──
-  useEffect(() => {
-    const fetchHolidays = async () => {
-      const h = await getHolidays()
-      if (h) setHolidays(h)
+// ── Fetch holidays + auto-sync saat admin edit di Halaman Hari Efektif ──
+useEffect(() => {
+  const fetchHolidays = async () => {
+    if (document.hidden) return
+    const h = await getHolidays()
+    if (h) setHolidays(h)
+  }
+
+  fetchHolidays()
+
+  const onVisible = () => { if (!document.hidden) fetchHolidays() }
+  document.addEventListener('visibilitychange', onVisible)
+
+  const interval = setInterval(fetchHolidays, 60000)
+
+  return () => {
+    clearInterval(interval)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
+}, [pathname])
+
+// ── Fetch daftar Kelas & Jurusan untuk dropdown filter (WAJIB ADA) ──
+// Tanpa blok ini, dropdown "Tingkat" dan "Jurusan & Kelas" kosong!
+useEffect(() => {
+  const f = async () => {
+    try {
+      const res = await getKelasFilters()
+      if (res?.kelasJurusanList) {
+        setKelasJurusanList(res.kelasJurusanList)
+      } else {
+        console.error('[RekapKehadiran] getKelasFilters tidak mengembalikan kelasJurusanList:', res)
+      }
+    } catch (e) {
+      console.error('[RekapKehadiran] getKelasFilters gagal:', e)
     }
-    // Fetch langsung saat pertama kali / navigasi kembali
-    fetchHolidays()
-    // Polling setiap 15 detik — menangani cache server yang belum ter-invalidate
-    // di lingkungan serverless (Vercel) dimana cold start bisa pakai instance berbeda
-    const interval = setInterval(fetchHolidays, 60000) // 60 detik
-    return () => clearInterval(interval)
-  }, [pathname]) // Re-run saat user navigasi kembali ke halaman ini
-  useEffect(() => { const f = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; f() }, [])
+  }
+  f()
+}, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)

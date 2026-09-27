@@ -315,9 +315,35 @@ export async function checkSakitIzinToday(nisn, tanggal) {
 }
 
 export async function getSakitIzinWaliKelas(kelas, jurusan) {
-  const query = supabaseAdmin.from('tb_absensi_sakit_izin').select('*').order('created_at', { ascending: false })
-  if (kelas) query.eq('kelas', kelas); if (jurusan) query.eq('jurusan', jurusan)
-  const { data, error } = await query; if (error) return { data: [], error: error.message }; return { data }
+  try {
+    // Ambil bertahap — tanpa ini daftar terpotong diam-diam di batas
+    // 1000 baris PostgREST saat tabel menumpuk (mode Admin tanpa filter)
+    let all = [];
+    const BATCH = 1000;
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabaseAdmin
+        .from('tb_absensi_sakit_izin')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(page * BATCH, (page + 1) * BATCH - 1);
+      if (kelas) query = query.eq('kelas', kelas);
+      if (jurusan) query = query.eq('jurusan', jurusan);
+
+      const { data, error } = await query;
+      if (error) return { data: [], error: error.message };
+
+      all = all.concat(data || []);
+      hasMore = (data || []).length === BATCH;
+      page++;
+    }
+
+    return { data: all };
+  } catch (e) {
+    return { data: [], error: e.message };
+  }
 }
 
 // ── OPTIMASI: Upload foto + cari siswa → PARALEL (hemat ~20ms) ──

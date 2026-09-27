@@ -16,6 +16,7 @@ import KisahAlumni from '@/app/components/KisahAlumni';
 import { getFormulirStats } from '@/app/actions/formulirActions';
 import { getHomeRewardChart } from '@/app/actions/rewardActions';
 import { getHomePelanggaranChart } from '@/app/actions/pelanggaranActions';
+import { getAppSettings } from '@/lib/appSettingsClient';
 
 export default function SIPANDU() {
   const [currentImg, setCurrentImg] = useState(0);
@@ -35,7 +36,7 @@ export default function SIPANDU() {
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
+      const data = await getAppSettings();
       if (data) setSettings(data);
     };
     fetchSettings();

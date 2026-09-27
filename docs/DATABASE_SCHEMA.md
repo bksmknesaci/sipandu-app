@@ -514,3 +514,39 @@ Catatan Penggunaan Nilai (Value Constraints)
 * Session otomatis dihapus oleh getActiveSessions jika last_active lebih dari 2 menit (stale heartbeat)
 * Heartbeat dikirim setiap 45 detik dari AppShell saat user aktif
 * Session dihapus saat AppShell unmount (logout atau navigasi keluar)
+
+## Supabase Storage Buckets (Update — 2026-09-10)
+* assets (public) -- Untuk hero images dashboard/Beranda (hero_*), logo aplikasi (logo_*), logo KOP dinas (kop_dinas_*), logo KOP sekolah (kop_sekolah_*)
+* Catatan: upload baru otomatis terkompresi (preset heroImage 1280×720, JPEG ±150KB) + cacheControl 2592000 (30 hari) — file lama yang diupload sebelum update tetap berukuran besar & ber-cache default 1 jam, wajib di-upload ulang sekali (atau update metadata cacheControl via SQL)
+
+## Catatan Penggunaan Nilai (Update — 2026-09-10)
+* app_settings
+* hero_images: Array URL publik dari bucket 'assets' (maks 5 foto) — upload baru terkompresi ±150KB/foto + cache browser 30 hari
+* user_sessions
+* Session stale (heartbeat > 2 menit) tidak lagi tampil di daftar Pengguna Aktif (difilter langsung pada SELECT) dan dihapus fisik maksimal 1x per 5 menit (throttle cleanup, sebelumnya DELETE di setiap panggilan getActiveSessions)
+
+## Supabase Realtime Publication (Update — 2026-09-23)
+* supabase_realtime kini berisi 3 tabel: absensi, parent_notifications, notifications
+* Sebelumnya HANYA notifications — subscription postgres_changes pada absensi (DaftarTidakHadir) dan parent_notifications (Portal Orang Tua) tidak pernah menerima event sejak awal
+* Perintah yang dijalankan: ALTER PUBLICATION supabase_realtime ADD TABLE public.absensi; ALTER PUBLICATION supabase_realtime ADD TABLE public.parent_notifications
+* Aturan ke depan: tabel baru WAJIB ditambahkan ke publication sebelum subscription postgres_changes dibuat di frontend
+
+## Catatan Penggunaan Nilai (Update — 2026-09-23)
+* app_settings
+* hero_images: file upload baru terkompresi otomatis (103-183 kB JPEG, preset heroImage) + cacheControl 2592000 (30 hari) — file lama (704-786 kB PNG) telah diganti
+* major_logos: TEPAT 6 key (TKRO, PH, DKV, KL, RPL, LPKKK) — entri lama 'TKR' dihapus karena menunjuk file yang sudah dihapus dari Storage; upload baru terkompresi 17-28 kB PNG + cacheControl 2592000
+
+## Catatan Penggunaan Nilai (Update — 2026-09-28)
+* user_sessions
+* Heartbeat 90 detik, hanya dikirim saat tab terlihat (visibility-aware)
+* Session dianggap stale setelah 4 MENIT tanpa heartbeat (sebelumnya 2 menit) — user yang minimize browser >4 menit keluar dari daftar Pengguna Aktif hingga membuka tab kembali
+* Cleanup fisik DELETE di-throttle maksimal 1x per 5 menit
+
+## Catatan Teknis: Batas 1000 Baris PostgREST (2026-09-28)
+* Supabase memotong hasil query SELECT pada 1000 baris TANPA error — data hilang diam-diam
+* Semua query rentang panjang (absensi 1 tahun, pkl_attendance semester, tabel reward seluruh sekolah, tabel formulir) kini memakai pola batch: .order('id') + .range(page*1000, ...) diulang sampai habis
+* Query baru yang berpotensi melewati 1000 baris WAJIB mengikuti pola batch ini
+* Posisi data saat audit (Sep 2026): pkl_attendance 5521 baris, pkl_profiles 377, tb_absensi_sakit_izin 28, tb_reward_siswa 23
+
+## Supabase Storage Buckets (Update — 2026-09-28)
+* bukti-formulir — upload bukti SNBP/SNBT kini dengan cacheControl 604800 (7 hari)

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import MajorLogoManager from '@/app/components/MajorLogoManager';
 import { ArrowLeft, Save, Upload, School, BookOpen, Users, Trash2, FileText } from 'lucide-react';
+import { compressImage, COMPRESSION_PRESETS } from '@/lib/storageOptimize';
+import { clearAppSettingsCache } from '@/lib/appSettingsClient';
 
 export default function ProfilSIPANDU() {
   const [loading, setLoading] = useState(true);
@@ -75,36 +77,45 @@ export default function ProfilSIPANDU() {
     }
   };
 
-  const handleHeroUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (heroImages.length + files.length > 5) return alert('Maksimal 5 foto!');
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `hero_${Date.now()}_${Math.random().toString(36).substring(7)}_${i}.${fileExt}`;
-      const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
+const handleHeroUpload = async (e) => {
+  const files = Array.from(e.target.files);
+  if (heroImages.length + files.length > 5) return alert('Maksimal 5 foto!');
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      // KOMPRESI — dari 3-8MB menjadi ±150KB
+      const compressed = await compressImage(file, COMPRESSION_PRESETS.heroImage);
+      const fileName = `hero_${Date.now()}_${Math.random().toString(36).substring(7)}_${i}.jpg`;
+      const { data, error } = await supabase.storage.from('assets').upload(fileName, compressed, {
+        contentType: 'image/jpeg',
+        cacheControl: '2592000' // 30 hari — pengunjung berulang tidak unduh ulang
+      });
       if (error) {
         alert('Gagal upload foto ' + file.name + ': ' + error.message);
       } else {
         const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
         if (urlData) setHeroImages(prev => [...prev, urlData.publicUrl]);
       }
+    } catch (err) {
+      alert('Gagal memproses foto ' + file.name + ': ' + err.message);
     }
-  };
+  }
+};
 
   const handleDeleteImage = (indexToDelete) => {
     setHeroImages(heroImages.filter((_, index) => index !== indexToDelete));
   };
 
   // Upload file ke storage, return public URL
-  const uploadToStorage = async (file, prefix) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
-    if (error) throw new Error('Gagal upload: ' + error.message);
-    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(data.path);
-    return urlData.publicUrl;
-  };
+const uploadToStorage = async (file, prefix) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const { data, error } = await supabase.storage.from('assets')
+    .upload(fileName, file, { cacheControl: '2592000' });
+  if (error) throw new Error('Gagal upload: ' + error.message);
+  const { data: urlData } = await supabase.storage.from('assets').getPublicUrl(data.path);
+  return urlData.publicUrl;
+};
 
   const handleSave = async () => {
     let finalLogoUrl = logoUrl;
@@ -147,6 +158,7 @@ export default function ProfilSIPANDU() {
       alert('Gagal menyimpan: ' + error.message);
     } else {
       alert('Pengaturan berhasil disimpan!');
+      clearAppSettingsCache(); // ← tambahkan baris ini
       setLogoFile(null);
       setKopLogoDinasFile(null);
       setKopLogoSekolahFile(null);

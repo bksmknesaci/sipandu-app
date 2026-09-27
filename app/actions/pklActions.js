@@ -435,12 +435,30 @@ async function fetchAttendanceBatch(studentIds, dateFilter = {}) {
   const batchSize = 100
   for (let i = 0; i < studentIds.length; i += batchSize) {
     const batch = studentIds.slice(i, i + batchSize)
-    let query = supabaseAdmin.from('pkl_attendance').select('*').in('student_id', batch)
-    if (dateFilter.eq) query = query.eq('attendance_date', dateFilter.eq)
-    if (dateFilter.gte) query = query.gte('attendance_date', dateFilter.gte)
-    if (dateFilter.lte) query = query.lte('attendance_date', dateFilter.lte)
-    const { data } = await query
-    if (data) allAtt.push(...data)
+
+    // ── FIX BATAS 1000 BARIS POSTGREST ──
+    // Pengelompokan per 100 SISWA saja belum cukup: 1 kelompok siswa ×
+    // 1 semester bisa menghasilkan ribuan baris (tabel kini 5521 baris) →
+    // terpotong diam-diam di batas 1000 → absensi hilang → rekap salah.
+    // Solusi: tiap kelompok siswa juga diambil per 1000 baris dengan
+    // ORDER BY id (urutan stabil antar halaman — wajib untuk pagination).
+    let page = 0
+    let hasMore = true
+    while (hasMore) {
+      let query = supabaseAdmin
+        .from('pkl_attendance')
+        .select('*')
+        .in('student_id', batch)
+        .order('id', { ascending: true })
+        .range(page * 1000, (page + 1) * 1000 - 1)
+      if (dateFilter.eq) query = query.eq('attendance_date', dateFilter.eq)
+      if (dateFilter.gte) query = query.gte('attendance_date', dateFilter.gte)
+      if (dateFilter.lte) query = query.lte('attendance_date', dateFilter.lte)
+      const { data } = await query
+      if (data) allAtt.push(...data)
+      hasMore = (data || []).length === 1000
+      page++
+    }
   }
   return allAtt
 }

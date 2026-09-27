@@ -20,6 +20,11 @@ Status: ACTIVE
 - Rekapitulasi Jumlah Siswa (Real-time dari Database, 6 Jurusan Tetap)
 - Rekap Reward & Pelanggaran (Accordion Kategori)
 - Akses Cepat Informasi
+## Beranda (Update — 2026-09-10)
+- Hero carousel: kelima foto diunduh sekaligus per pengunjung baru — setelah kompresi total ±0,75MB (sebelumnya 15-40MB), pengunjung berulang 0 (cache browser 30 hari)
+## Beranda (Update — 2026-09-23)
+- Fetch app_settings terpusat di lib/appSettingsClient.js — 1 fetch per browser per 5 menit dengan deduplikasi request bersamaan (sebelumnya 4-5 fetch full-row per buka halaman)
+- Hero images hasil upload baru: 103-183 kB (sebelumnya 704-786 kB PNG) + cache browser 30 hari
 
 Status: ACTIVE
 
@@ -51,6 +56,14 @@ Status: ACTIVE
 - Upload Logo Jurusan (6 Slot: TKR, PH, DKV, KL, RPL, LPKKK)
 - Tampilkan Logo Jurusan di Rekapitulasi Jumlah Siswa
 - Hapus Logo Jurusan
+## Profil Sekolah (Update — 2026-09-10)
+- Upload Foto Hero Dashboard: kompresi otomatis preset heroImage (1280×720, JPEG 75%, ±150KB per foto) — sebelumnya file mentah 3-8MB tanpa kompresi
+- Upload Hero, Logo Aplikasi, Logo KOP Dinas & KOP Sekolah: cacheControl 2592000 (30 hari) — browser tidak mengunduh ulang
+- Langkah manual sekali setelah deploy: hero lama di-upload ulang agar terkompresi & ber-cache 30 hari
+## Profil Sekolah (Update — 2026-09-23)
+- Upload Logo Jurusan: kompresi otomatis preset logoJurusan (120×120 PNG, 17-28 kB — sebelumnya 612-639 kB) + cacheControl 30 hari
+- Perubahan tersimpan langsung terlihat di Beranda (clearAppSettingsCache dipanggil setelah simpan)
+- Entri major_logos lama 'TKR' (menunjuk file terhapus) dibersihkan — kini tepat 6 key
 
 Status: ACTIVE
 
@@ -143,6 +156,11 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Manajemen User (Update — 2026-09-10)
+- Upload foto profil: cacheControl 604800 (7 hari) pada upload ke Supabase Storage
+
+Status: ACTIVE
+
 ---
 
 ## Profil Saya
@@ -191,6 +209,11 @@ Status: ACTIVE
 ## Beranda - Daftar Siswa Tidak Hadir
 - Integrasi Supabase Realtime Subscription (Auto-update tanpa reload)
 - Perbaikan Label Kelas (Gabungan Kelas + Jurusan, cont: "XI TKRO 1")
+## Beranda - Daftar Siswa Tidak Hadir (Update — 2026-09-10)
+- Realtime absensi dengan debounce 5 detik: batch finalisasi absensi pagi & Auto-Alpha pukul 14:00 kini memicu 1x fetch gabungan — sebelumnya 1x fetch PER BARIS ke semua tab Beranda terbuka
+- Polling 30 detik yang selalu aktif diganti fallback sungguhan: hanya jalan saat websocket realtime gagal DAN tab terlihat, interval 60 detik
+## Beranda - Daftar Siswa Tidak Hadir (Update — 2026-09-23)
+- Realtime absensi kini benar-benar aktif — tabel absensi ditambahkan ke publication supabase_realtime (sebelumnya subscription tidak pernah menerima event)
 
 Status: ACTIVE
 
@@ -228,6 +251,8 @@ Status: ACTIVE
 - Icon mata (Eye) di kolom Aksi: Modal detail lengkap siswa yang mengajukan (profil, jenis, tanggal, jam, alasan, foto bukti klik-zoom, koordinat GPS + akurasi + tombol Google Maps, catatan WK jika ditolak, timestamp verifikasi)
 - Hapus otomatis riwayat pengajuan sakit/izin yang sudah lebih dari 30 hari (record + foto bukti di Storage) — tidak berpengaruh ke data Rekap Kehadiran karena sumber data terpisah
 - Fix filter tanggal tidak menampilkan format dd/mm/yyyy di layar HP — tambahkan label tanggal terformat yang hanya muncul di layar kecil (sm:hidden)
+## Rekap Sakit & Izin (Update — 2026-09-28)
+- getSakitIzinWaliKelas: pengambilan data bertahap 1000 baris per batch — mode Admin tanpa filter tidak lagi berisiko kehilangan pengajuan lama
 
 Status: ACTIVE
 
@@ -303,6 +328,12 @@ Status: ACTIVE
 - Tab Bulanan (Freeze Table Nama & Header, Kolom Nomor Urut, Kolom Tanggal 1-31, Tanpa Kolom NISN)
 - Tab Semester (6 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
 - Tab Tahunan (12 Bulan, Format H/S/I/A vertikal, Freeze Table, Tanpa Kolom NISN)
+## Menu Rekap Kehadiran (Update — 2026-09-10)
+- Auto-Alpha & auto-cleanup Alpha tidak lagi re-fetch absensi satu tahun penuh — hasil upsert digabung lokal, hasil delete difilter lokal (transfer per pembukaan halaman turun ±50%)
+- Polling sinkron hari libur (60 detik) berhenti saat tab tersembunyi + refresh otomatis saat tab kembali terlihat
+## Menu Rekap Kehadiran (Update — 2026-09-28)
+- FIX data salah Alpha: getRekapKehadiran mengambil absensi setahun penuh bertahap 1000 baris per batch — sebelumnya terpotong diam-diam di batas 1000 PostgREST sehingga siswa-siswa baris akhir selalu tampil Alpha meski absennya sudah diisi
+- Dropdown filter "Tingkat" dan "Jurusan & Kelas" dipulihkan (useEffect getKelasFilters + try/catch dengan console error)
 
 Status: ACTIVE
 
@@ -374,6 +405,11 @@ Status: ACTIVE
 - Modal Detail Data Formulir (Menampilkan semua field dinamis termasuk link file bukti)
 - Tombol Reset Semua Data Formulir (Hapus permanen semua isian dari 3 tabel)
 - Tombol Reset Semua Data Formulir menggunakan modal popup modern (bukan browser confirm) — peringatan detail 3 jenis formulir yang dihapus → ketik "HAPUS SEMUA", loading spinner, tombol disabled sampai teks cocok persis
+## Menu Rekap Formulir (Update — 2026-09-28)
+- getRekapFormulir: pengambilan bertahap 1000 baris per batch (tabel tracer studi menumpuk tiap angkatan)
+- getFormulirStats: count query memakai head:true — hanya hitungan, tanpa mengirim baris
+- Pencarian real-time dengan debounce 400 ms — 1 query setelah user berhenti mengetik
+- Upload bukti SNBP/SNBT: cacheControl 7 hari
 
 Status: ACTIVE
 
@@ -549,6 +585,12 @@ Status: ACTIVE
 - Info PKL Otomatis: Section "Status Hari Ini" kehadiran sekolah disembunyikan jika siswa PKL (sudah ditampilkan di PklInfoSection)
 - Info PKL Otomatis: Statistik bulanan PKL (Hadir, Terlambat, Sakit, Izin, Alpha, Libur) dengan progress bar persentase kehadiran
 - Info PKL Otomatis: Riwayat absensi PKL terakhir (20 record) dengan ikon status, jam masuk/pulang, keterangan terlambat, catatan sakit/izin
+## Portal Orang Tua (Update — 2026-09-10)
+- Polling notifikasi 60 detik hanya aktif saat realtime gagal + tab terlihat (sebelumnya jalan terus bersamaan dengan websocket)
+- Callback realtime parent_notifications didebounce 3 detik
+## Portal Orang Tua (Update — 2026-09-28)
+- Ranking reward: tabel reward seluruh sekolah diambil bertahap + cache server 10 menit (key reward_rank_all, otomatis ter-invalidate saat reward ditambah/dihapus) — sebelumnya seluruh tabel diunduh ulang tiap kunjungan
+- Realtime parent_notifications kini benar-benar aktif (tabel ditambahkan ke publication supabase_realtime)
 
 Status: ACTIVE
 
@@ -686,6 +728,8 @@ Status: ACTIVE
 - Integrasi tanggal WIB (toLocaleDateString 'sv-SE')
 - Filter absensi semester berdasarkan academic_calendar aktif
 - Match NISN siswa ke tb_reward_siswa.nisn dan tb_pelanggaran_siswa.nisn
+## Cari Data Siswa (Update — 2026-09-28)
+- searchSiswa: query absensi hari ini dibatasi hanya ke 10 siswa hasil pencarian (sebelumnya mengunduh absensi seluruh sekolah pada setiap ketikan — boros egress + rawan terpotong batas 1000 baris)
 
 Status: ACTIVE
 
@@ -714,6 +758,12 @@ Status: ACTIVE
 - Pengguna Aktif: Auto-refresh setiap 15 detik, indikator online hijau berdenyut, session otomatis dihapus setelah 2 menit tidak ada heartbeat
 - Pengguna Aktif: Heartbeat dikirim setiap 45 detik dari AppShell, session dihapus saat logout atau navigasi keluar
 - Pengguna Aktif: Empty state saat tidak ada user aktif, loading state dengan spinner, error state dengan tombol coba lagi
+## Dashboard (Update — 2026-09-10)
+- Pengguna Aktif: polling 60 detik hanya saat tab terlihat, refresh otomatis saat kembali (visibilitychange)
+- getActiveSessions: DELETE session stale di-throttle 1x per 5 menit — daftar tetap akurat via filter last_active langsung pada SELECT
+## Dashboard (Update — 2026-09-28)
+- Heartbeat session: 90 detik dan hanya dikirim saat tab terlihat (sebelumnya 45 detik terus-menerus termasuk tab tersembunyi) — volume request & log ingestion turun ±60-80%
+- Session dianggap aktif selama 4 menit sejak heartbeat terakhir; user yang minimize browser >4 menit otomatis keluar dari daftar Pengguna Aktif hingga kembali membuka tab
 
 Status: ACTIVE
 
@@ -741,6 +791,9 @@ Status: ACTIVE
 - Bell icon tampil untuk semua role termasuk Admin hardcoded
 - Halaman Pusat Notifikasi aksesibel untuk semua role yang login
 - Login hardcoded Admin mengambil ID user dari database (notifikasi berfungsi penuh)
+## Notifikasi (Update — 2026-09-10)
+- NotificationCenter: callback realtime didebounce 3 detik — tandai-dibaca/hapus massal tidak lagi memicu fetch per baris
+- Fetch realtime dilewati saat tab tersembunyi
 
 Status: ACTIVE
 
@@ -1503,6 +1556,8 @@ Status: ACTIVE
 - Modal Detail Absensi: Semua text menggunakan warna eksplisit (text-gray-800/600/500) — tidak ada lagi text putih yang tidak terbaca di HP
 - Modal Detail Absensi: Info siswa menggunakan path Supabase join yang benar (detailData.siswa?.nama, bukan detailData.student_nama)
 - Fix halaman 404 blank: File terpotong di tengah JSX — tab Bulanan dan Semester ditulis ulang lengkap
+## Rekap Kehadiran PKL (Update — 2026-09-28)
+- fetchAttendanceBatch: pagination baris 1000 di dalam loop kelompok 100 siswa — satu titik perbaikan yang meliputi Rekap Harian, Bulanan, Semester, dan Stats (sebelumnya 1 kelompok siswa × 1 semester bisa terpotong di batas 1000 baris)
 
 Status: ACTIVE
 

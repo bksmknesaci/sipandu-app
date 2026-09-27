@@ -8,6 +8,7 @@ import { updateProfileData, resolveAdminUserId, createUserSession, updateSession
 import { addCacheControl } from '@/lib/storageOptimize';
 import { getUserKelasInfo } from '@/app/actions/absensiActions';
 import NotificationCenter from '@/app/components/NotificationCenter';
+import { getAppSettings } from '@/lib/appSettingsClient';
 import { 
   Home, Info, Bell, LogIn, LogOut, Menu, X, User, Shield, Search, QrCode,
   HeartPulse, GraduationCap, BookOpen, ClipboardList, CalendarDays, AlertTriangle, Award, 
@@ -37,12 +38,13 @@ export default function AppShell({ children }) {
 
     if (!userId) return
 
-    const heartbeat = setInterval(() => {
-      updateSessionHeartbeat({ userId })
-    }, 120000) // setiap 2 menit
+// SESUDAH — 90 detik + hanya saat tab terlihat:
+const interval = setInterval(() => {
+  if (!document.hidden) updateSessionHeartbeat({ userId })
+}, 90000)
 
     return () => {
-      clearInterval(heartbeat)
+      clearInterval(interval)
       endUserSession({ userId })
     }
   }, [])
@@ -144,8 +146,8 @@ export default function AppShell({ children }) {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
-        if (data) setSettings(data);
+        const data = await getAppSettings();
+        if (data) setSettings(data)
       } catch (err) { console.error('Settings fetch error:', err); }
     };
     fetchSettings();

@@ -128,9 +128,20 @@ export default function NotificationCenter({ userId, userRole }) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Supabase Realtime ──
-  useEffect(() => {
+// ── Supabase Realtime ──
+useEffect(() => {
     if (!userId) return;
+
+    // Debounce: update/hapus massal notifikasi lama → 1 fetch gabungan
+    let pendingTimer = null;
+    const debouncedFetch = () => {
+      if (pendingTimer) return;
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        if (!document.hidden) fetchData();
+      }, 3000);
+    };
+
     const channel = supabase
       .channel(`notif-${userId}`)
       .on('postgres_changes', {
@@ -139,17 +150,21 @@ export default function NotificationCenter({ userId, userRole }) {
         table: 'notifications',
         filter: `user_id=eq.${userId}`,
       }, () => {
-        fetchData();
+        debouncedFetch();
         setShaking(true);
         setTimeout(() => setShaking(false), 700);
       })
       .subscribe((status, err) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[NotificationCenter] WebSocket gagal, polling fallback aktif');
+          console.warn('[NotificationCenter] WebSocket gagal');
+          notifWsOkRef.current = false;
         }
       });
     channelRef.current = channel;
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+      if (pendingTimer) clearTimeout(pendingTimer);
+    };
   }, [userId, fetchData]);
 
   // ── Shake berulang jika ada unread ──

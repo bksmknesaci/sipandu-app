@@ -43,7 +43,7 @@ export async function uploadMajorLogoAction(formData) {
   const { data, error } = await supabaseAdmin.storage
     .from('logos')
     .upload(fileName, file, {
-      cacheControl: '3600',
+      cacheControl: '2592000',
       upsert: true,
     });
 

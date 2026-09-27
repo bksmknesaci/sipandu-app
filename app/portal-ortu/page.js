@@ -142,6 +142,7 @@ export default function PortalOrtu() {
   const notifPanelRef = useRef(null);
   const [isPkl, setIsPkl] = useState(false);
   const [pklStats, setPklStats] = useState(null);
+  const notifWsOkRef = useRef(false);
 
   useEffect(() => {
     if (!isPkl || !student) return
@@ -272,9 +273,19 @@ export default function PortalOrtu() {
 
   useEffect(() => { fetchOrtuNotifs(); }, [fetchOrtuNotifs]);
 
-  // ── Supabase Realtime: parent_notifications ──
-  useEffect(() => {
+// ── Supabase Realtime: parent_notifications ──
+useEffect(() => {
     if (!student) return;
+
+    let pendingTimer = null;
+    const debouncedFetch = () => {
+      if (pendingTimer) return;
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        if (!document.hidden) fetchOrtuNotifs();
+      }, 3000);
+    };
+
     const channel = supabase
       .channel(`parent-notif-${student.id}`)
       .on('postgres_changes', {
@@ -283,22 +294,28 @@ export default function PortalOrtu() {
         table: 'parent_notifications',
         filter: `student_id=eq.${student.id}`,
       }, () => {
-        fetchOrtuNotifs();
+        debouncedFetch();
         setNotifShaking(true);
         setTimeout(() => setNotifShaking(false), 700);
       })
       .subscribe((status, err) => {
+        notifWsOkRef.current = (status === 'SUBSCRIBED');
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.warn('[PortalOrtu] WebSocket notif gagal, polling fallback aktif');
         }
       });
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+      if (pendingTimer) clearTimeout(pendingTimer);
+    };
   }, [student, fetchOrtuNotifs]);
 
-  // ── Polling fallback notifikasi: setiap 15 detik ──
-  useEffect(() => {
+// ── Polling fallback notifikasi: hanya saat realtime gagal + tab terlihat ──
+useEffect(() => {
     if (!student) return;
-    const iv = setInterval(fetchOrtuNotifs, 60000); // 60 detik
+    const iv = setInterval(() => {
+      if (!notifWsOkRef.current && !document.hidden) fetchOrtuNotifs();
+    }, 60000);
     return () => clearInterval(iv);
   }, [student, fetchOrtuNotifs]);
 

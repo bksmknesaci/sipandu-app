@@ -47,9 +47,9 @@ export async function saveSnbpSnbt(payload, file) {
 export async function getFormulirStats() {
   return getCached('formulir_stats', async () => {
     const [tracer, karir, snbp, alumniStats] = await Promise.all([
-      supabaseAdmin.from('form_tracer_studi').select('id', { count: 'exact' }),
-      supabaseAdmin.from('form_pemetaan_karir').select('id', { count: 'exact' }),
-      supabaseAdmin.from('form_snbp_snbt').select('id', { count: 'exact' }),
+      supabaseAdmin.from('form_tracer_studi').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('form_pemetaan_karir').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('form_snbp_snbt').select('id', { count: 'exact', head: true }),
       getAlumniStats()
     ])
     const totalTracer = tracer.count || 0
@@ -61,20 +61,36 @@ export async function getFormulirStats() {
 
 export async function getRekapFormulir(type, filters = {}) {
   try {
-    let query;
-    if (type === 'tracer') query = supabaseAdmin.from('form_tracer_studi').select('*').order('created_at', { ascending: false })
-    else if (type === 'karir') query = supabaseAdmin.from('form_pemetaan_karir').select('*').order('created_at', { ascending: false })
-    else if (type === 'snbp') query = supabaseAdmin.from('form_snbp_snbt').select('*').order('created_at', { ascending: false })
-    else return { data: [] }
+    let table;
+    if (type === 'tracer') table = 'form_tracer_studi';
+    else if (type === 'karir') table = 'form_pemetaan_karir';
+    else if (type === 'snbp') table = 'form_snbp_snbt';
+    else return { data: [] };
 
-    if (filters?.search) {
-      const safeSearch = filters.search.replace(/[%_]/g, '\\$&')
-      query = query.or(`nama.ilike.%${safeSearch}%,nisn.ilike.%${safeSearch}%`)
+    // ── FIX BATAS 1000 BARIS POSTGREST ──
+    // Tanpa .range(), hasil terpotong diam-diam di 1000 baris saat tabel
+    // formulir menumpuk (tracer studi bertambah setiap angkatan alumni).
+    let all = [];
+    const BATCH = 1000;
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabaseAdmin.from(table).select('*')
+        .order('created_at', { ascending: false })
+        .range(page * BATCH, (page + 1) * BATCH - 1);
+      if (filters?.search) {
+        const safeSearch = filters.search.replace(/[%_]/g, '\\$&');
+        query = query.or(`nama.ilike.%${safeSearch}%,nisn.ilike.%${safeSearch}%`);
+      }
+      const { data, error } = await query;
+      if (error) return { data: [], error: error.message };
+      all = all.concat(data || []);
+      hasMore = (data || []).length === BATCH;
+      page++;
     }
 
-    const { data, error } = await query
-    if (error) return { data: [], error: error.message }
-    return { data }
+    return { data: all };
   } catch (err) { return { data: [], error: err.message } }
 }
 

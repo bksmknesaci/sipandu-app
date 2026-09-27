@@ -39,24 +39,41 @@ export default function DaftarTidakHadir() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     fetchData();
 
-    // PERBAIKAN: Tambahkan Realtime Supabase Subscription
-    // Dashboard akan langsung update ketika Sekretaris/Admin menekan tombol Absensi
+    // DEBOUNCE: finalisasi absensi / Alpha otomatis mengirim banyak event
+    // sekaligus — sekarang 1 fetch gabungan setelah 5 detik,
+    // bukan 1 fetch PER BARIS (sebelumnya: 150 insert = 150x fetch!)
+    let pendingTimer = null;
+    const debouncedFetch = () => {
+      if (pendingTimer) return;
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        if (!document.hidden) fetchData();
+      }, 5000);
+    };
+
+    // Status koneksi realtime
+    let realtimeOk = false;
+
     const channel = supabase
       .channel('absensi-dashboard-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, () => {
-        fetchData();
-      })
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, debouncedFetch)
+      .subscribe((status) => {
+        realtimeOk = (status === 'SUBSCRIBED');
+      });
 
-    // Fallback polling tetap berjaga jika ada koneksi yang terputus
-    const interval = setInterval(fetchData, 30000);
+    // Polling sekarang BENAR-BENAR fallback:
+    // hanya jalan saat realtime gagal DAN tab sedang dilihat
+    const interval = setInterval(() => {
+      if (!realtimeOk && !document.hidden) fetchData();
+    }, 60000);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
+      if (pendingTimer) clearTimeout(pendingTimer);
     };
   }, [fetchData]);
 

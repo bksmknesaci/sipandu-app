@@ -186,6 +186,7 @@ SIPANDU-APP/
 │   └── PROJECT_CONTEXT.md
 │
 ├── lib/
+│   ├── appSettingsClient.js 
 │   ├── cacheHelpers.js
 │   ├── dbOptimize.js
 │   ├── getCurrentUser.js

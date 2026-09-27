@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, BookOpen, Eye, Target, Users } from 'lucide-react';
+import { getAppSettings } from '@/lib/appSettingsClient';
 
 export default function TentangSIPANDU() {
   const [settings, setSettings] = useState({ nama_sekolah: '', tentang: '', visi: '', misi: '', tim: '' });
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
+      const data = await getAppSettings();
       if (data) setSettings(data);
     };
     fetchSettings();

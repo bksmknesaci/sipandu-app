@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useTransition, useRef } from 'react';
+import { compressImage, COMPRESSION_PRESETS } from '@/lib/storageOptimize';
+import { clearAppSettingsCache } from '@/lib/appSettingsClient'; // ← di baris import atas
 import {
   getMajorLogosAction,
   uploadMajorLogoAction,
@@ -76,8 +78,10 @@ export default function MajorLogoManager() {
       setUploadingIndex(code);
       setMessage(null);
 
+      // SESUDAH — kompres 630KB → ±10-20KB (preset logoJurusan sudah ada):
+      const compressed = await compressImage(file, COMPRESSION_PRESETS.logoJurusan);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressed, `${code}-logo.png`);
       formData.append('code', code);
 
       const result = await uploadMajorLogoAction(formData);
@@ -111,8 +115,10 @@ export default function MajorLogoManager() {
       setMessage(null);
       const result = await saveMajorLogosAction(majorLogos);
       if (result.error) {
+        clearAppSettingsCache();  // ← tambahkan
         setMessage({ type: 'error', text: result.error });
       } else {
+        clearAppSettingsCache();  // ← tambahkan
         setMessage({ type: 'success', text: 'Logo jurusan berhasil disimpan!' });
         setTimeout(() => setMessage(null), 3000);
       }

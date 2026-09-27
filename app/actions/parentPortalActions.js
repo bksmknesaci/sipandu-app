@@ -39,7 +39,7 @@ export async function searchStudentByNIS(nis) {
 
 export async function getDashboardData(studentId, studentNisn, studentKelas = '', studentJurusan = '') {
   const now = new Date()
-  const today = now.toLocaleDateString('sv-SE')
+  const today = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
   const monthStr = String(currentMonth).padStart(2, '0')
@@ -82,7 +82,26 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
       getPJByClass(kelas, jurusan),
       TTL.PENANGGUNG_JAWAB
     ),
-    supabaseAdmin.from('tb_reward_siswa').select('nisn, reward_poin'),
+    getCached('reward_rank_all', async () => {
+  // Ambil bertahap 1000 baris — tabel reward seluruh sekolah bisa
+  // melewati batas 1000 PostgREST (rank diam-diam salah)
+  let all = [];
+  const BATCH = 1000;
+  let page = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await supabaseAdmin
+      .from('tb_reward_siswa')
+      .select('nisn, reward_poin')
+      .order('id', { ascending: true })
+      .range(page * BATCH, (page + 1) * BATCH - 1);
+    if (error) break;
+    all = all.concat(data || []);
+    hasMore = (data || []).length === BATCH;
+    page++;
+  }
+  return all;
+}, TTL.MINUTE * 10),
     supabaseAdmin.from('tb_penanganan_siswa').select('*').eq('siswa_id', studentId).single(),
   ]);
 
@@ -121,7 +140,7 @@ export async function getDashboardData(studentId, studentNisn, studentKelas = ''
     pelanggaranMonthly[m] = (pelanggaranMonthly[m] || 0) + (p.poin || 0)
   })
 
-  const allRewardEntries = rankAllRes.data || []
+  const allRewardEntries = rankAllRes || []
   const rankMap = {}
   allRewardEntries.forEach(r => {
     rankMap[r.nisn] = (rankMap[r.nisn] || 0) + (r.reward_poin || 0)

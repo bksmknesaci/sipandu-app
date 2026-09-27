@@ -78,6 +78,7 @@ export async function uploadUserPhotoAction(file) {
   const { error: uploadError } = await supabaseAdmin.storage
     .from('logos')
     .upload(fileName, buffer, { contentType: file.type, upsert: true })
+    .upload(fileName, buffer, { contentType: file.type, upsert: true, cacheControl: '604800' })
 
   if (uploadError) return { error: 'Gagal upload foto: ' + uploadError.message }
 
@@ -340,18 +341,30 @@ export async function endUserSession({ userId }) {
   } catch (e) { /* silent — cleanup function */ }
 }
 
-export async function getActiveSessions() {
-  // Hapus session stale (tidak ada heartbeat > 2 menit)
-  const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-  await supabaseAdmin
-    .from('user_sessions')
-    .delete()
-    .lt('last_active', twoMinAgo)
+// Throttle cleanup — DELETE cukup 1x per 5 menit
+let lastCleanupAt = 0
+const SESSION_CLEANUP_INTERVAL = 5 * 60 * 1000
 
+export async function getActiveSessions() {
+  const now = Date.now()
+  const fourMinAgo = new Date(now - 4 * 60 * 1000).toISOString()  // ganti nama variabel juga boleh: fourMinAgo
+
+  // SELECT langsung difilter — daftar yang tampil tetap sama persis
+  // (hanya session dengan heartbeat < 4 menit), tanpa perlu DELETE tiap kali
   const { data, error } = await supabaseAdmin
     .from('user_sessions')
     .select('*')
+    .gte('last_active', twoMinAgo)
     .order('logged_in_at', { ascending: true })
+
+  // Cleanup sesekali saja (sebelumnya: SETIAP panggilan)
+  if (now - lastCleanupAt > SESSION_CLEANUP_INTERVAL) {
+    lastCleanupAt = now
+    await supabaseAdmin
+      .from('user_sessions')
+      .delete()
+      .lt('last_active', twoMinAgo)
+  }
 
   return { data: data || [], error }
 }

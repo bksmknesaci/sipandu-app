@@ -72,11 +72,24 @@ export default function ActiveUsersTable() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchSessions()
-    const interval = setInterval(fetchSessions, 60000) // refresh setiap 60 detik
-    return () => clearInterval(interval)
-  }, [fetchSessions])
+  // SESUDAH:
+useEffect(() => {
+  fetchSessions()
+
+  // Refresh segera saat user kembali ke tab ini
+  const onVisible = () => { if (!document.hidden) fetchSessions() }
+  document.addEventListener('visibilitychange', onVisible)
+
+  // Polling hanya saat tab terlihat
+  const interval = setInterval(() => {
+    if (!document.hidden) fetchSessions()
+  }, 60000)
+
+  return () => {
+    clearInterval(interval)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
+}, [fetchSessions])
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -181,7 +194,7 @@ export default function ActiveUsersTable() {
         {!loading && sessions.length > 0 && (
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
             <p className="text-[10px] text-gray-400">
-              💡 Session otomatis dihapus setelah 2 menit tidak aktif
+              💡 Session otomatis dihapus setelah 4 menit tidak aktif
             </p>
             <button
               onClick={fetchSessions}

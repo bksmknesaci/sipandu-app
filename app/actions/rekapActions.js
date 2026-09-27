@@ -46,12 +46,34 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
   const startDate = `${academicStartYear}-07-01`;
   const endDate = `${academicStartYear + 1}-06-30`;
 
-  let { data: absensi, error: absensiError } = await supabaseAdmin
-    .from('absensi')
-    .select('*')
-    .in('siswa_id', studentIds)
-    .gte('tanggal', startDate)
-    .lte('tanggal', endDate);
+  // ── FIX: BATAS 1000 BARIS POSTGREST (akar masalah Rekap salah Alpha) ──
+  // Supabase memotong hasil query pada 1000 baris TANPA error.
+  // 1 kelas × 1 tahun ajaran = ribuan baris → record siswa bagian akhir
+  // terpotong diam-diam → Rekap menganggap mereka belum di-absen → Alpha.
+  // (Halaman Absensi Kelas tampil benar karena hanya mengambil 1 tanggal.)
+  // Solusi: ambil bertahap 1000 baris per batch + ORDER BY id agar urutan
+  // antar-batch stabil (WAJIB — tanpa ORDER BY, baris bisa terlewat/ganda).
+  let absensi = [];
+  let absensiError = null;
+  const BATCH_SIZE = 1000;
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabaseAdmin
+      .from('absensi')
+      .select('*')
+      .in('siswa_id', studentIds)
+      .gte('tanggal', startDate)
+      .lte('tanggal', endDate)
+      .order('id', { ascending: true })
+      .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+    if (error) { absensiError = error; break; }
+    absensi = [...absensi, ...(data || [])];
+    hasMore = (data || []).length === BATCH_SIZE;
+    page++;
+  }
 
   if (absensiError) return { error: absensiError.message };
 
@@ -61,34 +83,25 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
   if (date === today && currentHour >= 14) {
     const todayIsEffective = await isEffectiveDay(today);
 
-    if (todayIsEffective) {
-      const todayRecords = (absensi || []).filter(a => a.tanggal === today);
-      const presentIds = todayRecords.map(a => a.siswa_id);
-      const absentStudents = students.filter(s => !presentIds.includes(s.id));
+if (absentStudents.length > 0) {
+  const alphaInserts = absentStudents.map(s => ({
+    siswa_id: s.id,
+    tanggal: today,
+    status: 'Alpha',
+    input_by: 'Sistem Otomatis',
+    locked: true
+  }));
 
-      if (absentStudents.length > 0) {
-        const alphaInserts = absentStudents.map(s => ({
-          siswa_id: s.id,
-          tanggal: today,
-          status: 'Alpha',
-          input_by: 'Sistem Otomatis',
-          locked: true
-        }));
+  // Ambil baris yang baru di-insert — TANPA re-fetch satu tahun penuh
+  const { data: insertedAlphas } = await supabaseAdmin
+    .from('absensi')
+    .upsert(alphaInserts, { onConflict: 'siswa_id,tanggal', ignoreDuplicates: true })
+    .select('id, siswa_id, tanggal, status, input_by, locked, created_at, updated_at');
 
-        await supabaseAdmin
-          .from('absensi')
-          .upsert(alphaInserts, { onConflict: 'siswa_id,tanggal', ignoreDuplicates: true });
-
-        const { data: updatedAbsensi } = await supabaseAdmin
-          .from('absensi')
-          .select('*')
-          .in('siswa_id', studentIds)
-          .gte('tanggal', startDate)
-          .lte('tanggal', endDate);
-
-        absensi = updatedAbsensi || [];
-      }
-    } else {
+  if (insertedAlphas && insertedAlphas.length > 0) {
+    absensi = [...(absensi || []), ...insertedAlphas];
+  }
+} else {
       const { data: wrongAlphas } = await supabaseAdmin
         .from('absensi')
         .select('id')
@@ -97,21 +110,13 @@ export async function getRekapKehadiran({ date, tingkat, jurusan, userRole, user
         .eq('input_by', 'Sistem Otomatis');
 
       if (wrongAlphas && wrongAlphas.length > 0) {
-        const wrongIds = wrongAlphas.map(a => a.id);
-        await supabaseAdmin
-          .from('absensi')
-          .delete()
-          .in('id', wrongIds);
+  const wrongIds = wrongAlphas.map(a => a.id);
+  await supabaseAdmin.from('absensi').delete().in('id', wrongIds);
 
-        const { data: updatedAbsensi } = await supabaseAdmin
-          .from('absensi')
-          .select('*')
-          .in('siswa_id', studentIds)
-          .gte('tanggal', startDate)
-          .lte('tanggal', endDate);
-
-        absensi = updatedAbsensi || [];
-      }
+  // Hapus lokal — TANPA re-fetch satu tahun penuh
+  const wrongIdSet = new Set(wrongIds);
+  absensi = (absensi || []).filter(a => !wrongIdSet.has(a.id));
+}
     }
   }
 

@@ -10,30 +10,31 @@ export async function searchSiswa(query) {
     const term = query.trim().replace(/[%_]/g, '\\$&');
     const todayWIB = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
 
-    // ── OPTIMASI: 2 query paralel (sebelumnya sequential) ──
-    const [siswaRes, todayAbsensiRes] = await Promise.all([
-      supabaseAdmin
-        .from('siswa')
-        .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
-        .or(`nama.ilike.%${term}%,nisn.ilike.%${term}%,kelas.ilike.%${term}%`)
-        .order('nama', { ascending: true })
-        .limit(10),
-      supabaseAdmin
-        .from('absensi')
-        .select('siswa_id, status, created_at')
-        .eq('tanggal', todayWIB),
-    ]);
+    // Step 1: cari siswa (maks 10)
+    const { data } = await supabaseAdmin
+      .from('siswa')
+      .select('id, nisn, nama, kelas, jurusan, jenis_kelamin, status')
+      .or(`nama.ilike.%${term}%,nisn.ilike.%${term}%,kelas.ilike.%${term}%`)
+      .order('nama', { ascending: true })
+      .limit(10);
 
-    const data = siswaRes.data || [];
-    if (data.length === 0) return [];
+    const siswaList = data || [];
+    if (siswaList.length === 0) return [];
+
+    // Step 2: status hari ini HANYA untuk 10 siswa hasil pencarian
+    // (sebelumnya: absensi seluruh sekolah diunduh tiap ketikan —
+    //  terpotong batas 1000 baris saat sekolah besar + boros egress)
+    const ids = siswaList.map(s => s.id);
+    const { data: todayAbsensi } = await supabaseAdmin
+      .from('absensi')
+      .select('siswa_id, status')
+      .in('siswa_id', ids)
+      .eq('tanggal', todayWIB);
 
     const statusMap = {};
-    const ids = data.map(s => s.id);
-    (todayAbsensiRes.data || []).forEach(a => {
-      if (ids.includes(a.siswa_id)) statusMap[a.siswa_id] = a.status;
-    });
+    (todayAbsensi || []).forEach(a => { statusMap[a.siswa_id] = a.status; });
 
-    return data.map(s => ({ ...s, statusHariIni: statusMap[s.id] || null }));
+    return siswaList.map(s => ({ ...s, statusHariIni: statusMap[s.id] || null }));
   } catch (err) {
     console.error('searchSiswa exception:', err);
     return [];
