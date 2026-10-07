@@ -550,3 +550,14 @@ Catatan Penggunaan Nilai (Value Constraints)
 
 ## Supabase Storage Buckets (Update — 2026-09-28)
 * bukti-formulir — upload bukti SNBP/SNBT kini dengan cacheControl 604800 (7 hari)
+
+## Catatan Penggunaan Nilai (Update — 2026-10-08)
+* pkl_attendance
+* Foto selfie (selfie_url, check_out_selfie_url) dihapus otomatis oleh cleanupOldPklSelfies setelah > 1 hari — kini HANYA record yang masih memiliki selfie yang diproses, cap maksimal 50 iterasi per eksekusi, dan di-throttle 1x per 30 menit per server
+* Sebelumnya cleanup mengambil semua record lama tanpa filter → 200 baris yang sama diambil ulang selamanya setelah tabel melewati 200 baris lama → loop tak berujung yang menggantungkan seluruh server action (Rekap PKL & Absensi PKL macet total)
+* Cache server rekap PKL
+* getPklRekapHarian / getPklRekapBulanan / getPklRekapSemester / getPklStats di-cache 60 detik dengan key pkl_rekap_harian_* / pkl_rekap_bulanan_* / pkl_rekap_semester_* / pkl_rekap_stats_ — otomatis ter-invalidate oleh invalidateCacheByPrefix('pkl_') pada fungsi tulis (updatePklAttendanceStatus, insertPklAttendanceRecord, deleteCompletedPklData, resetAllPklData, savePklProfile)
+
+## Catatan Teknis: Pola Cleanup Aman (2026-10-08)
+* Setiap fungsi cleanup massal WAJIB memenuhi 3 syarat: (1) query hanya record yang BELUM diproses, (2) batas iterasi maksimal (guard), (3) throttle antar-eksekusi
+* Query cleanup tanpa filter "belum diproses" = loop tak berujung begitu data melewati ukuran batch

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { MapPin, Camera, Search, CheckCircle, XCircle, Clock, Building2, User, GraduationCap, Loader2, AlertTriangle, LogOut, LogIn, RefreshCw, ArrowLeft, ShieldCheck, Calendar, Timer } from 'lucide-react'
-import { getPklStudentData, savePklProfile, submitPklCheckIn, submitPklCheckOut, submitPlakSakitIzin, cleanupOldPklSelfies } from '@/app/actions/pklActions'
+import { getPklStudentData, savePklProfile, submitPklCheckIn, submitPklCheckOut, submitPklSakitIzin, cleanupOldPklSelfies } from '@/app/actions/pklActions'
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
 const DAY_NAMES_GETDAY = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
@@ -322,14 +322,20 @@ export default function AbsensiPKL() {
     if (!capturedPhoto) { showToast('Ambil foto selfie terlebih dahulu', 'error'); return }
     if (!note.trim()) { showToast('Alasan wajib diisi', 'error'); return }
     setSubmitting(true)
-    const res = await submitPklSakitIzin({ studentId: student.id, type: selectedType, photoBase64: capturedPhoto, note: note.trim(), latitude: gpsData?.lat, longitude: gpsData?.lng })
-    setSubmitting(false)
-    if (res.error) { showToast(res.error, 'error'); return }
-    const fresh = await getPklStudentData(nisn.trim())
-    if (!fresh.error) setTodayAtt(fresh.todayAttendance)
-    setAttStep('done'); setCapturedPhoto(null); setGpsData(null); setGpsStatus('')
-    showToast(`Absensi ${selectedType.toLowerCase()} berhasil dicatat!`)
-    cleanupOldPklSelfies().catch(() => {})
+    try {
+      const res = await submitPklSakitIzin({ studentId: student.id, type: selectedType, photoBase64: capturedPhoto, note: note.trim(), latitude: gpsData?.lat, longitude: gpsData?.lng })
+      if (res.error) { showToast(res.error, 'error'); return }
+      const fresh = await getPklStudentData(nisn.trim())
+      if (!fresh.error) setTodayAtt(fresh.todayAttendance)
+      setAttStep('done'); setCapturedPhoto(null); setGpsData(null); setGpsStatus('')
+      showToast(`Absensi ${selectedType.toLowerCase()} berhasil dicatat!`)
+      cleanupOldPklSelfies().catch(() => {})
+    } catch (e) {
+      console.error('handleSakitIzin error:', e)
+      showToast('Gagal menyimpan absensi ' + selectedType, 'error')
+    } finally {
+      setSubmitting(false) // spinner SELALU berhenti apa pun yang terjadi
+    }
   }
 
   const handleSakitIzinClick = (type) => {

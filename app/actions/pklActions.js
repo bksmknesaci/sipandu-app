@@ -463,7 +463,7 @@ async function fetchAttendanceBatch(studentIds, dateFilter = {}) {
   return allAtt
 }
 
-export async function getPklRekapHarian(date, filters = {}) {
+async function getPklRekapHarianInternal(date, filters = {}) {
   try {
     const { students } = await getPklStudents(filters)
     if (students.length === 0) return { students: [], date }
@@ -486,8 +486,12 @@ export async function getPklRekapHarian(date, filters = {}) {
     return { students: [], date }
   }
 }
+export async function getPklRekapHarian(date, filters = {}) {
+  return getCached(`pkl_rekap_harian_${date}_${JSON.stringify(filters || {})}`,
+    () => getPklRekapHarianInternal(date, filters), TTL.MINUTE)
+}
 
-export async function getPklRekapBulanan(year, month, filters = {}) {
+async function getPklRekapBulananInternal(year, month, filters = {}) {
   try {
     const { students } = await getPklStudents(filters)
     if (students.length === 0) return { students: [], year, month, daysInMonth: 0 }
@@ -547,8 +551,12 @@ export async function getPklRekapBulanan(year, month, filters = {}) {
     return { students: [], year, month, daysInMonth: 0 }
   }
 }
+export async function getPklRekapBulanan(year, month, filters = {}) {
+  return getCached(`pkl_rekap_bulanan_${year}_${month}_${JSON.stringify(filters || {})}`,
+    () => getPklRekapBulananInternal(year, month, filters), TTL.MINUTE)
+}
 
-export async function getPklRekapSemester(filters = {}) {
+async function getPklRekapSemesterInternal(filters = {}) {
   try {
     const { students } = await getPklStudents(filters)
     if (students.length === 0) return { students: [], semesterInfo: null }
@@ -623,8 +631,12 @@ export async function getPklRekapSemester(filters = {}) {
     return { students: [], semesterInfo: null }
   }
 }
+export async function getPklRekapSemester(filters = {}) {
+  return getCached(`pkl_rekap_semester_${JSON.stringify(filters || {})}`,
+    () => getPklRekapSemesterInternal(filters), TTL.MINUTE)
+}
 
-export async function getPklStats(filters = {}) {
+async function getPklStatsInternal(filters = {}) {
   try {
     const { students } = await getPklStudents(filters)
     const ids = students.map(s => s.student_id)
@@ -656,6 +668,10 @@ export async function getPklStats(filters = {}) {
     console.error('[getPklStats]', e)
     return { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, terlambat: 0, libur: 0, persentase: '0.0' }
   }
+}
+export async function getPklStats(filters = {}) {
+  return getCached(`pkl_rekap_stats_${JSON.stringify(filters || {})}`,
+    () => getPklStatsInternal(filters), TTL.MINUTE)
 }
 
 export async function getPklAttendanceDetail(id) {
@@ -778,16 +794,33 @@ export async function resetAllPklData() {
   return { success: true }
 }
 
+// ── Throttle: cleanup maksimal 1x per 30 menit per server ──
+let _lastPklSelfieCleanupAt = 0
+const PKL_SELFIE_CLEANUP_INTERVAL = 30 * 60 * 1000
+
 export async function cleanupOldPklSelfies() {
+  const now = Date.now()
+  if (now - _lastPklSelfieCleanupAt < PKL_SELFIE_CLEANUP_INTERVAL) {
+    return { deleted: 0, skipped: true }
+  }
+  _lastPklSelfieCleanupAt = now
+
   try {
     let totalDeleted = 0
     let hasMore = true
+    let guard = 0 // pengaman keras: maksimal 50 iterasi
     const todayWIB = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })
 
-    while (hasMore) {
+    while (hasMore && guard < 50) {
+      guard++
+
+      // FIX AKAR MASALAH: hanya ambil record yang MASIH punya selfie.
+      // Sebelumnya semua record lama diambil ulang tiap iterasi → setelah
+      // tabel melewati 200 baris lama, loop tidak pernah berhenti.
       const { data: old } = await supabaseAdmin.from('pkl_attendance')
         .select('id, selfie_url, check_out_selfie_url')
         .lt('attendance_date', todayWIB)
+        .or('selfie_url.not.is.null,check_out_selfie_url.not.is.null')
         .limit(200)
 
       if (!old || old.length === 0) { hasMore = false; break }
@@ -809,13 +842,18 @@ export async function cleanupOldPklSelfies() {
       }
 
       if (ids.length > 0) {
-        await supabaseAdmin.from('pkl_attendance')
+        const { error: updErr } = await supabaseAdmin.from('pkl_attendance')
           .update({ selfie_url: null, check_out_selfie_url: null })
           .in('id', ids)
+        if (updErr) { console.error('[cleanupPklSelfies] update error:', updErr); break }
       }
 
-      if (old.length < 200) hasMore = false
+      // record yang sudah di-null tidak akan lolos filter di atas →
+      // batch berikutnya pasti mengecil → berhenti alami saat 0
+      hasMore = old.length === 200
     }
+
+    if (guard >= 50) console.warn('[cleanupPklSelfies] cap iterasi tercapai — lanjut di pemanggilan berikutnya')
     return { deleted: totalDeleted }
   } catch (e) {
     console.error('[cleanupPklSelfies]', e)

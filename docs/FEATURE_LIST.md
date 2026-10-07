@@ -1524,6 +1524,15 @@ Status: ACTIVE
 
 ---
 
+## Absensi PKL (Update — 2026-10-08)
+- Fix tombol Sakit/Izin berputar selamanya: typo import submitPlakSakitIzin → submitPklSakitIzin (fungsi yang dipanggil tidak pernah terimpor → error senyap → spinner tidak pernah berhenti) — bug ini berdiri sendiri sejak lama, terpisah dari masalah jam server
+- handleSakitIzin dibungkus try/catch/finally — spinner selalu berhenti apa pun yang terjadi di masa depan
+- Tombol Cari tidak lagi menggantung (dulunya akibat jam cleanup infinite loop yang dipanggil di mount halaman ini — kini aman)
+
+Status: ACTIVE
+
+---
+
 ## Rekap Kehadiran PKL (Update — 2026-07-26)
 - Checkbox "Sembunyikan Selesai" sekarang berfungsi — fix bug `getCompletedPklStudentIds` memfilter kelas/jurusan di tabel `pkl_profiles` yang tidak memiliki kolom tersebut, diganti join ke tabel `siswa`
 - Badge ceklis (✓) untuk siswa status Selesai sekarang muncul di kolom Status tab Harian
@@ -1558,6 +1567,14 @@ Status: ACTIVE
 - Fix halaman 404 blank: File terpotong di tengah JSX — tab Bulanan dan Semester ditulis ulang lengkap
 ## Rekap Kehadiran PKL (Update — 2026-09-28)
 - fetchAttendanceBatch: pagination baris 1000 di dalam loop kelompok 100 siswa — satu titik perbaikan yang meliputi Rekap Harian, Bulanan, Semester, dan Stats (sebelumnya 1 kelompok siswa × 1 semester bisa terpotong di batas 1000 baris)
+
+Status: ACTIVE
+
+## Rekap Kehadiran PKL (Update — 2026-10-08)
+- Fix macet total halaman: akar masalah cleanupOldPklSelfies loop tak berujung (query tanpa filter "masih punya selfie" → 200 baris yang sama diambil ulang selamanya setelah tabel melewati 200 baris lama) → seluruh server action menggantung: data terjebak di fetch harian pertama (tab bulanan tanpa kolom tanggal, semester semua 0, filter mati, PDF blank, indikator "Rendering..." tanpa henti)
+- cleanupOldPklSelfies diperbaiki: hanya memproses record yang masih punya selfie + cap 50 iterasi + throttle 1x/30 menit per server
+- 5 perbaikan halaman: dropdown filter anti-timpa (merge state), effect fetch pola cancel standar (guard fetchRef dihapus), tombol "Coba Lagi" benar-benar memuat ulang (state reloadKey), path foto selfie modal diperbaiki (detailData.attendance.selfie_url), PDF tidak lagi meninggalkan jendela blank saat gagal
+- Data rekap harian/bulanan/semester/stats di-cache server 60 detik — otomatis segar setelah edit absensi (invalidasi prefix 'pkl_')
 
 Status: ACTIVE
 

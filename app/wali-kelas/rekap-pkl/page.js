@@ -165,9 +165,9 @@ export default function RekapPKL() {
   const [editNote, setEditNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [editDate, setEditDate] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const delRef = useRef(null)
   const rstRef = useRef(null)
-  const fetchRef = useRef(false)
 
   useEffect(() => { try { const s = localStorage.getItem('userData'); if(s) setUserData(JSON.parse(s)) } catch{} }, [])
   const role = userData?.role || ''
@@ -194,7 +194,12 @@ export default function RekapPKL() {
     init()
   }, [isWK, userData?.id])
 
-  useEffect(() => { getPklFilters().then(r => { if(r) setFilterOpts(r) }).catch() }, [])
+  useEffect(() => {
+  getPklFilters().then(r => {
+    if (r) setFilterOpts(prev => ({ ...prev, ...r })) // gabungkan — jangan timpa
+  }).catch()
+}, [])
+  // SESUDAH (komentar sementara — cleanup adalah tersangka kemacetan):
   useEffect(() => { const t = setTimeout(() => cleanupOldPklSelfies().catch(), 3000); return () => clearTimeout(t) }, [])
 
   useEffect(() => {
@@ -206,9 +211,7 @@ export default function RekapPKL() {
   useEffect(() => {
     if (!udLoaded) return
     if (isWK && !filters.kelas) return
-    if (fetchRef.current) return
     let cancel = false
-    fetchRef.current = true
     setLoading(true)
     setLoadingErr(null)
     const tabP = activeTab==='harian' ? getPklRekapHarian(selDate,filters) : activeTab==='bulanan' ? getPklRekapBulanan(selYear,selMonth,filters) : getPklRekapSemester(filters)
@@ -221,9 +224,9 @@ export default function RekapPKL() {
         setData(tR.students||[])
       }
     }).catch(e => { if(!cancel) { console.error(e); setLoadingErr('Gagal memuat data. Periksa koneksi internet.') } })
-    .finally(() => { if(!cancel) { setLoading(false); fetchRef.current=false } })
-    return () => { cancel=true; fetchRef.current=false }
-  }, [udLoaded, isWK, filters.kelas, filters.jurusan, filters.company, filters.status, activeTab, selDate, selMonth, selYear])
+    .finally(() => { if(!cancel) setLoading(false) })
+    return () => { cancel = true }
+  }, [udLoaded, isWK, filters.kelas, filters.jurusan, filters.company, filters.status, activeTab, selDate, selMonth, selYear, reloadKey])
 
   useEffect(() => { if(!isWK) { setActiveTab('harian'); setSelDate(new Date().toLocaleDateString('sv-SE')) } }, [isWK])
 
@@ -333,8 +336,6 @@ export default function RekapPKL() {
 
   const exportPDF = async () => {
     if (!data.length) { showToast('Tidak ada data','error'); return }
-    const w = window.open('','_blank')
-    if(!w) { showToast('Popup diblokir','error'); return }
     try {
       const ks = await getKopSuratSettings()
       const kop = await generateKopSuratHTML(ks)
@@ -387,6 +388,8 @@ export default function RekapPKL() {
         th += '</tbody></table>'
       }
       const printDate = new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'})
+      const w = window.open('','_blank')
+      if(!w) { showToast('Popup diblokir','error'); return }
       w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>${css}body{font-family:Arial,sans-serif;padding:20px}h3{text-align:center;margin:0;font-size:14px;text-transform:uppercase}p.sub{text-align:center;color:#666;font-size:12px;margin:2px 0 16px}@media print{body{margin:0}}</style></head><body>${kop}<div style="text-align:center"><h3>${title}</h3><p class="sub">${sub}</p>${kl?`<p class="sub">${kl}</p>`:''}${co?`<p class="sub">${co}</p>`:''}<p class="sub">Dicetak: ${printDate}</p></div>${th}<script>setTimeout(()=>window.print(),500)<\/script></body></html>`)
       w.document.close()
     } catch(e) { console.error(e); showToast('Gagal membuat PDF','error') }
@@ -446,7 +449,7 @@ export default function RekapPKL() {
       <div className="text-center py-12 px-4">
         <AlertTriangle size={40} className="mx-auto text-red-300 mb-3"/>
         <p className="text-red-600 font-semibold text-sm">{loadingErr}</p>
-        <button onClick={() => { setLoadingErr(null); setLoading(true) }} className="mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition flex items-center gap-2 mx-auto"><RotateCcw size={14}/>Coba Lagi</button>
+        <button onClick={() => setReloadKey(k => k+1)} className="mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition flex items-center gap-2 mx-auto"><RotateCcw size={14}/>Coba Lagi</button>
       </div>
     )
   } else if (loading && data.length === 0) {
@@ -774,22 +777,22 @@ export default function RekapPKL() {
               {/* Foto Selfie */}
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-gray-500 text-[10px] uppercase font-semibold mb-1.5 flex items-center gap-1"><Camera size={11}/>Selfie Masuk</p>{detailData.attendance?.selfie_url ? <img
-  src={getOptimizedImageUrl(detailData.selfie_url, 'medium')}
+  src={getOptimizedImageUrl(detailData.attendance.selfie_url, 'medium')}
   alt="Selfie masuk"
   loading="lazy"
   decoding="async"
   referrerPolicy="no-referrer"
   className="..."
-  onClick={() => setSelfieZoom(getOptimizedImageUrl(detailData.selfie_url, 'full'))}
+  onClick={() => setSelfieZoom(getOptimizedImageUrl(detailData.attendance.selfie_url, 'full'))}
 /> : <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center gap-1"><Camera size={24} className="text-gray-300"/><span className="text-[10px] text-gray-400">Tidak ada foto</span></div>}</div>
                 <div><p className="text-gray-500 text-[10px] uppercase font-semibold mb-1.5 flex items-center gap-1"><Camera size={11}/>Selfie Pulang</p>{detailData.attendance?.check_out_selfie_url ? <img
-  src={getOptimizedImageUrl(detailData.check_out_selfie_url, 'medium')}
+  src={getOptimizedImageUrl(detailData.attendance.check_out_selfie_url, 'medium')}
   alt="Selfie pulang"
   loading="lazy"
   decoding="async"
   referrerPolicy="no-referrer"
   className="..."
-  onClick={() => setSelfieZoom(getOptimizedImageUrl(detailData.check_out_selfie_url, 'full'))}
+  onClick={() => setSelfieZoom(getOptimizedImageUrl(detailData.attendance.check_out_selfie_url, 'full'))}
 /> : <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center gap-1"><Camera size={24} className="text-gray-300"/><span className="text-[10px] text-gray-400">{detailData.attendance?.check_out_time ? 'Tidak ada foto' : 'Belum absen pulang'}</span></div>}</div>
               </div>
 

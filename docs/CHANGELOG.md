@@ -1,5 +1,18 @@
 # Changelog SIPANDU
 
+## 2026-10-08 (Fix Infinite Loop cleanupOldPklSelfies + Pemulihan Rekap PKL & Absensi PKL + Cache Rekap PKL)
+- Akar masalah ditemukan: cleanupOldPklSelfies berputar tanpa henti — query mengambil SEMUA record lama tanpa filter "masih punya selfie" → setelah tabel pkl_attendance melewati 200 baris lama (posisi: 5521 baris), 200 baris yang sama diambil ulang selamanya → seluruh server action dari halaman mana pun menggantung
+- Bukti: API logs meledak 29.3k request per 60 menit (GET /rest/v1/pkl_attendance identik berulang = suara loop); indikator dev "Rendering..." tanpa henti; halaman Rekap PKL data terjebak di fetch harian pertama (tab bulanan tanpa kolom tanggal, semester semua 0, filter mati, PDF blank); halaman Absensi PKL tombol Cari menggantung
+- Loop ini juga penyumbang besar konsumsi Log Ingestion
+- pklActions.js: cleanupOldPklSelfies diperbaiki — query hanya record yang masih punya selfie (.or selfie_url.not.is.null,check_out_selfie_url.not.is.null), berhenti saat update gagal, cap 50 iterasi, throttle 1x per 30 menit per server (variabel module-level _lastPklSelfieCleanupAt)
+- pklActions.js: cache rekap PKL 60 detik — getPklRekapHarian/Bulanan/Semester/Stats di-rename menjadi Internal + wrapper getCached (key pkl_rekap_), otomatis ter-invalidate oleh invalidateCacheByPrefix('pkl_') yang sudah ada di fungsi tulis
+- Fix typo: submitPlakSakitIzin → submitPklSakitIzin (import di absensi-pkl/page.js + export di pklActions.js) — handleSakitIzin memanggil ejaan benar yang tidak pernah diimpor → ReferenceError senyap → spinner Sakit/Izin berputar selamanya sejak awal
+- absensi-pkl/page.js: handleSakitIzin dibungkus try/catch/finally — spinner selalu berhenti apa pun yang terjadi
+- rekap-pkl/page.js 5 perbaikan: setFilterOpts merge anti-timpa; effect fetch utama diganti pola cancel standar (fetchRef yang rentan macet dihapus) + state reloadKey; tombol "Coba Lagi" memicu fetch ulang via reloadKey; modal selfie memperbaiki path detailData.attendance.selfie_url & check_out_selfie_url (sebelumnya detailData.selfie_url → selalu placeholder); exportPDF window.open dipindah setelah data siap
+- Catatan dev: 404 mendadak di seluruh route setelah sesi edit panjang = cache dev server (.next) basi — solusi: hapus folder .next + restart npm run dev (bukan error kode); data aman
+- Dampak: halaman Rekap Kehadiran PKL & Absensi PKL berfungsi normal kembali (filter, tab bulanan lengkap dengan kolom tanggal, semester terisi, PDF hidup, Sakit/Izin tersimpan); volume request & log ke Supabase turun drastis
+- File diubah: app/actions/pklActions.js, app/wali-kelas/rekap-pkl/page.js, app/absensi-pkl/page.js
+
 ## 2026-09-28 (Fix Batas 1000 Baris PostgREST di Seluruh Query Besar + Optimasi Heartbeat/Log Ingestion)
 - Akar masalah ditemukan: Supabase memotong hasil query SELECT pada 1000 baris TANPA error — query rentang panjang kehilangan data diam-diam (rekap salah Alpha, ranking salah, pengajuan lama hilang dari daftar)
 - Audit SQL: pkl_attendance 5521 baris (5× batas), pkl_profiles 377, tb_absensi_sakit_izin 28, tb_reward_siswa 23
