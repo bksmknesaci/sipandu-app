@@ -561,3 +561,10 @@ Catatan Penggunaan Nilai (Value Constraints)
 ## Catatan Teknis: Pola Cleanup Aman (2026-10-08)
 * Setiap fungsi cleanup massal WAJIB memenuhi 3 syarat: (1) query hanya record yang BELUM diproses, (2) batas iterasi maksimal (guard), (3) throttle antar-eksekusi
 * Query cleanup tanpa filter "belum diproses" = loop tak berujung begitu data melewati ukuran batch
+
+## user_sessions (Update — 2026-10-11)
+* Constraint baru: user_sessions_user_id_key — UNIQUE (user_id) — WAJIB ada untuk upsert createUserSession (onConflict 'user_id'); tanpa ini upsert gagal dengan error "no unique or exclusion constraint matching the ON CONFLICT specification" dan session tidak pernah tersimpan
+
+## Catatan Penggunaan Nilai (Update — 2026-10-11)
+* user_sessions
+* Session kini benar-benar tersimpan (upsert per user_id) — sebelumnya tabel selalu kosong karena constraint UNIQUE tidak dibuat saat tabel dibuat; fitur Pengguna Aktif baru efektif bekerja sejak 11 Oktober 2026

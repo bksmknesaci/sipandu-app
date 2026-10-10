@@ -1,5 +1,13 @@
 # Changelog SIPANDU
 
+## 2026-10-11 (Fitur Pengguna Aktif Dihidupkan — Fix Constraint user_sessions + getActiveSessions)
+- Akar masalah ditemukan lewat Log Explorer (error Postgres berulang): "there is no unique or exclusion constraint matching the ON CONFLICT specification" — tabel user_sessions TIDAK memiliki constraint UNIQUE(user_id) padahal createUserSession memakai upsert onConflict 'user_id' → upsert gagal setiap kali sejak fitur dibuat 20 Juli 2026 → tabel selalu kosong, error senyap di console.error
+- SQL: DELETE duplikat + ALTER TABLE user_sessions ADD CONSTRAINT user_sessions_user_id_key UNIQUE (user_id)
+- userActions.js: Fix ReferenceError "twoMinAgo is not defined" di getActiveSessions — sisa penggantian nama variabel saat edit ambang 2→4 menit (deklarasi sudah fourMinAgo, pemakaian di .gte/.lt masih twoMinAgo) — kini konsisten fourMinAgo
+- Hasil: fitur Pengguna Aktif di Dashboard Admin berfungsi nyata untuk pertama kalinya — session login tersimpan, heartbeat memperbarui, daftar tampil akurat; error ON CONFLICT tidak lagi menambah entri log Postgres
+- Status audit akhir: trafik API normal (query per-siswa, bukan pola loop), egress aman; Log Ingestion 2.128GB/1GB (213%) & Log Query 131GB/100GB (131%) akibat loop historis + sesi debugging — reset siklus 21 Oktober, prognosis sehat setelahnya
+- File diubah: app/actions/userActions.js (+ SQL: constraint user_sessions)
+
 ## 2026-10-08 (Fix Infinite Loop cleanupOldPklSelfies + Pemulihan Rekap PKL & Absensi PKL + Cache Rekap PKL)
 - Akar masalah ditemukan: cleanupOldPklSelfies berputar tanpa henti — query mengambil SEMUA record lama tanpa filter "masih punya selfie" → setelah tabel pkl_attendance melewati 200 baris lama (posisi: 5521 baris), 200 baris yang sama diambil ulang selamanya → seluruh server action dari halaman mana pun menggantung
 - Bukti: API logs meledak 29.3k request per 60 menit (GET /rest/v1/pkl_attendance identik berulang = suara loop); indikator dev "Rendering..." tanpa henti; halaman Rekap PKL data terjebak di fetch harian pertama (tab bulanan tanpa kolom tanggal, semester semua 0, filter mati, PDF blank); halaman Absensi PKL tombol Cari menggantung

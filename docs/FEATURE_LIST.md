@@ -1337,6 +1337,12 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Dashboard (Update — 2026-10-11)
+- Pengguna Aktif kini benar-benar berfungsi: akar masalah ganda — (1) tabel user_sessions tanpa constraint UNIQUE(user_id) yang wajib untuk upsert createUserSession → session tidak pernah tersimpan sejak fitur dibuat 20 Juli (error ON CONFLICT senyap), (2) ReferenceError twoMinAgo/fourMinAgo di getActiveSessions sisa edit ambang 4 menit
+- Fix: constraint UNIQUE(user_id) via SQL + konsistensi nama variabel fourMinAgo
+
+Status: ACTIVE
+
 ## Modul Absensi PKL (Siswa)
 - Halaman Absensi PKL (/absensi-pkl) — standalone page tanpa AppShell
 - Login menggunakan NISN (pencarian di tabel siswa, fallback kolom nis)

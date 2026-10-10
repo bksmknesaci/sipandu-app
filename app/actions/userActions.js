@@ -354,7 +354,7 @@ export async function getActiveSessions() {
   const { data, error } = await supabaseAdmin
     .from('user_sessions')
     .select('*')
-    .gte('last_active', twoMinAgo)
+    .gte('last_active', fourMinAgo)
     .order('logged_in_at', { ascending: true })
 
   // Cleanup sesekali saja (sebelumnya: SETIAP panggilan)
@@ -363,7 +363,7 @@ export async function getActiveSessions() {
     await supabaseAdmin
       .from('user_sessions')
       .delete()
-      .lt('last_active', twoMinAgo)
+      .lt('last_active', fourMinAgo)
   }
 
   return { data: data || [], error }
