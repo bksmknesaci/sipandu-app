@@ -1,5 +1,15 @@
 # Changelog SIPANDU
 
+## 2026-10-12 (Integrasi Status Pindah/Keluar di Seluruh Halaman + Fix Batas 1000 Baris di Penanganan)
+- Akar masalah filter Mutasi 9 dari 11 siswa: query siswa di getPenangananData mengambil seluruh sekolah tanpa pagination → terpotong batas 1000 baris PostgREST → 2 siswa urutan nama terakhir (kebetulan siswa mutasi) hilang saat tanpa filter kelas — sementara filter per kelas normal karena di bawah 1000 baris
+- penangananActions.js: getPenangananData — query siswa kini bertahap 1000 baris per halaman (ORDER nama + id stabil); getPenangananStats — pola batch yang sama agar kartu statistik lengkap
+- Daftar Siswa: filter status menambah opsi "Keluar"; opsi "Non Aktif" kini berfungsi (status ≠ Aktif — konsisten dengan kartu statistik Non Aktif); opsi Keluar juga ditambahkan di modal Tambah/Edit
+- Beranda: Rekapitulasi Jumlah Siswa kini hanya menghitung siswa Aktif — total, L/P, kelas, dan jurusan otomatis berkurang saat ada siswa pindah/keluar
+- Absensi Kelas: getAbsensiByDate + getAbsensiStats memfilter status Aktif — siswa Pindah/Keluar hilang dari daftar absen DAN statistik sinkron dengan jumlah baris tabel (sebelumnya selisih: statistik 36 vs tabel 34; sekretaris tidak lagi bingung dengan nama siswa yang sudah keluar/pindah)
+- absensiActions.js: getSiswaByKelas juga memfilter status Aktif
+- Hasil verifikasi: Penanganan 11 mutasi lengkap (8 Pindah + 3 Keluar), Daftar Siswa (Pindah 8 / Keluar 3 / Non Aktif 11), Beranda rekapitulasi berkurang 11, Absensi sinkron
+- File diubah: app/actions/penangananActions.js, app/admin/siswa/page.js, app/components/RekapSiswa.js, app/actions/absensiActions.js
+
 ## 2026-10-11 (Fitur Pengguna Aktif Dihidupkan — Fix Constraint user_sessions + getActiveSessions)
 - Akar masalah ditemukan lewat Log Explorer (error Postgres berulang): "there is no unique or exclusion constraint matching the ON CONFLICT specification" — tabel user_sessions TIDAK memiliki constraint UNIQUE(user_id) padahal createUserSession memakai upsert onConflict 'user_id' → upsert gagal setiap kali sejak fitur dibuat 20 Juli 2026 → tabel selalu kosong, error senyap di console.error
 - SQL: DELETE duplikat + ALTER TABLE user_sessions ADD CONSTRAINT user_sessions_user_id_key UNIQUE (user_id)

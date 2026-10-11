@@ -568,3 +568,8 @@ Catatan Penggunaan Nilai (Value Constraints)
 ## Catatan Penggunaan Nilai (Update — 2026-10-11)
 * user_sessions
 * Session kini benar-benar tersimpan (upsert per user_id) — sebelumnya tabel selalu kosong karena constraint UNIQUE tidak dibuat saat tabel dibuat; fitur Pengguna Aktif baru efektif bekerja sejak 11 Oktober 2026
+
+## Catatan Penggunaan Nilai (Update — 2026-10-12)
+* siswa
+* status: nilai yang tersimpan di database adalah 'Aktif', 'Pindah', 'Keluar', 'Lulus' — "Non Aktif" di halaman Daftar Siswa adalah FILTER TAMPILAN (status ≠ Aktif), bukan nilai tersimpan
+* Halaman inti (Absensi Kelas, Rekap Kehadiran, Rekapitulasi Beranda, Penanganan) hanya memproses siswa Aktif; siswa Pindah/Keluar hanya tampil di Penanganan Siswa (baris bawah), Daftar Siswa, dan Rekap Pindah & Keluar

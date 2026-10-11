@@ -369,6 +369,11 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Menu Penanganan Siswa (Update — 2026-10-12)
+- Fix filter Mutasi: getPenangananData & getPenangananStats mengambil data bertahap 1000 baris per batch — sebelumnya terpotong batas PostgREST saat tanpa filter tingkat (9 dari 11 siswa mutasi)
+
+Status: ACTIVE
+
 ---
 
 ## Menu Rekap Pindah & Keluar (Administrator)
@@ -969,6 +974,11 @@ Status: ACTIVE
 
 Status: ACTIVE
 
+## Absensi Kehadiran — Sekretaris (Update — 2026-10-12)
+- Daftar siswa hanya menampilkan siswa Aktif (getAbsensiByDate) dan statistik sinkron (getAbsensiStats terfilter) — siswa Pindah/Keluar hilang dari tabel absensi dan jumlah kartu statistik
+
+Status: ACTIVE
+
 ---
 
 ## Rekap Kehadiran (Update)
@@ -1180,6 +1190,11 @@ Status: ACTIVE
 - Tambah server action getHomePelanggaranChart() di pelanggaranActions.js
 - Hapus data mockup hardcoded (allRewardData, allPelanggaranData) dari page.js
 - Grafik otomatis sinkron dengan setiap entri reward/pelanggaran baru
+
+Status: ACTIVE
+
+## Beranda (Update — 2026-10-12)
+- Rekapitulasi Jumlah Siswa hanya menghitung siswa berstatus Aktif — jumlah kelas, jurusan, L/P, dan total otomatis berkurang saat ada siswa pindah/keluar
 
 Status: ACTIVE
 
@@ -1591,6 +1606,11 @@ Status: ACTIVE
 - Hapus tombol Export CSV — cukup gunakan Cetak Data
 - Kartu statistik dinamis mengikuti filter — Total Siswa, Total Kelas, Total Rombel, Aktif, Non Aktif berubah saat filter diterapkan
 - Total Jurusan diganti Total Rombel — menghitung gabungan unik kelas + jurusan (contoh: "X TKR 1", "X RPL 2") bukan jurusan saja
+
+Status: ACTIVE
+
+## Data Siswa (Update — 2026-10-12)
+- Filter status: tambah opsi "Keluar"; opsi "Non Aktif" kini berfungsi — menampilkan semua status ≠ Aktif (Pindah/Keluar/Lulus), konsisten dengan kartu statistik
 
 Status: ACTIVE
 

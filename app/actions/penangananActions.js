@@ -51,26 +51,50 @@ export async function getPenangananFilters() {
 
 export async function getPenangananData(filters = {}) {
   try {
-    let query = supabaseAdmin.from('siswa').select('*').in('status', ['Aktif', 'Pindah', 'Keluar'])
+    // ── FIX BATAS 1000 BARIS POSTGREST ──
+    // Tanpa filter tingkat, query mengambil seluruh sekolah (>1000 baris) dan
+    // terpotong diam-diam di 1000 — siswa urutan nama terakhir hilang
+    // (itulah sebabnya filter Mutasi menampilkan 9 dari 11 siswa).
+    // Solusi: bangun ulang query per halaman 1000 baris + ORDER stabil.
+    const buildSiswaQuery = () => {
+      let q = supabaseAdmin.from('siswa').select('*').in('status', ['Aktif', 'Pindah', 'Keluar']);
 
-    if (filters?.userRole === 'Wali Kelas') {
-      const parsed = parseKelasJurusan(filters.userKelas)
-      const jurusan = (filters?.userJurusan || '').trim() || parsed.jurusan
-      if (parsed.tingkat) query = query.eq('kelas', parsed.tingkat)
-      if (jurusan) query = query.eq('jurusan', jurusan)
-    } else {
-      if (filters?.tingkat) query = query.eq('kelas', filters.tingkat)
-      if (filters?.jurusan) query = query.eq('jurusan', filters.jurusan)
+      if (filters?.userRole === 'Wali Kelas') {
+        const parsed = parseKelasJurusan(filters.userKelas);
+        const jurusan = (filters?.userJurusan || '').trim() || parsed.jurusan;
+        if (parsed.tingkat) q = q.eq('kelas', parsed.tingkat);
+        if (jurusan) q = q.eq('jurusan', jurusan);
+      } else {
+        if (filters?.tingkat) q = q.eq('kelas', filters.tingkat);
+        if (filters?.jurusan) q = q.eq('jurusan', filters.jurusan);
+      }
+
+      if (filters?.search) {
+        const safeSearch = filters.search.replace(/[%_]/g, '\\$&');
+        q = q.or(`nama.ilike.%${safeSearch}%,nisn.ilike.%${safeSearch}%`);
+      }
+      return q;
+    };
+
+    let siswaList = [];
+    let queryError = null;
+    const PAGE = 1000;
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await buildSiswaQuery()
+        .order('nama', { ascending: true })
+        .order('id', { ascending: true })   // tie-breaker — pagination harus stabil
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) { queryError = error; break; }
+      siswaList = siswaList.concat(data || []);
+      hasMore = (data || []).length === PAGE;
+      page++;
     }
 
-    if (filters?.search) {
-      const safeSearch = filters.search.replace(/[%_]/g, '\\$&')
-      query = query.or(`nama.ilike.%${safeSearch}%,nisn.ilike.%${safeSearch}%`)
-    }
-
-    const { data: siswaList, error } = await query.order('nama', { ascending: true })
-    if (error) return { data: [], error: error.message }
-    if (!siswaList || siswaList.length === 0) return { data: [] }
+    if (queryError) return { data: [], error: queryError.message };
+    if (siswaList.length === 0) return { data: [] };
 
     const nisns = siswaList.map(s => s.nisn).filter(Boolean)
     if (nisns.length === 0) return { data: [] }
@@ -146,7 +170,21 @@ export async function getPenangananData(filters = {}) {
 
 export async function getPenangananStats() {
   try {
-    const { data: siswa } = await supabaseAdmin.from('siswa').select('nisn, status').in('status', ['Aktif', 'Pindah', 'Keluar'])
+    let siswa = [];
+{
+  const PAGE = 1000;
+  let pg = 0;
+  let more = true;
+  while (more) {
+    const { data } = await supabaseAdmin.from('siswa').select('nisn, status')
+      .in('status', ['Aktif', 'Pindah', 'Keluar'])
+      .order('id', { ascending: true })
+      .range(pg * PAGE, (pg + 1) * PAGE - 1);
+    siswa = siswa.concat(data || []);
+    more = (data || []).length === PAGE;
+    pg++;
+  }
+}
     const nisns = (siswa || []).map(s => s.nisn).filter(Boolean)
 
     // Gunakan batch query agar data lengkap

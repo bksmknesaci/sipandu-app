@@ -128,12 +128,15 @@ export default function RekapSiswa({ settings }) {
   // ============================================
   // HITUNG STATISTIK
   // ============================================
-  const totalSiswa = siswaData.length;
-  const maleCount = siswaData.filter(s => s.jenis_kelamin === 'L').length;
-  const femaleCount = siswaData.filter(s => s.jenis_kelamin === 'P').length;
+  // ── FIX: hanya siswa AKTIF yang dihitung — Pindah/Keluar/Lulus tidak ──
+const activeSiswa = siswaData.filter(s => (s.status || '').trim() === 'Aktif');
 
-  const tingkatGroups = {};
-  siswaData.forEach(s => {
+const totalSiswa = activeSiswa.length;
+const maleCount = activeSiswa.filter(s => s.jenis_kelamin === 'L').length;
+const femaleCount = activeSiswa.filter(s => s.jenis_kelamin === 'P').length;
+
+const tingkatGroups = {};
+activeSiswa.forEach(s => {
     const kelas = (s.kelas || '').trim();
     let tingkat = kelas.split(/\s+/)[0];
     if (!['X', 'XI', 'XII'].includes(tingkat)) tingkat = 'Lainnya';
@@ -183,7 +186,7 @@ export default function RekapSiswa({ settings }) {
   ];
 
   const majorsList = fixedMajors.map(major => {
-    const count = siswaData.filter(s => {
+    const count = activeSiswa.filter(s => {
       const j = (s.jurusan || '').trim().toUpperCase();
       const k = (s.kelas || '').trim().toUpperCase();
       return j.startsWith(major.code) || k.includes(major.code);

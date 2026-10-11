@@ -49,6 +49,8 @@ export async function getSiswaByKelas(kelas, jurusan) {
   let query = supabaseAdmin.from('siswa').select('*')
   if (kelas) query = query.eq('kelas', kelas)
   if (jurusan) query = query.ilike('jurusan', `%${jurusan}%`)
+  // ── FIX: hanya siswa Aktif — Pindah/Keluar tidak muncul di daftar absen ──
+  query = query.eq('status', 'Aktif')
   const { data, error } = await query.order('nama', { ascending: true })
   if (error) return { siswa: [], error: error.message }
   return { siswa: data || [] }
@@ -58,6 +60,8 @@ export async function getAbsensiByDate(tanggal, kelas, jurusan) {
   let siswaQuery = supabaseAdmin.from('siswa').select('*').order('nama', { ascending: true })
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas)
   if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
+  // ── FIX: hanya siswa Aktif — Pindah/Keluar tidak muncul di daftar absen ──
+  siswaQuery = siswaQuery.eq('status', 'Aktif')
   const { data: siswaList, error: siswaError } = await siswaQuery
   if (siswaError) return { data: [], error: siswaError.message }
   if (!siswaList || siswaList.length === 0) return { data: [], error: null }
@@ -73,6 +77,8 @@ export async function getAbsensiStats(tanggal, kelas, jurusan) {
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas)
   if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
+  // ── FIX: sinkron dengan getAbsensiByDate — hanya siswa Aktif yang dihitung ──
+  siswaQuery = siswaQuery.eq('status', 'Aktif')
   const { data: siswaList } = await siswaQuery
   const siswaIds = (siswaList || []).map(s => s.id); const totalSiswa = siswaIds.length
   if (totalSiswa === 0) return { total: 0, hadir: 0, sakit: 0, izin: 0, alpha: 0, belum: 0 }
@@ -118,6 +124,8 @@ export async function submitAbsensi(tanggal, kelas, jurusan, records = null) {
   }
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
   if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
+  // ── FIX: hanya siswa Aktif — Pindah/Keluar tidak muncul di daftar absen ──
+  siswaQuery = siswaQuery.eq('status', 'Aktif')
   const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
   const siswaIds = siswaList.map(s => s.id)
   const { error } = await supabaseAdmin.from('absensi').update({ locked: true, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)

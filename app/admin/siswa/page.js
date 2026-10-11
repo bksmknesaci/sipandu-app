@@ -66,8 +66,10 @@ export default function ManajemenSiswa() {
     const kelasParts = (s.kelas || '').trim().split(/\s+/);
     const studentKelasGroup = kelasParts.length > 1 ? kelasParts.slice(1).join(' ') : (s.jurusan || '');
     const matchKelasGroup = !filterJurusan || studentKelasGroup === filterJurusan;
-    const matchStatus = !filterStatus || s.status === filterStatus;
-    return matchSearch && matchTingkat && matchKelasGroup && matchStatus;
+    // konsisten dengan kartu statistik "Non Aktif":
+    const matchStatus = !filterStatus ||
+     (filterStatus === 'Non Aktif' ? s.status !== 'Aktif' : s.status === filterStatus);
+       return matchSearch && matchTingkat && matchKelasGroup && matchStatus;
   });
 
   const totalPages = Math.ceil(filteredSiswa.length / itemsPerPage);
@@ -254,7 +256,7 @@ export default function ManajemenSiswa() {
               <div className="relative md:col-span-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18}/><input type="text" placeholder="Cari Nama / NISN / No WA..." style={blackText} className="w-full pl-10 pr-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
               <select style={blackText} className="border rounded-lg py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)}><option value="">Semua Kelas</option>{tingkatList.map(t => <option key={t} value={t}>{t}</option>)}</select>
               <select style={blackText} className="border rounded-lg py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={filterJurusan} onChange={(e) => setFilterJurusan(e.target.value)}><option value="">Semua Jurusan</option>{kelasGroupList.map(k => <option key={k} value={k}>{k}</option>)}</select>
-              <select style={blackText} className="border rounded-lg py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Non Aktif">Non Aktif</option><option value="Lulus">Lulus</option><option value="Pindah">Pindah</option></select>
+              <select style={blackText} className="border rounded-lg py-2.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Non Aktif">Non Aktif</option><option value="Lulus">Lulus</option><option value="Pindah">Pindah</option><option value="Keluar">Keluar</option></select>
             </div>
           </div>
 
@@ -374,7 +376,7 @@ export default function ManajemenSiswa() {
               <div><label className="text-xs font-semibold text-gray-500 block mb-1">Nama Lengkap</label><input type="text" name="nama" value={formData.nama} onChange={handleInputChange} style={blackText} className={inputClass} placeholder="Nama Lengkap Siswa"/></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-xs font-semibold text-gray-500 block mb-1">Jenis Kelamin</label><select name="jenis_kelamin" value={formData.jenis_kelamin} onChange={handleInputChange} style={blackText} className={inputClass}><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
-                <div><label className="text-xs font-semibold text-gray-500 block mb-1">Status</label><select name="status" value={formData.status} onChange={handleInputChange} style={blackText} className={inputClass}><option value="Aktif">Aktif</option><option value="Non Aktif">Non Aktif</option><option value="Lulus">Lulus</option><option value="Pindah">Pindah</option></select></div>
+                <div><label className="text-xs font-semibold text-gray-500 block mb-1">Status</label><select name="status" value={formData.status} onChange={handleInputChange} style={blackText} className={inputClass}><option value="Aktif">Aktif</option><option value="Non Aktif">Non Aktif</option><option value="Lulus">Lulus</option><option value="Pindah">Pindah</option><option value="Keluar">Keluar</option></select></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-xs font-semibold text-gray-500 block mb-1">Kelas</label><select name="kelas" value={formData.kelas?.split(' ')[0] || ''} onChange={(e) => { const tingkat = e.target.value; const jurusan = formData.jurusan || ''; setFormData({ ...formData, kelas: jurusan ? `${tingkat} ${jurusan}` : tingkat }); }} style={blackText} className={inputClass}><option value="">Pilih Kelas</option>{tingkatList.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
