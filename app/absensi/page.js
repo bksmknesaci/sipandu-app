@@ -4,11 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   CalendarDays, Users, UserCheck, HeartPulse, Shield, AlertTriangle,
   Clock, CheckCircle, Save, Lock, GraduationCap, Filter,
-  Send, X, XCircle, MessageCircle, Loader2
+  Send, X, XCircle, MessageCircle, Loader2, BellRing
 } from 'lucide-react'
 import {
   getAllKelas, getKelasFilters, getAbsensiByDate, batchUpsertAbsensi, getAbsensiStats,
-  submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest, getUserKelasInfo
+  submitAbsensi, isAbsensiSubmitted, createEditRequest, checkPendingRequest, getUserKelasInfo, getPendingEditRequestsForApprover, approveEditRequest, rejectEditRequest
 } from '@/app/actions/absensiActions'
 // [WA] Import fungsi WhatsApp
 import { getAlphaStudentsForWA, executeSendWA } from '@/app/actions/whatsappActions'
@@ -69,10 +69,11 @@ export default function AbsensiKehadiran() {
   const [selectedDate, setSelectedDate] = useState(today)
   const isAdmin = userData?.role === 'Administrator'
   const isSekretaris = userData?.role === 'Sekretaris Kelas'
-  const fetchDate = isAdmin ? selectedDate : today
-  const activeDateDisplay = isAdmin
-    ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-    : todayDisplay
+  const isWaliKelas = userData?.role === 'Wali Kelas'
+  const fetchDate = (isAdmin || isWaliKelas) ? selectedDate : today
+  const activeDateDisplay = (isAdmin || isWaliKelas)
+  ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  : todayDisplay
 
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -87,6 +88,53 @@ export default function AbsensiKehadiran() {
   const [waModal, setWaModal] = useState(null) // null | 'confirm' | 'sending' | 'result'
   const [waAlphaStudents, setWaAlphaStudents] = useState([])
   const [waResult, setWaResult] = useState(null)
+
+  // ── Modal tinjauan revisi absensi (Admin & WK) ──
+  const [pendingRequests, setPendingRequests] = useState([])
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewSubmitting, setReviewSubmitting] = useState(null) // { id, action }
+  const [reviewError, setReviewError] = useState(null)
+
+  useEffect(() => {
+    const loadPending = async () => {
+      if (!userData?.id) return
+      if (!(userData.role === 'Administrator' || userData.role === 'Wali Kelas')) return
+      const res = await getPendingEditRequestsForApprover(userData.id)
+      if (res?.data) setPendingRequests(res.data)
+      // Datang dari klik notifikasi (?review=<id>) → langsung buka modal tinjauan
+      try {
+        const rid = new URLSearchParams(window.location.search).get('review')
+        if (rid && res?.data?.some(r => String(r.id) === String(rid))) setShowReviewModal(true)
+      } catch {}
+    }
+    loadPending()
+  }, [userData])
+
+  const handleReviewAction = async (req, action) => {
+    if (reviewSubmitting) return
+    setReviewSubmitting({ id: req.id, action })
+    setReviewError(null)
+    try {
+      const res = action === 'approve'
+        ? await approveEditRequest(req.id, userData.id, req.kelas, req.jurusan, req.tanggal)
+        : await rejectEditRequest(req.id, userData.id)
+      if (res?.error) { setReviewError(res.error); setReviewSubmitting(null); return }
+
+      const remaining = pendingRequests.filter(p => p.id !== req.id)
+      setPendingRequests(remaining)
+      if (remaining.length === 0) setShowReviewModal(false)
+      showToast(
+        action === 'approve'
+          ? `Revisi kelas ${req.kelas} ${req.jurusan || ''} tgl ${req.tanggal} DISETUJUI — notifikasi terkirim ke ${req.pemohon_nama}`
+          : `Revisi kelas ${req.kelas} ${req.jurusan || ''} tgl ${req.tanggal} ditolak — notifikasi terkirim ke ${req.pemohon_nama}`,
+        action === 'approve' ? 'success' : 'info'
+      )
+      if (String(req.tanggal) === String(fetchDate)) checkSubmitted()
+    } catch (e) {
+      setReviewError(e.message || 'Terjadi kesalahan')
+    }
+    setReviewSubmitting(null)
+  }
 
   useEffect(() => {
     if (userData?.role !== 'Sekretaris Kelas') return
@@ -108,43 +156,45 @@ export default function AbsensiKehadiran() {
   useEffect(() => { try { const stored = localStorage.getItem('userData'); if (stored) setUserData(JSON.parse(stored)) } catch {} }, [])
   useEffect(() => { const init = async () => { setLoading(true); const kelasRes = await getAllKelas(); if (kelasRes.kelas) setKelasList(kelasRes.kelas); setLoading(false) }; init() }, [])
   useEffect(() => { const fetchFilters = async () => { const res = await getKelasFilters(); if (res.kelasJurusanList) setKelasJurusanList(res.kelasJurusanList) }; fetchFilters() }, [])
+    // ── #3: auto-resolusi kelas binaan untuk Sekretaris DAN Wali Kelas ──
   useEffect(() => {
-    if (userData && userData.role === 'Sekretaris Kelas' && userData.id) {
-      const initSekretarisKelas = async () => {
+    if (userData && (userData.role === 'Sekretaris Kelas' || userData.role === 'Wali Kelas') && userData.id) {
+      const initKelasBinean = async () => {
+        const applyLocal = () => {
+          let tingkat = (userData.kelas || '').trim()
+          let jur = (userData.jurusan || '').trim()
+          if (!jur && tingkat.includes(' ')) {          // dukung bentuk gabungan "XI TKJ"
+            const parsed = parseKelasJurusan(tingkat)
+            tingkat = parsed.tingkat; jur = parsed.jurusan || ''
+          }
+          const full = jur ? `${tingkat} ${jur}` : tingkat
+          setSelectedTingkat(tingkat); setSelectedJurusan(jur)
+          setSelectedKelas(full); setSekretarisFullKelas(full)
+          setKelasNotFound(false)
+        }
         try {
           const dbInfo = await getUserKelasInfo(userData.id)
           if (dbInfo.kelas) {
             setSelectedTingkat(dbInfo.kelas.trim())
             setSelectedJurusan(dbInfo.jurusan ? dbInfo.jurusan.trim() : '')
             const full = dbInfo.jurusan ? `${dbInfo.kelas.trim()} ${dbInfo.jurusan.trim()}` : dbInfo.kelas.trim()
-            setSelectedKelas(full)
-            setSekretarisFullKelas(full)
+            setSelectedKelas(full); setSekretarisFullKelas(full)
             setKelasNotFound(false)
           } else {
-            const parsed = parseKelasJurusan(userData.kelas)
-            setSelectedTingkat(parsed.tingkat)
-            setSelectedJurusan(parsed.jurusan)
-            setSelectedKelas(userData.kelas)
-            setSekretarisFullKelas(userData.kelas)
-            setKelasNotFound(false)
+            applyLocal()
           }
         } catch (e) {
-          console.error('Gagal ambil kelas sekretaris dari DB:', e)
-          const parsed = parseKelasJurusan(userData.kelas)
-          setSelectedTingkat(parsed.tingkat)
-          setSelectedJurusan(parsed.jurusan)
-          setSelectedKelas(userData.kelas)
-          setSekretarisFullKelas(userData.kelas)
-          setKelasNotFound(false)
+          console.error('Gagal ambil kelas dari DB:', e)
+          applyLocal()
         }
       }
-      initSekretarisKelas()
+      initKelasBinean()
     }
   }, [userData])
   useEffect(() => { if (userData?.role !== 'Administrator') return; if (selectedTingkat && selectedJurusan) { setSelectedKelas(`${selectedTingkat} ${selectedJurusan}`); setKelasNotFound(false) } else { setSelectedKelas(''); setKelasNotFound(false) } }, [selectedTingkat, selectedJurusan, userData])
 
-  const handleTingkatChange = (val) => { setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
-  const handleJurusanChange = (val) => { setSelectedJurusan(val) }
+  const handleTingkatChange = (val) => { if (userData?.role !== 'Administrator') return; setSelectedTingkat(val); setSelectedJurusan(''); setSelectedKelas(''); setKelasNotFound(false) }
+  const handleJurusanChange = (val) => { if (userData?.role !== 'Administrator') return; setSelectedJurusan(val) }
   const tingkatOptions = [...new Set(kelasJurusanList.map(c => c.kelas))].sort()
   const jurusanOptions = selectedTingkat
     ? [...new Set(kelasJurusanList.filter(c => c.kelas === selectedTingkat).map(c => c.jurusan))].sort()
@@ -153,7 +203,7 @@ export default function AbsensiKehadiran() {
   useEffect(() => {
     const checkTime = () => {
       setCurrentTime(formatWIBTime())
-      if (userData && userData.role === 'Sekretaris Kelas') {
+      if (userData && (userData.role === 'Sekretaris Kelas' || userData.role === 'Wali Kelas')) {
         const { hour, minute } = getWIBHourMinutes(); const totalMin = hour * 60 + minute
         if (totalMin < 9 * 60 + 5) { setWithinTime(false); setTimeStatus('before') }
         else if (totalMin > 14 * 60 + 40) { setWithinTime(false); setTimeStatus('after') }
@@ -187,13 +237,15 @@ export default function AbsensiKehadiran() {
 
   useEffect(() => { if (selectedKelas) checkSubmitted() }, [selectedKelas, checkSubmitted])
 
-  const canEdit = isAdmin || (isSekretaris && withinTime && selectedKelas === sekretarisFullKelas && sekretarisFullKelas && (!isSubmitted || hasApprovedRequest))
+  const canEdit = isAdmin
+  || (isSekretaris && withinTime && selectedKelas === sekretarisFullKelas && sekretarisFullKelas && (!isSubmitted || hasApprovedRequest))
+  || (isWaliKelas && sekretarisFullKelas && selectedKelas === sekretarisFullKelas)
 
   const handleBadgeClick = async (siswa, newStatus) => {
     if (!canEdit) return
-    if (isSekretaris && siswa.locked) return
-    if (isSekretaris && !['Hadir', 'Alpha'].includes(newStatus)) return
-    setSiswaList(prev => prev.map(s => s.id === siswa.id ? { ...s, status: newStatus, input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator' } : s))
+    if (isSekretaris && siswa.locked) return   // WK tetap boleh edit baris terkunci (hak pembina)
+    if ((isSekretaris || isWaliKelas) && !['Hadir', 'Alpha'].includes(newStatus)) return
+    setSiswaList(prev => prev.map(s => s.id === siswa.id ? { ...s, status: newStatus, input_by: isSekretaris ? 'Sekretaris Kelas' : (isWaliKelas ? 'Wali Kelas' : 'Administrator') } : s))
     setStats(prev => {
       const oldStatus = siswa.status; const newStats = { ...prev }
       if (oldStatus && oldStatus !== newStatus) {
@@ -208,14 +260,14 @@ export default function AbsensiKehadiran() {
   const handleSaveAll = async () => {
     const records = siswaList.filter(s => s.status && s.status !== null).map(s => ({
       siswa_id: s.id, tanggal: fetchDate, status: s.status,
-      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : (isSekretaris ? 'Sekretaris Kelas' : 'Administrator'),
+      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : (isSekretaris ? 'Sekretaris Kelas' : isWaliKelas ? 'Wali Kelas' : 'Administrator'),
       locked: false
     }))
     if (records.length === 0) { showToast('Belum ada data absensi untuk disimpan', 'error'); return }
     setSaving(true)
     const result = await batchUpsertAbsensi(records)
     if (result.error) { showToast(result.error, 'error'); setSaving(false); return }
-    if (isSekretaris && hasApprovedRequest) {
+    if ((isSekretaris && hasApprovedRequest) || (isWaliKelas && isSubmitted)) {
       const lockResult = await submitAbsensi(fetchDate, selectedTingkat, selectedJurusan)
       if (lockResult.error) { showToast('Gagal mengunci: ' + lockResult.error, 'error') }
       else { setIsSubmitted(true); setHasApprovedRequest(false); showToast(`${result.count} data absensi berhasil direvisi dan dikunci kembali!`) }
@@ -227,7 +279,7 @@ export default function AbsensiKehadiran() {
     if (!canEdit) return; const belum = siswaList.filter(s => !s.status)
     if (belum.length === 0) { showToast('Semua siswa sudah memiliki status', 'info'); return }
     setSaving(true)
-    const records = belum.map(s => ({ siswa_id: s.id, tanggal: fetchDate, status: 'Hadir', input_by: isSekretaris ? 'Sekretaris Kelas' : 'Administrator', locked: false }))
+    const records = belum.map(s => ({ siswa_id: s.id, tanggal: fetchDate, status: 'Hadir', input_by: isSekretaris ? 'Sekretaris Kelas' : isWaliKelas ? 'Wali Kelas' : 'Administrator', locked: false }))
     const result = await batchUpsertAbsensi(records)
     if (result.error) { showToast(result.error, 'error') } else { showToast(`${result.count} siswa ditandai Hadir!`) }
     setSaving(false); fetchData()
@@ -239,7 +291,7 @@ export default function AbsensiKehadiran() {
     setIsSubmitting(true)
     const records = siswaList.filter(s => s.status).map(s => ({
       siswa_id: s.id, tanggal: fetchDate, status: s.status,
-      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : 'Sekretaris Kelas',
+      input_by: (s.input_by === 'QR Mandiri' || s.input_by === 'Sakit/Izin Online') ? s.input_by : (isWaliKelas ? 'Wali Kelas' : 'Sekretaris Kelas'),
       locked: false
     }))
     const saveResult = await batchUpsertAbsensi(records)
@@ -347,6 +399,27 @@ export default function AbsensiKehadiran() {
         <p className="text-sm text-gray-500 mt-1">{activeDateDisplay}</p>
       </div>
 
+      {/* BANNER PERMINTAAN REVISI (Admin & WK) */}
+      {(isAdmin || isWaliKelas) && pendingRequests.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <BellRing size={20} className="animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-amber-800">
+              {pendingRequests.length} permintaan revisi absensi menunggu {isWaliKelas ? 'persetujuan Anda' : 'persetujuan'}
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5 truncate">
+              Terbaru: {pendingRequests[0].pemohon_nama} — {pendingRequests[0].kelas} {pendingRequests[0].jurusan || ''}, tgl {pendingRequests[0].tanggal}
+            </p>
+          </div>
+          <button onClick={() => { setReviewError(null); setShowReviewModal(true) }}
+            className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm">
+            Tinjau
+          </button>
+        </div>
+      )}
+
       {isSekretaris && withinTime && timeRemaining && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 rounded-2xl shadow-lg flex items-center justify-between text-white">
           <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center"><Clock size={20} className="animate-pulse"/></div><div><p className="text-xs opacity-80 font-medium">Waktu Absensi Sekretaris</p><p className="text-sm font-bold">Tutup pada pukul 14:40 WIB</p></div></div>
@@ -360,7 +433,7 @@ export default function AbsensiKehadiran() {
         </div>
       )}
 
-      {isAdmin && selectedDate !== today && (
+      {(isAdmin || isWaliKelas) && selectedDate !== today && (
         <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl">📅</div>
           <div>
@@ -372,7 +445,7 @@ export default function AbsensiKehadiran() {
 
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[{ label: 'Tanggal', value: isAdmin ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : todayDisplay, icon: CalendarDays, color: 'text-blue-600 bg-blue-50' },{ label: 'Kelas', value: selectedKelas || '—', icon: GraduationCap, color: 'text-purple-600 bg-purple-50' },{ label: userData?.role === 'Administrator' ? 'Admin' : 'Sekretaris', value: userData?.nama || '—', icon: Shield, color: 'text-emerald-600 bg-emerald-50' },{ label: 'Jumlah Siswa', value: stats.total, icon: Users, color: 'text-gray-600 bg-gray-50' },{ label: 'Sudah Absen', value: stats.total - stats.belum, icon: CheckCircle, color: 'text-green-600 bg-green-50' },{ label: 'Belum Absen', value: stats.belum, icon: AlertTriangle, color: 'text-orange-600 bg-orange-50' }].map((item, idx) => (
+          {[{ label: 'Tanggal', value: isAdmin ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : todayDisplay, icon: CalendarDays, color: 'text-blue-600 bg-blue-50' },{ label: 'Kelas', value: selectedKelas || '—', icon: GraduationCap, color: 'text-purple-600 bg-purple-50' },{ label: userData?.role === 'Administrator' ? 'Admin' : userData?.role === 'Wali Kelas' ? 'Wali Kelas' : 'Sekretaris', value: userData?.nama || '—', icon: Shield, color: 'text-emerald-600 bg-emerald-50' },{ label: 'Jumlah Siswa', value: stats.total, icon: Users, color: 'text-gray-600 bg-gray-50' },{ label: 'Sudah Absen', value: stats.total - stats.belum, icon: CheckCircle, color: 'text-green-600 bg-green-50' },{ label: 'Belum Absen', value: stats.belum, icon: AlertTriangle, color: 'text-orange-600 bg-orange-50' }].map((item, idx) => (
             <div key={idx} className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.color}`}><item.icon size={18}/></div><div><p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{item.label}</p><p className="text-sm font-bold text-gray-800 truncate max-w-[140px]">{item.value}</p></div></div>
           ))}
         </div>
@@ -381,7 +454,7 @@ export default function AbsensiKehadiran() {
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2"><Filter size={18} className="text-gray-500"/><span className="text-sm font-semibold text-gray-700">Filter:</span></div>
-          {isAdmin ? (
+          {isAdmin || isWaliKelas ? (
             <>
               <div className="flex items-center gap-1.5">
                 <CalendarDays size={14} className="text-blue-500" />
@@ -489,8 +562,8 @@ export default function AbsensiKehadiran() {
                 {isSekretaris && isSubmitted && hasApprovedRequest && (
                   <><span className="px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold border border-blue-200">✅ Admin menyetujui edit (1x saja)</span><button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Perubahan</>}</button></>
                 )}
-                {isAdmin && <button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Semua</>}</button>}
-                {isAdmin && stats.alpha > 0 && (
+                {(isAdmin || isWaliKelas) && <button onClick={handleSaveAll} disabled={saving} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-500/25">{saving ? '⏳ Menyimpan...' : <><Save size={16}/> Simpan Semua</>}</button>}
+                {(isAdmin || isWaliKelas) && stats.alpha > 0 && (
                   <button onClick={handleOpenWAModal}
                     className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 transition flex items-center gap-2 shadow-lg shadow-green-500/25">
                     <MessageCircle size={16}/> Finalisasi & Kirim WA
@@ -516,6 +589,53 @@ export default function AbsensiKehadiran() {
                 <button onClick={() => { setShowEditRequestModal(false); setEditRequestReason('') }} className="flex-1 px-4 py-2.5 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
                 <button onClick={handleRequestEdit} disabled={!editRequestReason.trim()} className="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 transition disabled:opacity-50 flex items-center justify-center gap-2">📨 Kirim Permintaan</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TINJAUAN PERMINTAAN REVISI (Admin & WK) */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => { if (!reviewSubmitting) setShowReviewModal(false) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+              <h3 className="text-base font-bold text-gray-800">Permintaan Revisi Absensi</h3>
+              <button onClick={() => { if (!reviewSubmitting) setShowReviewModal(false) }}
+                className="text-gray-400 hover:text-red-500 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-5 space-y-3">
+              {pendingRequests.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">Tidak ada permintaan menunggu persetujuan.</p>
+              ) : pendingRequests.map(req => (
+                <div key={req.id} className="border border-gray-100 rounded-2xl p-4 bg-gray-50/60">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-sm font-bold text-gray-800">{req.pemohon_nama}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-semibold whitespace-nowrap">{req.pemohon_role}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-2">
+                    <p><span className="text-gray-400">Kelas:</span> <b>{req.kelas} {req.jurusan || ''}</b></p>
+                    <p><span className="text-gray-400">Tanggal:</span> <b>{req.tanggal}</b></p>
+                  </div>
+                  <div className="text-xs bg-white border border-gray-100 rounded-xl p-3 text-gray-600 leading-relaxed">
+                    <span className="text-gray-400">Alasan:</span> {req.reason || '-'}
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => handleReviewAction(req, 'reject')} disabled={!!reviewSubmitting}
+                      className="flex-1 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50">
+                      {reviewSubmitting?.id === req.id && reviewSubmitting.action === 'reject' ? 'Menolak...' : 'Tolak'}
+                    </button>
+                    <button onClick={() => handleReviewAction(req, 'approve')} disabled={!!reviewSubmitting}
+                      className="flex-1 px-3 py-2 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition shadow-sm disabled:opacity-50">
+                      {reviewSubmitting?.id === req.id && reviewSubmitting.action === 'approve' ? 'Memproses...' : 'Terima'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {reviewError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl p-3">{reviewError}</p>
+              )}
             </div>
           </div>
         </div>

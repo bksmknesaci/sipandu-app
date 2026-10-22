@@ -727,8 +727,8 @@ export default function PenangananSiswa() {
                     ))}
                   </div>
 
-                  {/* Baris 3: Status Akhir + Tanggal Keputusan (Hanya Admin) */}
-                  {isAdmin && (
+                  {/* Baris 3: Status Akhir + Tanggal Keputusan (Admin dan Wali Kelas) */}
+                  {(isAdmin || isWaliKelas) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold text-gray-500 block mb-1">Status Akhir</label>
@@ -765,8 +765,8 @@ export default function PenangananSiswa() {
                     </div>
                   )}
 
-                  {/* Hanya muncul saat Pindah/Keluar (Admin only) */}
-                  {isChangingToExit && (
+                  {/* Hanya muncul saat Pindah/Keluar (Admin dan Wali Kelas) */}
+                  {(isAdmin || isWaliKelas) && isChangingToExit && (
                     <div>
                       <label className="text-xs font-semibold text-gray-500 block mb-1">Alasan Pindah/Keluar</label>
                       <textarea value={formData.alasan_pindah_keluar || ''} onChange={e => setFormData({ ...formData, alasan_pindah_keluar: e.target.value })} rows={2} className="w-full p-2.5 border border-red-200 rounded-xl text-sm text-gray-800 focus:ring-2 focus:ring-red-500 focus:outline-none bg-red-50 resize-none" placeholder="Jelaskan alasan siswa pindah atau keluar..."></textarea>

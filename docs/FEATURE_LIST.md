@@ -1620,3 +1620,27 @@ Status: ACTIVE
 - Fungsi helper isEffectiveDay di rekapActions.js: Cek weekend + hari libur dari tabel effective_days sebelum menentukan apakah hari ini layak diberi Alpha
 
 Status: ACTIVE
+
+## Penambahan Fitur — 2026-10-20
+* Dashboard Admin
+- [PERBAIKAN] Kartu Total Siswa, distribusi X/XI/XII, Total Kelas, dan rekapkehadiran per kelas kini hanya menghitung siswa berstatus Aktif (konsistendengan integrasi Pindah/Keluar).
+- [PERBAIKAN] Grafik Hadir/Alpha 30 hari menampilkan data lengkap (proteksibatas 1000 baris PostgREST pada query daftar siswa & absensi 30 hari).
+* Absensi Kelas — Wali Kelas (FITUR BARU)
+- Wali Kelas dapat membuka Absensi Kelas kelas binaannya; kelas, sekretaris,dan daftar siswa terisi otomatis (resolusi dari DB, fallback data session).
+- Filter tingkat/jurusan terkunci untuk non-Administrator; pemilih tanggal aktif.
+- Dapat menginput/mengoreksi status Hadir/Alpha tanpa jendela waktu(Sakit/Izin tetap melalui formulir online berbukti).
+- Dapat membuka & merevisi absensi tanggal lampau; simpan pada hari yang sudahtersubmit otomatis mengunci ulang hari tersebut.
+- input_by tercatat 'Wali Kelas'; tombol Simpan tersedia untuk WK(Kirim/Finalisasi + flow WhatsApp tetap eksklusif Sekretaris).
+* Alur Revisi Absensi (PERLUASAN)
+- Permintaan revisi dari Sekretaris Kelas dirouting ke Wali Kelas kelas binaan(fallback Administrator bila WK tidak tersedia).
+- Wali Kelas dapat menyetujui (ACC) / menolak permintaan revisi — divalidasiserver-side dari data request, terbatas kelas binaan; Administrator tetapdapat memproses semua request.
+- [BARU] UI tinjauan revisi: banner jumlah menunggu + modal detail (pemohon, kelas,tanggal, alasan) dengan tombol Terima/Tolak di halaman Absensi — untuk Administrator(semua request) dan Wali Kelas (kelas binaan); klik notifikasi approver otomatismembuka modal; pemberitahuan permintaan kini dikirim ke WK dan Admin sekaligus.
+* Penanganan Siswa — Wali Kelas (PERLUASAN)
+- Wali Kelas dapat mengatur Status Akhir (Aktif/Pindah/Keluar) beserta tanggalkeputusan; otomatis sinkron ke status siswa, Rekap Pindah & Keluar, Beranda,dan kartu Total Siswa dashboard.
+* Rekap Pindah & Keluar (FITUR BARU)
+- Hapus record per baris (ikon tong) dan Hapus Semua — khusus Administrator;siswa dipulihkan menjadi Aktif, dokumen pendukung ikut terhapus, aksitercatat di riwayat penanganan.
+- Modal konfirmasi modern menggantikan window.confirm/alert.
+* Komponen
+- BARU ConfirmModal (app/components/ConfirmModal.js): modal konfirmasireusable — varian danger/warning/info, baris detail, state loading & errorinline, tombol ESC / klik luar, scroll-lock.
+* Pemeliharaan & Performa
+- [PERBAIKAN] Rekap Sakit & Izin dimuat cepat: cleanup di-throttle 30 menit +anti-paralel, foto dihapus batch 100 file/request, kolom foto_bukti di-nullsetelah dibersihkan (ukuran daftar cleanup menyusut).

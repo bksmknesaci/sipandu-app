@@ -1,5 +1,41 @@
 # Changelog SIPANDU
 
+## 2026-10-22 — Baseline Usage pasca-reset (siklus 21 Okt – 21 Nov)
+- Egress 0,092GB / 5GB (2%) — target ~0,10GB/siklus tercapai (krisis awal: 8,52GB,app diblokir tiap 1-2 hari). Log Ingestion 0,052GB / 1GB (5%) — loop historisterkonfirmasi mati (dulu 213%). Cache egress 6%, DB 10%, storage 2%,realtime messages <1%, peak concurrent 22/200.
+- Angka dicapai pada hari uji end-to-run terpadat (3 role) — hari normal lebih ringan.
+- Catatan kebijakan: free plan pasca grace period → kelebihan kuota = error 402.Jadwal pemantauan: cek mingguan (alarm dini >50% pertengahan siklus),screenshot baseline tiap tanggal 21.
+
+## 2026-10-21 — #3 penyempurnaan: notifikasi ganda + modal tinjauan revisi
+* absensiActions.js
+- createEditRequest: permintaan Sekretaris kini memberitahu Wali Kelas kelas binaan DANsemua Administrator (sebelumnya salah satu saja); actionUrl notifikasi approver menjadi/absensi?review= agar halaman otomatis membuka modal tinjauan.
+- BARU getPendingEditRequestsForApprover(userId): daftar permintaan pending — Administratormelihat semua; Wali Kelas hanya kelas binaannya (filter server-side, request miliksendiri dikecualikan); disertai nama & role pemohon.
+- approveEditRequest / rejectEditRequest: tanpa perubahan (notifikasi ke pemohon, unlockbaris, dan validasi scope sudah berjalan).
+* app/absensi/page.js
+- Banner "N permintaan revisi menunggu persetujuan" untuk Administrator & Wali Kelas,
+- modal tinjauan: detail pemohon (nama/role), kelas, tanggal, alasan; tombol Tolak /Terima dengan state loading & error inline.
+- Auto-buka modal tinjauan saat datang dari klik notifikasi (?review=).
+- Setelah Terima/Tolak: item hilang dari daftar, toast ringkasan, checkSubmitteddi-refresh bila tanggal sama.
+- Banner permintaan revisi dipindah ke posisi teratas halaman (di bawah kartu header)agar langsung terlihat; opsi sticky + ikon berdenyut.
+
+## 2026-10-20 — Gelombang #1–#5: Dashboard Aktif, performa Sakit/Izin, Absensi & ACC Wali Kelas, Status Akhir WK, Hapus Pindah/Keluar
+* #1 — Dashboard Admin: kartu Total Siswa sinkron siswa Aktif
+- getAdminDashboardData (dashboardActions.js): Total Siswa, distribusi X/XI/XII,Total Kelas, dan rekap per kelas kini hanya berbasis siswa Aktif. Query daftarsiswa & absensi 30 hari memakai pola batch anti batas 1000 baris (grafikHadir/Alpha kini data lengkap). - Query nama redundan dihapus.AdminDashboard.js tanpa perubahan.
+* #2 — Rekap Sakit & Izin lambat dimuat
+- cleanupOldBuktiSakitIzin (absensiActions.js): throttle 30 menit + anti prosesparalel; foto dihapus batch 100 file/request; foto_bukti di-null setelahdihapus (daftar cleanup menyusut — akar kelambatan); cap 300 foto & 500 recordper proses. getSakitIzinWaliKelas tanpa perubahan.
+* #3 — Wali Kelas: menu Sekretaris, Absensi Kelas, & ACC revisi
+- AppShell.js: menu area Sekretaris tampil untuk Wali Kelas.
+- app/absensi/page.js: auto-resolusi kelas binaan untuk WK (fallback datasession); filter tingkat/jurusan terkunci untuk non-Administrator; WK dapatinput/koreksi Hadir/Alpha tanpa jendela waktu; dapat membuka & merevisitanggal lampau; simpan pada hari tersubmit otomatis mengunci ulang; tombolSimpan untuk WK (Kirim/Finalisasi + flow WA tetap Sekretaris); input_by'Wali Kelas'.
+- absensiActions.js: createEditRequest merouting permintaan Sekretaris ke WKkelas binaan (fallback Administrator) + konfirmasi langsung ke pemohon;approveEditRequest/rejectEditRequest divalidasi server-side viaverifyApproverScope dari data row (param client diabaikan) — WK terbataskelas binaan; urutan update-then-notify diperbaiki; request terproses tidakbisa diproses ulang; log jalur happy dipangkas (hemat log ingestion).
+* #4 — Penanganan Siswa WK: kolom Status Akhir
+- Halaman penanganan WK: modal Status Akhir (Aktif/Pindah/Keluar) + tanggalkeputusan dibuka untuk WK (isAdmin || isWaliKelas); payload dilengkapiidentitas siswa (nama/kelas/jurusan/jenis_kelamin/user_id).
+- savePenangananAction tanpa perubahan (sudah mendukung status_akhir penuh).
+* #5 — Rekap Pindah & Keluar: hapus per baris + Hapus Semua
+- penangananActions.js — BARU deletePindahKeluarRecord & deleteAllPindahKeluarRecords:khusus Administrator (pesan error dibedakan per penyebab); hapus dokumen(rows + file storage best-effort, batch); pulihkan siswa.status &penanganan.status_akhir ke Aktif; riwayat audit; pola batch anti 1000 baris.
+- pindah-keluar/page.js: ikon tong per baris + tombol Hapus Semua; userId kinidiisi dari session (localStorage 'userData' → .id, pola AppShell).
+- BARU app/components/ConfirmModal.js — modal konfirmasi modern reusable(varian danger/warning/info, baris detail, loading & error inline,ESC/backdrop, scroll-lock), menggantikan window.confirm/alert.
+* #6 — Tambah Siswa menyimpan kelas ganda (dikerjakan mandiri; catat bila belum ada)
+Form Tambah Siswa menyimpan kelas = tingkat saja + pembersihan data lama(split_part) — filter tingkat di seluruh sistem kembali konsisten.
+
 ## 2026-10-12 (Integrasi Status Pindah/Keluar di Seluruh Halaman + Fix Batas 1000 Baris di Penanganan)
 - Akar masalah filter Mutasi 9 dari 11 siswa: query siswa di getPenangananData mengambil seluruh sekolah tanpa pagination → terpotong batas 1000 baris PostgREST → 2 siswa urutan nama terakhir (kebetulan siswa mutasi) hilang saat tanpa filter kelas — sementara filter per kelas normal karena di bawah 1000 baris
 - penangananActions.js: getPenangananData — query siswa kini bertahap 1000 baris per halaman (ORDER nama + id stabil); getPenangananStats — pola batch yang sama agar kartu statistik lengkap

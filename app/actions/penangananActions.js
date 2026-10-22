@@ -430,3 +430,165 @@ export async function resetAllPenangananAction() {
     return { success: true }
   } catch (err) { return { error: err.message } }
 }
+
+// ── #5: Hapus SATU record Pindah/Keluar + pulihkan siswa ke Aktif ──
+export async function deletePindahKeluarRecord(recordId, userId) {
+  try {
+    // Hanya Administrator (halaman ini memang area admin)
+    if (!userId) {
+  return { error: 'Sesi tidak terkirim dari halaman (userId kosong) — sumber userId di pindah-keluar/page.js belum benar' }
+}
+const { data: user } = await supabaseAdmin.from('users').select('role, status').eq('id', userId).maybeSingle()
+if (!user) return { error: `User id "${userId}" tidak ditemukan di tabel users` }
+if (user.status !== 'Aktif') return { error: `Akun Anda berstatus "${user.status}" — harus "Aktif"` }
+if (user.role !== 'Administrator') return { error: `Role akun Anda: "${user.role}" — hanya Administrator yang bisa menghapus` }
+
+    // Ambil record + dokumennya sekaligus (embed — tidak perlu tahu nama kolom FK)
+    const { data: record } = await supabaseAdmin
+      .from('tb_pindah_keluar')
+      .select('*, tb_pindah_keluar_dokumen(id, file_url)')
+      .eq('id', recordId)
+      .maybeSingle()
+    if (!record) return { error: 'Record tidak ditemukan' }
+
+    // 1. Hapus file dokumen dari storage (best-effort — gagal tidak memblokir hapus data)
+    for (const doc of (record.tb_pindah_keluar_dokumen || [])) {
+      try {
+        if (doc.file_url) {
+          const m = String(doc.file_url).match(/\/object\/public\/([^/]+)\/(.+)$/)
+          if (m) await supabaseAdmin.storage.from(m[1]).remove([decodeURIComponent(m[2])])
+        }
+      } catch (e) { /* file sudah tidak ada / URL bukan public — lanjut */ }
+    }
+
+    // 2. Hapus rows dokumen dulu (hindari FK constraint — pola resetAllPenangananAction)
+    const docIds = (record.tb_pindah_keluar_dokumen || []).map(d => d.id)
+    if (docIds.length > 0) {
+      await supabaseAdmin.from('tb_pindah_keluar_dokumen').delete().in('id', docIds)
+    }
+
+    // 3. Hapus record utama
+    const { error: delError } = await supabaseAdmin.from('tb_pindah_keluar').delete().eq('id', recordId)
+    if (delError) return { error: delError.message }
+
+    // 4. Pulihkan siswa + status_akhir penanganan, sekaligus catat riwayat/audit
+    if (record.siswa_id) {
+      await supabaseAdmin.from('siswa').update({ status: 'Aktif' }).eq('id', record.siswa_id)
+
+      const { data: penanganan } = await supabaseAdmin
+        .from('tb_penanganan_siswa')
+        .update({ status_akhir: 'Aktif', updated_at: new Date().toISOString() })
+        .eq('siswa_id', record.siswa_id)
+        .select('id')
+        .maybeSingle()
+
+      if (penanganan) {
+        await supabaseAdmin.from('tb_penanganan_history').insert([{
+          penanganan_id: penanganan.id,
+          updated_by: userId,
+          action: `Hapus record ${record.status} — status siswa dikembalikan ke Aktif`,
+          note: `Dihapus dari Rekap Pindah & Keluar. Tanggal keputusan lama: ${record.tanggal_keputusan || '-'}`
+        }])
+      }
+    }
+
+    invalidateCacheByPrefix('penanganan_')
+    return { success: true }
+  } catch (err) {
+    return { error: err.message }
+  }
+}
+
+// ── #5: Hapus SEMUA record Pindah/Keluar + pulihkan semua siswa terkait ──
+// Beda dari resetAllPenangananAction: riwayat & data penanganan TETAP utuh.
+export async function deleteAllPindahKeluarRecords(userId) {
+  try {
+    if (!userId) {
+  return { error: 'Sesi tidak terkirim dari halaman (userId kosong) — sumber userId di pindah-keluar/page.js belum benar' }
+}
+const { data: user } = await supabaseAdmin.from('users').select('role, status').eq('id', userId).maybeSingle()
+if (!user) return { error: `User id "${userId}" tidak ditemukan di tabel users` }
+if (user.status !== 'Aktif') return { error: `Akun Anda berstatus "${user.status}" — harus "Aktif"` }
+if (user.role !== 'Administrator') return { error: `Role akun Anda: "${user.role}" — hanya Administrator yang bisa menghapus` }
+
+    // Ambil semua record + dokumen — bertahap (anti batas 1000 baris PostgREST)
+    let all = []
+    const BATCH = 1000
+    let page = 0
+    let hasMore = true
+    while (hasMore) {
+      const { data, error } = await supabaseAdmin
+        .from('tb_pindah_keluar')
+        .select('id, siswa_id, status, tb_pindah_keluar_dokumen(id, file_url)')
+        .order('id', { ascending: true })
+        .range(page * BATCH, (page + 1) * BATCH - 1)
+      if (error) break
+      all = all.concat(data || [])
+      hasMore = (data || []).length === BATCH
+      page++
+    }
+    if (all.length === 0) return { success: true, deleted: 0 }
+
+    // 1. Hapus semua file dokumen dari storage (best-effort, dikelompokkan per bucket)
+    const fileRefs = []
+    for (const rec of all) {
+      for (const doc of (rec.tb_pindah_keluar_dokumen || [])) {
+        if (doc.file_url) {
+          const m = String(doc.file_url).match(/\/object\/public\/([^/]+)\/(.+)$/)
+          if (m) fileRefs.push({ bucket: m[1], path: decodeURIComponent(m[2]) })
+        }
+      }
+    }
+    for (let i = 0; i < fileRefs.length; i += 100) {
+      try {
+        const byBucket = {}
+        for (const f of fileRefs.slice(i, i + 100)) {
+          (byBucket[f.bucket] = byBucket[f.bucket] || []).push(f.path)
+        }
+        for (const [bucket, paths] of Object.entries(byBucket)) {
+          await supabaseAdmin.storage.from(bucket).remove(paths)
+        }
+      } catch (e) { /* lanjut — file storage tidak boleh memblokir pembersihan data */ }
+    }
+
+    // 2. Hapus rows dokumen (batch 100)
+    const docIds = all.flatMap(r => (r.tb_pindah_keluar_dokumen || []).map(d => d.id))
+    for (let i = 0; i < docIds.length; i += 100) {
+      await supabaseAdmin.from('tb_pindah_keluar_dokumen').delete().in('id', docIds.slice(i, i + 100))
+    }
+
+    // 3. Hapus semua record utama
+    await supabaseAdmin.from('tb_pindah_keluar').delete().neq('id', 0)
+
+    // 4. Pulihkan semua siswa ke Aktif (batch 100)
+    const siswaIds = [...new Set(all.map(r => r.siswa_id).filter(Boolean))]
+    for (let i = 0; i < siswaIds.length; i += 100) {
+      await supabaseAdmin.from('siswa').update({ status: 'Aktif' }).in('id', siswaIds.slice(i, i + 100))
+    }
+
+    // 5. Pulihkan status_akhir penanganan + catat riwayat audit (batch 100)
+    let penangananIds = []
+    for (let i = 0; i < siswaIds.length; i += 100) {
+      const { data: updated } = await supabaseAdmin
+        .from('tb_penanganan_siswa')
+        .update({ status_akhir: 'Aktif', updated_at: new Date().toISOString() })
+        .in('siswa_id', siswaIds.slice(i, i + 100))
+        .select('id')
+      penangananIds = penangananIds.concat((updated || []).map(p => p.id))
+    }
+    const historyRows = penangananIds.map(pid => ({
+      penanganan_id: pid,
+      updated_by: userId,
+      action: 'Hapus Semua record Pindah/Keluar — status siswa dikembalikan ke Aktif',
+      note: 'Pembersihan massal dari Rekap Pindah & Keluar'
+    }))
+    for (let i = 0; i < historyRows.length; i += 100) {
+      await supabaseAdmin.from('tb_penanganan_history').insert(historyRows.slice(i, i + 100))
+    }
+
+    invalidateCacheByPrefix('penanganan_')
+    return { success: true, deleted: all.length }
+  } catch (err) {
+    return { error: err.message }
+  }
+}

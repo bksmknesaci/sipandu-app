@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Package, Search, Download, Eye, FileText, Printer, Trash2 } from 'lucide-react';
 import {
-  Package, Search, Download, Eye, FileText, Printer
-} from 'lucide-react';
-import {
-  getPindahKeluarData, getPindahKeluarStats, getSiswaPenangananDetail, getPenangananFilters
+  getPindahKeluarData, getPindahKeluarStats, getSiswaPenangananDetail, getPenangananFilters,
+  deletePindahKeluarRecord, deleteAllPindahKeluarRecords
 } from '@/app/actions/penangananActions';
 import { getKopSuratSettings } from '@/app/actions/siswaActions'
 import { generateKopSuratHTML } from '@/lib/kopSuratHelper'
+import ConfirmModal from '@/app/components/ConfirmModal';
+// Trash2 sudah ada di import lucide-react
 
 function CountUp({ end, duration = 1200 }) {
   const [count, setCount] = useState(0);
@@ -35,6 +36,12 @@ export default function RekapPindahKeluar() {
 
   const [showDetail, setShowDetail] = useState(null);
   const [detailData, setDetailData] = useState(null);
+  const [confirmTarget, setConfirmTarget] = useState(null);  // record yg akan dihapus
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [userId, setUserId] = useState(null);                // ← isi via Langkah 2 di atas
 
   useEffect(() => {
     loadFilterOptions();
@@ -42,6 +49,41 @@ export default function RekapPindahKeluar() {
   }, []);
 
   useEffect(() => { fetchData(); }, [filters]);
+
+  const handleConfirmDelete = async () => {
+  const target = confirmTarget;
+  if (!target || deleting) return;
+  setDeleting(true);
+  setDeleteError(null);
+  const res = await deletePindahKeluarRecord(target.id, userId);
+  setDeleting(false);
+  if (res?.error) { setDeleteError(res.error); return; }
+  setConfirmTarget(null);
+  if (showDetail === target.id) { setShowDetail(null); setDetailData(null); }
+  fetchData();
+};
+
+  // ── #5: isi userId dari session (pola SAMA dengan AppShell: key 'userData', field 'id') ──
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u && u.id) setUserId(u.id);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+const handleConfirmDeleteAll = async () => {
+  if (!confirmAll || deleting) return;
+  setDeleting(true);
+  setDeleteError(null);
+  const res = await deleteAllPindahKeluarRecords(userId);
+  setDeleting(false);
+  if (res?.error) { setDeleteError(res.error); return; }
+  setConfirmAll(false);
+  fetchData();
+};
 
   const loadFilterOptions = async () => {
     const res = await getPenangananFilters();
@@ -163,6 +205,10 @@ export default function RekapPindahKeluar() {
           <div className="flex gap-2 w-full md:w-auto">
             <button onClick={handleExportCSV} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-green-700 transition shadow-sm"><Download size={16} /> CSV</button>
             <button onClick={handlePrint} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gray-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-700 transition shadow-sm"><Printer size={16} /> Cetak</button>
+            <button onClick={() => { setConfirmTarget(null); setDeleteError(null); setConfirmAll(true); }} disabled={deleting || data.length === 0}
+  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-700 transition shadow-sm disabled:opacity-50">
+  <Trash2 size={16} /> Hapus Semua
+</button>
           </div>
         </div>
       </div>
@@ -210,8 +256,11 @@ export default function RekapPindahKeluar() {
                     <td className="py-3 px-4 text-gray-600 text-xs whitespace-nowrap">{d.tanggal_keputusan}</td>
                     <td className="py-3 px-4 text-gray-600 text-xs max-w-[200px] truncate" title={d.alasan}>{d.alasan || '-'}</td>
                     <td className="py-3 px-4 text-center">
-                      <button onClick={() => openDetail(d)} className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"><Eye size={16} /></button>
-                    </td>
+  <div className="flex items-center justify-center gap-1">
+    <button onClick={() => openDetail(d)} className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition" title="Detail"><Eye size={16} /></button>
+    <button onClick={() => { setConfirmAll(false); setDeleteError(null); setConfirmTarget(d); }} disabled={deleting} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition disabled:opacity-50" title="Hapus & kembalikan siswa ke Aktif"><Trash2 size={16} /></button>
+  </div>
+</td>
                   </tr>
                 ))
               )}
@@ -275,6 +324,46 @@ export default function RekapPindahKeluar() {
           </div>
         </div>
       )}
+
+      {/* MODAL KONFIRMASI — HAPUS SATU */}
+<ConfirmModal
+  open={!!confirmTarget}
+  onClose={() => { if (!deleting) setConfirmTarget(null); }}
+  onConfirm={handleConfirmDelete}
+  title="Hapus Record Pindah/Keluar?"
+  message="Record akan dihapus permanen dari rekap dan siswa dikembalikan menjadi Aktif."
+  details={confirmTarget ? [
+    { label: 'Nama', value: confirmTarget.nama },
+    { label: 'NISN', value: confirmTarget.nisn },
+    { label: 'Kelas', value: `${confirmTarget.kelas || ''} ${confirmTarget.jurusan || ''}`.trim() },
+    { label: 'Status', value: confirmTarget.status },
+    { label: 'Tgl Keputusan', value: confirmTarget.tanggal_keputusan },
+  ] : []}
+  warning="Siswa akan langsung muncul kembali di Beranda, Absensi, dan kartu Total Siswa dashboard."
+  confirmLabel="Ya, Hapus Record"
+  loading={deleting}
+  error={deleteError}
+  variant="danger"
+/>
+
+{/* MODAL KONFIRMASI — HAPUS SEMUA */}
+<ConfirmModal
+  open={confirmAll}
+  onClose={() => { if (!deleting) setConfirmAll(false); }}
+  onConfirm={handleConfirmDeleteAll}
+  title={`Hapus SEMUA ${data.length} Record?`}
+  message="Seluruh record Pindah/Keluar akan dihapus permanen beserta dokumen pendukungnya."
+  details={[
+    { label: 'Total Record', value: `${data.length} siswa` },
+    { label: 'Pindah', value: stats.pindah },
+    { label: 'Keluar', value: stats.keluar },
+  ]}
+  warning="Semua siswa terkait dikembalikan menjadi Aktif dan muncul kembali di seluruh sistem. Tindakan ini tidak dapat dibatalkan."
+  confirmLabel="Ya, Hapus Semua"
+  loading={deleting}
+  error={deleteError}
+  variant="danger"
+/>
 
       <style jsx>{`
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }

@@ -573,3 +573,24 @@ Catatan Penggunaan Nilai (Value Constraints)
 * siswa
 * status: nilai yang tersimpan di database adalah 'Aktif', 'Pindah', 'Keluar', 'Lulus' — "Non Aktif" di halaman Daftar Siswa adalah FILTER TAMPILAN (status ≠ Aktif), bukan nilai tersimpan
 * Halaman inti (Absensi Kelas, Rekap Kehadiran, Rekapitulasi Beranda, Penanganan) hanya memproses siswa Aktif; siswa Pindah/Keluar hanya tampil di Penanganan Siswa (baris bawah), Daftar Siswa, dan Rekap Pindah & Keluar
+
+## Catatan Skema — Gelombang 2026-10-20 (#1–#5)
+Tidak ada perubahan struktur: tanpa tabel/kolom/index baru, tanpa SQL migrasi.Berikut catatan perilaku & konvensi data pada tabel terkait.
+* users
+- Role 'Wali Kelas' WAJIB memiliki kolom kelas + jurusan terisi (prasyarat:Absensi Kelas WK, routing ACC revisi, validasi scope kelas binaan).
+- Role 'Wali Kelas' kini dapat menjadi approver absensi_edit_requests (see below)dan pengatur Status Akhir penanganan siswa kelas binaannya.
+* siswa
+- (Catat bila belum ada dari Fix #6) Kolom kelas menyimpan TINGKAT SAJA(X / XI / XII); jurusan tersimpan pada kolom terpisah. Seluruh filter tingkatdi sistem (absensi, rekap, penanganan) bergantung konvensi ini.
+* absensi
+- Nilai input_by yang mungkin kini: 'Sekretaris Kelas', 'Administrator','Wali Kelas', 'QR Mandiri', 'Sakit/Izin Online'.
+- Perilaku locked: baris ter-unlock ketika permintaan revisi disetujui;penyimpanan revisi oleh Wali Kelas pada hari yang sudah tersubmitotomatis mengunci ulang hari tersebut (submitAbsensi).
+* absensi_edit_requests
+- approved_by kini dapat berisi id Administrator ATAU id Wali Kelas kelas binaan.
+- Routing permintaan: dari Sekretaris Kelas → Wali Kelas kelas tersebut(fallback Administrator bila WK tidak ditemukan / tidak Aktif);dari Wali Kelas → Administrator.
+- Nilai status: pending / approved / rejected. Request yang sudah diprosestidak dapat diproses ulang (validasi server-side, terbatas kelas binaan utk WK).
+* tb_absensi_sakit_izin
+- foto_bukti di-null setelah file dibersihkan dari storage (cleanup berjalanmax 1× per 30 menit; foto > 1 hari dihapus batch 100 file/request;record > 30 hari dihapus, cap 500 per proses).
+tb_penanganan_siswa
+status_akhir dapat diatur oleh Administrator maupun Wali Kelas (kelas binaan).
+tb_pindah_keluar & tb_pindah_keluar_dokumen
+Dapat dihapus via Rekap Pindah & Keluar (per baris / Hapus Semua, khususAdministrator): siswa.status & tb_penanganan_siswa.status_akhir dipulihkanke 'Aktif', file dokumen dihapus dari storage, aksi tercatat ditb_penanganan_history.

@@ -144,165 +144,241 @@ export async function isAbsensiSubmitted(tanggal, kelas, jurusan) {
   return { submitted: allHaveStatus && allLocked }
 }
 
+// ── #3: validasi server-side siapa yang boleh memproses ACC ──
+// Administrator: semua request. Wali Kelas: hanya request kelas binaannya.
+// Data request dibaca dari server — param kelas/jurusan dari client TIDAK dipakai
+// (mencegah WK memproses request kelas lain lewat pemanggilan langsung).
+async function verifyApproverScope(approverId, kelasReq, jurusanReq) {
+  const { data: approver } = await supabaseAdmin
+    .from('users')
+    .select('role, status, kelas, jurusan')
+    .eq('id', approverId)
+    .maybeSingle()
+
+  if (!approver || approver.status !== 'Aktif') return { error: 'Pengguna approver tidak ditemukan / tidak aktif' }
+  if (approver.role === 'Administrator') return { ok: true }
+  if (approver.role === 'Wali Kelas') {
+    if (kelasReq && String(approver.kelas || '').trim() !== String(kelasReq).trim())
+      return { error: 'Anda hanya bisa memproses revisi untuk kelas binaan Anda' }
+    if (jurusanReq && String(approver.jurusan || '').trim() !== String(jurusanReq).trim())
+      return { error: 'Anda hanya bisa memproses revisi untuk kelas binaan Anda' }
+    return { ok: true }
+  }
+  return { error: 'Hanya Administrator atau Wali Kelas yang bisa memproses revisi absensi' }
+}
+
 export async function createEditRequest(userId, kelas, jurusan, tanggal, reason) {
   const { data, error } = await supabaseAdmin.from('absensi_edit_requests').insert([{
     user_id: userId, kelas, jurusan, tanggal, reason, status: 'pending'
   }]).select().single()
   if (error) return { error: error.message }
 
+  // ── v2: dari Sekretaris → Wali Kelas kelas binaan DAN semua Administrator ──
+  let approverIds = []
+  let approverLabel = 'Administrator'
   try {
-    console.log(`[createEditRequest] Mencari Admin untuk notifikasi...`);
-    const adminIds = await getAdminUserIds();
-    console.log(`[createEditRequest] Admin ditemukan: ${adminIds.length} user, IDs:`, adminIds);
-    if (adminIds.length > 0) {
+    const requestorRole = await getRoleByUserId(userId)
+    const adminIds = await getAdminUserIds()
+
+    if (requestorRole === 'Sekretaris Kelas') {
+      const wkId = await getWaliKelasUserId(kelas, jurusan)
+      if (wkId) {
+        approverIds = [wkId, ...adminIds.filter(id => String(id) !== String(wkId))]
+        approverLabel = `Wali Kelas ${kelas || ''}${jurusan ? ' ' + jurusan : ''}`.trim() + ' dan Administrator'
+      } else {
+        approverIds = adminIds
+      }
+    } else {
+      approverIds = adminIds
+    }
+
+    if (approverIds.length > 0) {
       const notifResult = await notifyMultipleUsers({
-        userIds: adminIds,
+        userIds: approverIds,
         title: '📝 Permintaan Revisi Absensi Baru',
         message: `${kelas ? kelas + ' ' : ''}${jurusan || ''} — Tanggal ${tanggal}. Alasan: "${(reason || '-').substring(0, 100)}"`,
         type: 'attendance_revision',
         priority: 'WARNING',
         referenceType: 'absensi_edit_request',
         referenceId: String(data?.id || ''),
-        actionUrl: '/absensi',
-      });
-      if (notifResult.error) {
-        console.error(`[createEditRequest] ❌ Gagal insert notifikasi ke Admin:`, notifResult.error);
-      } else {
-        console.log(`[createEditRequest] ✅ Notifikasi terkirim ke ${adminIds.length} Admin, jumlah row: ${notifResult.data?.length || 0}`);
-      }
+        actionUrl: `/absensi?review=${data?.id || ''}`,   // ← klik notif = auto-buka modal tinjauan
+      })
+      if (notifResult.error) console.error('[createEditRequest] Gagal kirim notifikasi approver:', notifResult.error)
     } else {
-      console.warn(`[createEditRequest] ⚠️ TIDAK ADA Admin ditemukan di tabel users (role=Administrator, status=Aktif)! Notifikasi tidak terkirim.`);
+      console.warn('[createEditRequest] Tidak ada approver (WK/Admin) aktif — notifikasi tidak terkirim')
     }
   } catch (notifErr) {
-    console.error('[createEditRequest] Gagal kirim notifikasi ke Admin:', notifErr);
+    console.error('[createEditRequest] Gagal kirim notifikasi approver:', notifErr)
   }
 
+  // Konfirmasi ke pemohon
   try {
-    const requestorRole = data ? await getRoleByUserId(data.user_id) : null;
-    let targetId = data.user_id;
-    
-    if (requestorRole === 'Sekretaris Kelas') {
-      const sekId = await getSekretarisUserId(kelas, jurusan);
-      if (sekId) targetId = sekId;
-    } else if (requestorRole === 'Wali Kelas') {
-      const wkId = await getWaliKelasUserId(kelas, jurusan);
-      if (wkId) targetId = wkId;
-    }
-    
-    if (targetId) {
-      await createNotification({
-        userId: targetId,
-        title: '📨 Permintaan Revisi Terkirim',
-        message: `Permintaan revisi absensi tanggal ${tanggal} telah dikirim ke Administrator. Tunggu persetujuan sebelum bisa mengedit.`,
-        type: 'attendance_revision',
-        priority: 'INFO',
-        referenceType: 'absensi_edit_request',
-        referenceId: String(data?.id || ''),
-        actionUrl: '/absensi',
-      });
-      console.log(`[createEditRequest] ✅ Konfirmasi dikirim ke id=${targetId} (role: ${requestorRole})`);
-    }
+    await createNotification({
+      userId,
+      title: '📨 Permintaan Revisi Terkirim',
+      message: `Permintaan revisi absensi tanggal ${tanggal} telah dikirim ke ${approverLabel}. Tunggu persetujuan sebelum bisa mengedit.`,
+      type: 'attendance_revision',
+      priority: 'INFO',
+      referenceType: 'absensi_edit_request',
+      referenceId: String(data?.id || ''),
+      actionUrl: '/absensi',
+    })
   } catch (err) {
-    console.error('[createEditRequest] Gagal kirim konfirmasi ke pemohon:', err);
+    console.error('[createEditRequest] Gagal kirim konfirmasi ke pemohon:', err)
   }
 
   return { success: true, data }
 }
 
+// ── Daftar permintaan revisi pending untuk peninjau (Admin: semua; WK: kelas binaan) ──
+export async function getPendingEditRequestsForApprover(userId) {
+  try {
+    if (!userId) return { data: [] }
+
+    const { data: approver } = await supabaseAdmin
+      .from('users')
+      .select('role, status, kelas, jurusan')
+      .eq('id', userId)
+      .maybeSingle()
+    if (!approver || approver.status !== 'Aktif') return { data: [] }
+    if (approver.role !== 'Administrator' && approver.role !== 'Wali Kelas') return { data: [] }
+
+    let query = supabaseAdmin
+      .from('absensi_edit_requests')
+      .select('id, user_id, kelas, jurusan, tanggal, reason, created_at')
+      .eq('status', 'pending')
+      .neq('user_id', userId)              // jangan tampilkan request milik sendiri
+      .order('created_at', { ascending: false })
+
+    if (approver.role === 'Wali Kelas') {
+      if (!approver.kelas) return { data: [] }   // WK tanpa kelas binaan → tidak ada scope
+      query = query.eq('kelas', String(approver.kelas).trim())
+      if (approver.jurusan) query = query.eq('jurusan', String(approver.jurusan).trim())
+    }
+
+    const { data: requests, error } = await query
+    if (error) return { data: [], error: error.message }
+    if (!requests || requests.length === 0) return { data: [] }
+
+    // Lengkapi nama & role pemohon (tanpa embed FK — aman dari nama relasi tak tentu)
+    const userIds = [...new Set(requests.map(r => r.user_id).filter(Boolean))]
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, nama, role')
+      .in('id', userIds)
+    const userMap = {}
+    for (const u of (users || [])) userMap[u.id] = u
+
+    return {
+      data: requests.map(r => ({
+        ...r,
+        pemohon_nama: userMap[r.user_id]?.nama || '-',
+        pemohon_role: userMap[r.user_id]?.role || '-',
+      })),
+    }
+  } catch (e) {
+    return { data: [], error: e.message }
+  }
+}
+
 export async function approveEditRequest(requestId, adminId, kelas, jurusan, tanggal) {
-  const { error: reqError } = await supabaseAdmin.from('absensi_edit_requests').update({ status: 'approved', approved_by: adminId, updated_at: new Date().toISOString() }).eq('id', requestId)
+  const { data: reqData, error: reqFetchError } = await supabaseAdmin
+    .from('absensi_edit_requests')
+    .select('id, user_id, kelas, jurusan, tanggal, status')
+    .eq('id', requestId)
+    .maybeSingle()
+
+  if (reqFetchError || !reqData) return { error: 'Permintaan revisi tidak ditemukan' }
+  if (reqData.status !== 'pending') return { error: 'Permintaan ini sudah diproses' }
+
+  // FIX #3: WK boleh ACC — tapi hanya untuk kelas binaannya (divalidasi server-side)
+  const scope = await verifyApproverScope(adminId, reqData.kelas, reqData.jurusan)
+  if (scope.error) return { error: scope.error }
+
+  // Update status dulu (dulu: update duluan → kalau siswa kosong, request terlanjur
+  // 'approved' padahal fungsi return error)
+  const { error: reqError } = await supabaseAdmin
+    .from('absensi_edit_requests')
+    .update({ status: 'approved', approved_by: adminId, updated_at: new Date().toISOString() })
+    .eq('id', requestId)
   if (reqError) return { error: reqError.message }
 
+  // Unlock absensi kelas tersebut pada tanggal tsb (dari data request, bukan param client)
   let siswaQuery = supabaseAdmin.from('siswa').select('id')
-  if (kelas) siswaQuery = siswaQuery.eq('kelas', kelas); if (jurusan) siswaQuery = siswaQuery.eq('jurusan', jurusan)
-  const { data: siswaList } = await siswaQuery; if (!siswaList || siswaList.length === 0) return { error: 'Tidak ada siswa' }
-  const siswaIds = siswaList.map(s => s.id)
-  const { error: unlockError } = await supabaseAdmin.from('absensi').update({ locked: false, updated_at: new Date().toISOString() }).eq('tanggal', tanggal).in('siswa_id', siswaIds)
-  if (unlockError) return { error: unlockError.message }
+  if (reqData.kelas) siswaQuery = siswaQuery.eq('kelas', reqData.kelas)
+  if (reqData.jurusan) siswaQuery = siswaQuery.eq('jurusan', reqData.jurusan)
+  const { data: siswaList } = await siswaQuery
 
+  if (siswaList && siswaList.length > 0) {
+    const siswaIds = siswaList.map(s => s.id)
+    const { error: unlockError } = await supabaseAdmin
+      .from('absensi')
+      .update({ locked: false, updated_at: new Date().toISOString() })
+      .eq('tanggal', reqData.tanggal)
+      .in('siswa_id', siswaIds)
+    if (unlockError) return { error: unlockError.message }
+  }
+
+  // Notifikasi ke pemohon — langsung ke reqData.user_id
   try {
-    const { data: reqData } = await supabaseAdmin
-      .from('absensi_edit_requests')
-      .select('user_id, kelas, jurusan, tanggal')
-      .eq('id', requestId)
-      .maybeSingle();
-
-    if (reqData) {
-      const requestorRole = await getRoleByUserId(reqData.user_id);
-      let targetId = reqData.user_id;
-      
-      if (requestorRole === 'Sekretaris Kelas') {
-        const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
-        if (sekId) targetId = sekId;
-      } else if (requestorRole === 'Wali Kelas') {
-        const wkId = await getWaliKelasUserId(reqData.kelas, reqData.jurusan);
-        if (wkId) targetId = wkId;
-      }
-      
-      if (targetId && String(targetId) !== String(adminId)) {
-        await createNotification({
-          userId: targetId,
-          title: '✅ Revisi Absensi Disetujui',
-          message: `Administrator telah menyetujui revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''}. Anda sekarang bisa mengedit data absensi.`,
-          type: 'attendance_revision',
-          priority: 'SUCCESS',
-          referenceType: 'absensi_revision',
-          referenceId: String(requestId),
-          actionUrl: '/absensi',
-        });
-        console.log(`[approveEdit] ✅ Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
-      }
+    if (reqData.user_id && String(reqData.user_id) !== String(adminId)) {
+      await createNotification({
+        userId: reqData.user_id,
+        title: '✅ Revisi Absensi Disetujui',
+        message: `Revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''} telah disetujui. Anda sekarang bisa mengedit data absensi.`,
+        type: 'attendance_revision',
+        priority: 'SUCCESS',
+        referenceType: 'absensi_revision',
+        referenceId: String(requestId),
+        actionUrl: '/absensi',
+      })
     }
   } catch (notifErr) {
-    console.error('[approveEdit] Gagal kirim notifikasi:', notifErr);
+    console.error('[approveEdit] Gagal kirim notifikasi:', notifErr)
   }
 
   return { success: true }
 }
 
 export async function rejectEditRequest(requestId, adminId) {
-  try {
-    const { data: reqData } = await supabaseAdmin
-      .from('absensi_edit_requests')
-      .select('user_id, kelas, jurusan, tanggal, reason')
-      .eq('id', requestId)
-      .maybeSingle();
+  const { data: reqData } = await supabaseAdmin
+    .from('absensi_edit_requests')
+    .select('user_id, kelas, jurusan, tanggal, reason, status')
+    .eq('id', requestId)
+    .maybeSingle()
 
-    if (reqData) {
-      const requestorRole = await getRoleByUserId(reqData.user_id);
-      let targetId = reqData.user_id;
-      
-      if (requestorRole === 'Sekretaris Kelas') {
-        const sekId = await getSekretarisUserId(reqData.kelas, reqData.jurusan);
-        if (sekId) targetId = sekId;
-      } else if (requestorRole === 'Wali Kelas') {
-        const wkId = await getWaliKelasUserId(reqData.kelas, reqData.jurusan);
-        if (wkId) targetId = wkId;
-      }
-      
-      if (targetId && String(targetId) !== String(adminId)) {
-        await createNotification({
-          userId: targetId,
-          title: '❌ Revisi Absensi Ditolak',
-          message: `Administrator menolak revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''}. Alasan: ${reqData.reason || '-'}`,
-          type: 'attendance_revision',
-          priority: 'DANGER',
-          referenceType: 'absensi_revision',
-          referenceId: String(requestId),
-          actionUrl: '/absensi',
-        });
-        console.log(`[rejectEdit] ✅ Notifikasi dikirim ke id=${targetId} (role: ${requestorRole})`);
-      }
-    }
-  } catch (notifErr) {
-    console.error('[rejectEdit] Gagal kirim notifikasi:', notifErr);
-  }
+  if (!reqData) return { error: 'Permintaan revisi tidak ditemukan' }
+  if (reqData.status !== 'pending') return { error: 'Permintaan ini sudah diproses' }
 
+  // FIX #3: WK boleh menolak — hanya kelas binaannya
+  const scope = await verifyApproverScope(adminId, reqData.kelas, reqData.jurusan)
+  if (scope.error) return { error: scope.error }
+
+  // Update DULU, baru notifikasi (dulu sebaliknya — update gagal = pemohon
+  // terima penolakan palsu)
   const { error } = await supabaseAdmin
     .from('absensi_edit_requests')
     .update({ status: 'rejected', approved_by: adminId, updated_at: new Date().toISOString() })
-    .eq('id', requestId);
-  if (error) return { error: error.message };
+    .eq('id', requestId)
+  if (error) return { error: error.message }
+
+  try {
+    if (reqData.user_id && String(reqData.user_id) !== String(adminId)) {
+      await createNotification({
+        userId: reqData.user_id,
+        title: '❌ Revisi Absensi Ditolak',
+        message: `Revisi absensi tanggal ${reqData.tanggal} kelas ${reqData.kelas} ${reqData.jurusan || ''} ditolak. Alasan: ${reqData.reason || '-'}`,
+        type: 'attendance_revision',
+        priority: 'DANGER',
+        referenceType: 'absensi_revision',
+        referenceId: String(requestId),
+        actionUrl: '/absensi',
+      })
+    }
+  } catch (notifErr) {
+    console.error('[rejectEdit] Gagal kirim notifikasi:', notifErr)
+  }
+
   return { success: true }
 }
 
@@ -483,61 +559,94 @@ function extractStoragePath(url) {
   }
 }
 
-export async function cleanupOldBuktiSakitIzin() {
-  try {
-    // ── 1. Hapus foto bukti yang sudah lebih dari 1 hari (existing behavior) ──
-    const oneDayAgo = new Date()
-    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
-    const oneDayCutoff = oneDayAgo.toISOString()
+// ── Throttle cleanup sakit/izin (pola sama dengan fix cleanup PKL) ──
+let _lastSakitIzinCleanupAt = 0;
+let _sakitIzinCleanupBusy = false;
 
+export async function cleanupOldBuktiSakitIzin() {
+  const now = Date.now();
+  if (_sakitIzinCleanupBusy) return;                          // sedang jalan — jangan dobel
+  if (now - _lastSakitIzinCleanupAt < 30 * 60 * 1000) return; // baru jalan < 30 menit — skip
+  _sakitIzinCleanupBusy = true;
+  _lastSakitIzinCleanupAt = now;
+
+  try {
+    // ── 1. Hapus foto bukti yang sudah lebih dari 1 hari ──
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const oneDayCutoff = oneDayAgo.toISOString();
+
+    // FIX: dibatasi 300 foto per proses — sisanya dikerjakan proses berikutnya
     const { data: oldPhotos } = await supabaseAdmin
       .from('tb_absensi_sakit_izin')
       .select('id, foto_bukti')
       .lt('created_at', oneDayCutoff)
       .not('foto_bukti', 'is', null)
+      .limit(300);
 
-    for (const record of (oldPhotos || [])) {
-      if (record.foto_bukti) {
-        const fileName = record.foto_bukti.split('/').pop()
-        if (fileName) {
-          await supabaseAdmin.storage.from('bukti-sakit-izin').remove([fileName])
-        }
-      }
-    }
-
-    // ── 2. Hapus record yang sudah lebih dari 30 hari ──
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    const thirtyDayCutoff = thirtyDaysAgo.toISOString()
-
-    const { data: oldRecords } = await supabaseAdmin
-      .from('tb_absensi_sakit_izin')
-      .select('id, foto_bukti')
-      .lte('created_at', thirtyDayCutoff)
-
-    if (oldRecords && oldRecords.length > 0) {
-      // Hapus foto yang mungkin masih tersisa (jika cleanup 1 hari sebelumnya gagal)
-      for (const record of oldRecords) {
+    if (oldPhotos && oldPhotos.length > 0) {
+      const idsToClear = [];
+      const fileNames = [];
+      for (const record of oldPhotos) {
         if (record.foto_bukti) {
-          const fileName = record.foto_bukti.split('/').pop()
+          const fileName = record.foto_bukti.split('/').pop();
           if (fileName) {
-            await supabaseAdmin.storage.from('bukti-sakit-izin').remove([fileName])
+            idsToClear.push(record.id);
+            fileNames.push(fileName);
           }
         }
       }
 
+      // FIX: hapus foto SECARA BATCH (100 file per request), bukan 1 request per file
+      for (let i = 0; i < fileNames.length; i += 100) {
+        await supabaseAdmin.storage.from('bukti-sakit-izin').remove(fileNames.slice(i, i + 100));
+      }
+
+      // FIX (paling penting): null-kan foto_bukti setelah fotonya dihapus.
+      // Tanpa ini daftar "foto lama" tidak pernah menyusut dan cleanup
+      // memproses ulang file yang sama setiap kali halaman dibuka.
+      for (let i = 0; i < idsToClear.length; i += 100) {
+        await supabaseAdmin
+          .from('tb_absensi_sakit_izin')
+          .update({ foto_bukti: null })
+          .in('id', idsToClear.slice(i, i + 100));
+      }
+    }
+
+    // ── 2. Hapus record yang sudah lebih dari 30 hari ──
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDayCutoff = thirtyDaysAgo.toISOString();
+
+    // FIX: dibatasi 500 record per proses
+    const { data: oldRecords } = await supabaseAdmin
+      .from('tb_absensi_sakit_izin')
+      .select('id, foto_bukti')
+      .lte('created_at', thirtyDayCutoff)
+      .limit(500);
+
+    if (oldRecords && oldRecords.length > 0) {
+      // Hapus foto yang mungkin masih tersisa — batch juga
+      const fileNames = oldRecords
+        .map(r => (r.foto_bukti ? r.foto_bukti.split('/').pop() : null))
+        .filter(Boolean);
+      for (let i = 0; i < fileNames.length; i += 100) {
+        await supabaseAdmin.storage.from('bukti-sakit-izin').remove(fileNames.slice(i, i + 100));
+      }
+
       // Hapus record dari database (batch 100 untuk aman)
-      const ids = oldRecords.map(r => r.id)
+      const ids = oldRecords.map(r => r.id);
       for (let i = 0; i < ids.length; i += 100) {
-        const batch = ids.slice(i, i + 100)
         await supabaseAdmin
           .from('tb_absensi_sakit_izin')
           .delete()
-          .in('id', batch)
+          .in('id', ids.slice(i, i + 100));
       }
     }
   } catch (err) {
-    console.error('Gagal cleanup sakit/izin:', err)
+    console.error('Gagal cleanup sakit/izin:', err);
+  } finally {
+    _sakitIzinCleanupBusy = false;
   }
 }
 

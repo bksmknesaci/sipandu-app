@@ -307,7 +307,7 @@ const interval = setInterval(() => {
 
   const bottomNavItems = [
     { key: 'siswa', icon: GraduationCap, label: 'Siswa', href: '/mobile/siswa', show: true },
-    { key: 'sekretaris', icon: ClipboardCheck, label: 'Sekretaris', href: '/mobile/sekretaris', show: isLoggedIn && (isSekretaris || isAdmin) },
+    { key: 'sekretaris', icon: ClipboardCheck, label: 'Sekretaris', href: '/mobile/sekretaris', show: isLoggedIn && (isSekretaris || isWaliKelas || isAdmin) },
     { key: 'osis', icon: CalendarDays, label: 'Osis', href: '/mobile/osis', show: isLoggedIn && (isOsis || isAdmin) },
     { key: 'wali', icon: User, label: 'Wali Kelas', href: '/mobile/wali-kelas', show: isLoggedIn && (isWaliKelas || isAdmin) },
     { key: 'admin', icon: Shield, label: 'Admin', href: '/mobile/admin', show: isLoggedIn && isAdmin },
@@ -366,7 +366,7 @@ const interval = setInterval(() => {
           <NavLink icon={UserCheck} title="Absen Hadir Mandiri" href="/absen-mandiri" menuId="absen-mandiri" />
           <NavLink icon={MapPin} title="Absensi PKL" href="/absensi-pkl" menuId="absensi-pkl" />
 
-          {isLoggedIn && (isSekretaris || isAdmin) && (
+          {isLoggedIn && (isSekretaris || isWaliKelas || isAdmin) && (
             <>
               <p className={'px-5 pt-3 pb-1.5 text-[10px] text-slate-500 font-bold tracking-wider whitespace-nowrap inline-block ' + txt}>MENU SEKRETARIS</p>
               <NavLink icon={ClipboardList} title="Absensi Kelas" href="/absensi" menuId="absensi" />

@@ -19,6 +19,28 @@ export async function getAdminDashboardData() {
   return getCached('dashboard_admin', async () => {
     const today = getTodayWIB();
 
+    // ── FIX #1: daftar siswa HANYA yang Aktif + diambil bertahap ──
+    // (anti batas 1000 baris PostgREST — pola sama dengan getSakitIzinWaliKelas)
+    const fetchSiswaAktif = async () => {
+      let all = [];
+      const BATCH = 1000;
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabaseAdmin
+          .from('siswa')
+          .select('id, kelas, jurusan, nama')
+          .eq('status', 'Aktif')
+          .order('id', { ascending: true })
+          .range(page * BATCH, (page + 1) * BATCH - 1);
+        if (error) break;
+        all = all.concat(data || []);
+        hasMore = (data || []).length === BATCH;
+        page++;
+      }
+      return all;
+    };
+
     // ── Batch 1: 10 query paralel ──
     const [
       siswaCountRes,
@@ -29,10 +51,11 @@ export async function getAdminDashboardData() {
       pelanggaranDataRes,
       absensiHariIniRes,
       newsRes,
-      siswaAllRes,
+      siswaAll,          // ← FIX: langsung array (bukan lagi { data })
       penangananRes,
     ] = await Promise.all([
-      supabaseAdmin.from('siswa').select('*', { count: 'exact', head: true }),
+      // ── FIX #1: kartu "Total Siswa" hanya menghitung siswa Aktif ──
+      supabaseAdmin.from('siswa').select('*', { count: 'exact', head: true }).eq('status', 'Aktif'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('role', 'Wali Kelas').eq('status', 'Aktif'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('role', 'Sekretaris Kelas').eq('status', 'Aktif'),
       supabaseAdmin.from('news_posts').select('*', { count: 'exact', head: true }).eq('status', 'Publish'),
@@ -40,7 +63,7 @@ export async function getAdminDashboardData() {
       supabaseAdmin.from('tb_pelanggaran_siswa').select('nisn, nama_siswa, poin, jenis_pelanggaran, kelas, jurusan'),
       supabaseAdmin.from('absensi').select('status, siswa_id, input_by, created_at').eq('tanggal', today),
       supabaseAdmin.from('news_posts').select('id, title, category, views').eq('status', 'Publish').order('published_at', { ascending: false }).limit(5),
-      supabaseAdmin.from('siswa').select('id, kelas, jurusan, nama'),
+      fetchSiswaAktif(),
       supabaseAdmin.from('tb_penanganan_siswa').select('id, sp1, sp2, sp3').eq('status_akhir', 'Aktif'),
     ]);
 
@@ -60,7 +83,8 @@ export async function getAdminDashboardData() {
     const izinHariIni = absensiHariIni.filter(a => a.status === 'Izin').length;
     const alphaHariIni = absensiHariIni.filter(a => a.status === 'Alpha').length;
 
-    const siswaAll = siswaAllRes.data || [];
+    // (baris lama "const siswaAll = siswaAllRes.data || [];" DIHAPUS — kini destructured langsung)
+
     const distribusi = { x: 0, xi: 0, xii: 0 };
     const kelasSet = new Set();
     for (const s of siswaAll) {
@@ -115,22 +139,38 @@ export async function getAdminDashboardData() {
     }
     const kelasAbsensi = Object.values(kelasGroup).sort((a, b) => a.kelas.localeCompare(b.kelas));
 
-    // ── Batch 2 — 2 query paralel ──
-    const siswaIdSet = [...new Set(absensiHariIni.map(a => a.siswa_id).filter(Boolean))];
+    // ── Batch 2 — absensi 30 hari, diambil bertahap ──
+    // FIX: tanpa batch, PostgREST memotong di 1000 baris pertama →
+    // grafik Hadir/Alpha 30 hari selama ini menampilkan data tidak lengkap
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
     const startDate = getDateWIB(thirtyDaysAgo);
 
-    const [namaRes, absensi30Res] = await Promise.all([
-      siswaIdSet.length > 0
-        ? supabaseAdmin.from('siswa').select('id, nama').in('id', siswaIdSet)
-        : Promise.resolve({ data: [] }),
-      supabaseAdmin.from('absensi').select('tanggal, status').gte('tanggal', startDate).lte('tanggal', today),
-    ]);
+    let absensi30 = [];
+    {
+      const BATCH = 1000;
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabaseAdmin
+          .from('absensi')
+          .select('tanggal, status')
+          .gte('tanggal', startDate)
+          .lte('tanggal', today)
+          .order('created_at', { ascending: true })
+          .range(page * BATCH, (page + 1) * BATCH - 1);
+        if (error) break;
+        absensi30 = absensi30.concat(data || []);
+        hasMore = (data || []).length === BATCH;
+        page++;
+      }
+    }
 
     // ── Processing Batch 2 ──
-    let namaLookup = {};
-    for (const s of (namaRes.data || [])) namaLookup[s.id] = s.nama;
+    // FIX: query nama terpisah dihapus — namaLookup cukup dibangun dari
+    // siswaAll (sudah berisi id + nama). Hemat 1 query per load dashboard.
+    const namaLookup = {};
+    for (const s of siswaAll) namaLookup[s.id] = s.nama;
 
     const activities = absensiHariIni.slice(0, 10).map(a => ({
       jam: new Date(a.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
@@ -140,7 +180,7 @@ export async function getAdminDashboardData() {
     }));
 
     const dateMap = {};
-    for (const a of (absensi30Res.data || [])) {
+    for (const a of absensi30) {
       if (!dateMap[a.tanggal]) dateMap[a.tanggal] = { hadir: 0, alpha: 0 };
       if (a.status === 'Hadir') dateMap[a.tanggal].hadir++;
       if (a.status === 'Alpha') dateMap[a.tanggal].alpha++;
